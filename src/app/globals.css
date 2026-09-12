@@ -1,0 +1,191 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+  Gaia theme tokens - same palette as the stock app.
+  Primary  = Gaia blue  (#4A6FA5 / #3E5FA0)
+  Accent   = Gaia green (#3E9B4F)
+  Neutrals = slate-tinted rather than pure black/white.
+*/
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.279 0.041 260.031);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.279 0.041 260.031);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.279 0.041 260.031);
+
+  --primary: #4a6fa5;
+  --primary-foreground: #ffffff;
+
+  --secondary: oklch(0.97 0.014 254.604);
+  --secondary-foreground: #2b4c86;
+
+  --muted: oklch(0.984 0.003 247.858);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+
+  --accent: oklch(0.982 0.018 155.826);
+  --accent-foreground: oklch(0.527 0.154 150.069);
+
+  --destructive: oklch(0.577 0.245 27.325);
+
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: #4a6fa5;
+
+  --chart-1: #4a6fa5;
+  --chart-2: oklch(0.527 0.154 150.069);
+  --chart-3: oklch(0.554 0.046 257.417);
+  --chart-4: oklch(0.704 0.04 256.788);
+  --chart-5: #3e5fa0;
+
+  --radius: 0.625rem;
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.279 0.041 260.031);
+  --sidebar-primary: #4a6fa5;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: oklch(0.97 0.014 254.604);
+  --sidebar-accent-foreground: #2b4c86;
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: #4a6fa5;
+
+  /* costing sheet chrome, derived from the same palette */
+  --sheet-line: oklch(0.929 0.013 255.508);
+  --sheet-line-strong: #b9c6ea;
+  --sheet-total: #f2f6fd;
+  --sheet-formula: #2f7d6a;
+  --sheet-danger: #b42318;
+  --sheet-danger-soft: #fef3f2;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+[data-sidebar="menu-button"] {
+  font-size: 0.95rem;
+}
+[data-sidebar="menu-button"] span {
+  font-size: 0.95rem;
+}
+[data-sidebar="group-label"] {
+  font-size: 0.8rem;
+}
+
+/* ---------------------------------------------------------------
+   Spreadsheet chrome for the costing grids
+   --------------------------------------------------------------- */
+.sheet {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 13px;
+}
+.sheet th,
+.sheet td {
+  border-bottom: 1px solid var(--sheet-line);
+  border-right: 1px solid var(--sheet-line);
+  padding: 0;
+  white-space: nowrap;
+  min-width: 7.5rem;
+}
+.sheet thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8fafd;
+  border-bottom: 1px solid var(--sheet-line-strong);
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  color: #2b4c86;
+}
+.sheet .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+  border-right: 1px solid var(--sheet-line-strong);
+  min-width: 15rem;
+}
+.sheet thead .sticky-col {
+  z-index: 4;
+  background: #f8fafd;
+}
+.sheet tbody tr:hover td {
+  background: #f6f9ff;
+}
+.sheet tbody tr:hover .sticky-col {
+  background: #f6f9ff;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
