@@ -7,11 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:reset": "psql -q -d costing_erp -v ON_ERROR_STOP=1 -f db/001_schema.sql",
-    "db:create": "createdb costing_erp || true",
+    "db:setup": "tsx db/setup.ts",
+    "db:reset": "tsx db/setup.ts --reset",
     "db:seed": "tsx db/seed.ts",
     "db:verify": "tsx db/verify.ts",
-    "db:procurement": "psql -q -d costing_erp -v ON_ERROR_STOP=1 -f db/003_procurement.sql",
     "db:verify-procurement": "tsx db/verify-procurement.ts"
   },
   "dependencies": {
