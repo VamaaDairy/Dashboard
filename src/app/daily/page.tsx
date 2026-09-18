@@ -26,11 +26,9 @@ export default async function DailyPage() {
             <thead>
               <tr className="border-b border-slate-200 bg-[#F8FAFD] text-[10px] uppercase tracking-wider text-[#2B4C86]">
                 <th className="px-4 py-2 text-left font-bold">Date</th>
-                <th className="px-3 py-2 text-right font-bold">Milk processed (L)</th>
+                <th className="px-3 py-2 text-right font-bold">Milk (L)</th>
                 <th className="px-3 py-2 text-right font-bold">Shared cost ₹</th>
-                <th className="px-3 py-2 text-right font-bold">Conversion ₹/L</th>
                 <th className="px-3 py-2 text-right font-bold">Products</th>
-                <th className="px-3 py-2 text-right font-bold">Production cost ₹</th>
                 <th className="px-3 py-2 text-right font-bold">Cost ₹/L</th>
               </tr>
             </thead>
@@ -42,16 +40,12 @@ export default async function DailyPage() {
                       {d.day}
                     </Link>
                   </td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.milk_processed_l, 1)}</td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.total_overhead, 2)}</td>
-                  <td className="num px-3 py-1.5 text-right font-semibold text-[#3E5FA0]">
-                    {formatNumber(d.conversion_rate, 4)}
-                  </td>
+                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.milk_processed_l, 0)}</td>
+                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.total_overhead, 0)}</td>
                   <td className="num px-3 py-1.5 text-right text-slate-500">{d.products_made}</td>
                   <td className="num px-3 py-1.5 text-right font-semibold">
-                    {formatNumber(d.total_production_cost, 2)}
+                    {formatNumber(d.cost_per_litre, 2)}
                   </td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.cost_per_litre, 2)}</td>
                 </tr>
               ))}
             </tbody>

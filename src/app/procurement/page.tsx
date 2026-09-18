@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { Droplets } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { ModuleNav } from "@/components/procurement/ModuleNav";
-import { PROCUREMENT_MODULES } from "@/components/procurement/modules";
 import { Empty, Num, Section, Stat, THead, Th } from "@/components/procurement/ui";
 import { formatOrDash } from "@/lib/format";
 import { getDays, getProcurementTotals, kgPerLitre } from "@/lib/procurement/data";
@@ -30,7 +28,6 @@ export default async function ProcurementPage() {
           subtitle={`What a litre costs standing in our silo — farmer price, sachiv commission and tanker cost. 1 litre = ${formatOrDash(k, 2)} kg throughout.`}
         />
 
-        <ModuleNav />
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
@@ -109,34 +106,24 @@ export default async function ProcurementPage() {
                 <Th>Litres</Th>
                 <Th>Fat %</Th>
                 <Th>SNF %</Th>
-                <Th>kg solids</Th>
-                <Th>Farmer ₹</Th>
-                <Th>Commission ₹</Th>
-                <Th>Transport ₹</Th>
                 <Th>Total ₹</Th>
                 <Th>₹/litre</Th>
-                <Th>₹/kg</Th>
               </THead>
               <tbody>
                 {days.map((d) => (
                   <tr key={d.collected_on} className="border-b border-slate-100 hover:bg-blue-50/40">
                     <td className="px-3 py-1.5 font-semibold text-[#2B4C86]">{d.collected_on}</td>
                     <Num value={d.center_count} decimals={0} dim />
-                    <Num value={d.qty_kg} decimals={1} />
-                    <Num value={d.qty_litre} decimals={1} dim />
+                    <Num value={d.qty_kg} decimals={0} />
+                    <Num value={d.qty_litre} decimals={0} dim />
                     <Num value={d.fat_pct} />
                     <Num value={d.snf_pct} />
-                    <Num value={d.kg_solids} />
-                    <Num value={d.farmer_amount} />
-                    <Num value={d.commission_amount} />
-                    <Num value={d.transport_amount} />
-                    <Num value={d.total_cost} className="font-semibold" />
+                    <Num value={d.total_cost} decimals={0} className="font-semibold" />
                     <Num value={d.landed_per_litre} className="font-black text-[#2B4C86]" />
-                    <Num value={d.landed_per_kg} />
                   </tr>
                 ))}
                 {days.length === 0 ? (
-                  <Empty colSpan={13}>
+                  <Empty colSpan={8}>
                     Nothing procured yet. Start with a{" "}
                     <Link href="/procurement/farmer" className="font-semibold text-[#2B4C86] underline">
                       rate chart
@@ -150,23 +137,6 @@ export default async function ProcurementPage() {
                 ) : null}
               </tbody>
             </table>
-          </div>
-        </Section>
-
-        <Section
-          title="The modules"
-          description="Each one owns a piece of the landed rate above."
-        >
-          <div className="grid gap-px bg-slate-200 sm:grid-cols-3">
-            {PROCUREMENT_MODULES.filter((m) => m.href !== "/procurement").map((m) => (
-              <Link key={m.href} href={m.href} className="group bg-white p-4 hover:bg-blue-50/40">
-                <div className="flex items-center gap-2 font-bold text-[#2B4C86] group-hover:underline">
-                  <m.icon className="h-4 w-4" />
-                  {m.label}
-                </div>
-                <p className="mt-1 text-[12px] text-slate-500">{m.blurb}</p>
-              </Link>
-            ))}
           </div>
         </Section>
 
