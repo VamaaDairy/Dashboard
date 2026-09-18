@@ -5,3 +5,8 @@ export function formatNumber(n: number | null | undefined, decimals: number): st
     maximumFractionDigits: decimals,
   });
 }
+
+/** Same as formatNumber, but shows a dash where there is no number yet. */
+export function formatOrDash(n: number | null | undefined, decimals: number): string {
+  return formatNumber(n, decimals) || "—";
+}

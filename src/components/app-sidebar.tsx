@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  BarChart3, Beaker, Boxes, CalendarDays, Droplets, FileClock, LayoutGrid, LogOut,
-  Package, RefreshCw, Settings2, SlidersHorizontal, User,
+  BarChart3, Beaker, Boxes, CalendarDays, Droplets, FileClock, HandCoins, LayoutGrid, LogOut,
+  Package, RefreshCw, Settings2, SlidersHorizontal, Truck, User, Wallet,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
@@ -21,6 +22,13 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
   recipe: Package,
   product: Package,
 };
+
+/** The three cost blocks that make up the landed price of milk. */
+const PROCUREMENT_LINKS = [
+  { href: "/procurement/farmer", label: "Price to farmer", icon: Wallet },
+  { href: "/procurement/transport", label: "Tanker to plant", icon: Truck },
+  { href: "/procurement/commission", label: "Sachiv commission", icon: HandCoins },
+];
 
 export interface SidebarClass {
   code: string;
@@ -74,6 +82,35 @@ export function AppSidebar({
                     </Link>
                   }
                 />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={pathname.startsWith("/procurement")}
+                  tooltip="Milk procurement"
+                  render={
+                    <Link href="/procurement">
+                      <Droplets />
+                      <span>Milk procurement</span>
+                    </Link>
+                  }
+                />
+                {pathname.startsWith("/procurement") ? (
+                  <SidebarMenuSub>
+                    {PROCUREMENT_LINKS.map((item) => (
+                      <SidebarMenuSubItem key={item.href}>
+                        <SidebarMenuSubButton
+                          isActive={pathname === item.href}
+                          render={
+                            <Link href={item.href}>
+                              <item.icon />
+                              <span>{item.label}</span>
+                            </Link>
+                          }
+                        />
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                ) : null}
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
