@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function SchemaPage() {
   const classes = await getSchema();
   return (
-    <div className="flex flex-col flex-1 bg-white p-4 md:p-6 min-h-screen">
+    <div className="flex flex-col flex-1 bg-background p-4 md:p-6 min-h-screen">
       <div className="w-full space-y-5">
         <PageHeader
           icon={Settings2}

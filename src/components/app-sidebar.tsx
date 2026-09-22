@@ -4,13 +4,12 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  BarChart3, Beaker, Boxes, CalendarDays, Droplets, FileClock, HandCoins, LayoutGrid, LogOut,
-  Package, RefreshCw, Settings2, SlidersHorizontal, Truck, User, Wallet,
+  Beaker, Boxes, CalendarDays, ChevronRight, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
+  Package, RefreshCw, Settings2, SlidersHorizontal, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
@@ -23,11 +22,24 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
   product: Package,
 };
 
-/** The three cost blocks that make up the landed price of milk. */
-const PROCUREMENT_LINKS = [
-  { href: "/procurement/farmer", label: "Price to farmer", icon: Wallet },
-  { href: "/procurement/transport", label: "Tanker to plant", icon: Truck },
-  { href: "/procurement/commission", label: "Sachiv commission", icon: HandCoins },
+/**
+ * The two things done every day, and nothing else at this level. Everything
+ * that is set up once and then left alone lives further down.
+ */
+const DAILY = [
+  { href: "/", label: "Today", icon: Home, exact: true },
+  { href: "/procurement/vamaa", label: "Milk in", icon: Droplets },
+  { href: "/tanks", label: "Tanks", icon: Cylinder },
+  { href: "/daily", label: "Production", icon: CalendarDays },
+  { href: "/fuel", label: "Fuel", icon: Fuel },
+  { href: "/labour", label: "Labour", icon: Users },
+  { href: "/electricity", label: "Electricity", icon: Zap },
+];
+
+/** Opened when the model itself changes - rarely, and never during a normal day. */
+const SETUP = [
+  { href: "/schema", label: "Columns & classes", icon: Settings2 },
+  { href: "/audit", label: "Change log", icon: FileClock },
 ];
 
 export interface SidebarClass {
@@ -46,6 +58,10 @@ export function AppSidebar({
   const router = useRouter();
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
   const [recalcing, setRecalcing] = useState(false);
+  // Setup opens itself when you are already in it, otherwise stays shut.
+  const [setupOpen, setSetupOpen] = useState(() =>
+    SETUP.some((s) => pathname.startsWith(s.href)),
+  );
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -68,78 +84,29 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
+        {/* ---------------- every day ---------------- */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname === "/"}
-                  tooltip="Overview"
-                  render={
-                    <Link href="/">
-                      <LayoutGrid />
-                      <span>Overview</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname.startsWith("/procurement")}
-                  tooltip="Milk procurement"
-                  render={
-                    <Link href="/procurement">
-                      <Droplets />
-                      <span>Milk procurement</span>
-                    </Link>
-                  }
-                />
-                {pathname.startsWith("/procurement") ? (
-                  <SidebarMenuSub>
-                    {PROCUREMENT_LINKS.map((item) => (
-                      <SidebarMenuSubItem key={item.href}>
-                        <SidebarMenuSubButton
-                          isActive={pathname === item.href}
-                          render={
-                            <Link href={item.href}>
-                              <item.icon />
-                              <span>{item.label}</span>
-                            </Link>
-                          }
-                        />
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                ) : null}
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname.startsWith("/daily")}
-                  tooltip="Daily production"
-                  render={
-                    <Link href="/daily">
-                      <CalendarDays />
-                      <span>Daily production</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname.startsWith("/reports")}
-                  tooltip="Production by product"
-                  render={
-                    <Link href="/reports">
-                      <BarChart3 />
-                      <span>By product</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
+              {DAILY.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
+                    tooltip={item.label}
+                    render={
+                      <Link href={item.href}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    }
+                  />
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* ---------------- standing rates, changed now and then ---------------- */}
         <SidebarGroup>
           <SidebarGroupLabel>Rates &amp; masters</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -156,88 +123,123 @@ export function AppSidebar({
                         <Link href={href}>
                           <Icon />
                           <span className="flex-1">{c.label}</span>
-                          <span className="num text-[11px] text-slate-400">{c.count}</span>
+                          <span className="num text-[11px] text-muted-foreground">{c.count}</span>
                         </Link>
                       }
                     />
                   </SidebarMenuItem>
                 );
               })}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={pathname.startsWith("/parameters")}
+                  tooltip="Parameters"
+                  render={
+                    <Link href="/parameters">
+                      <SlidersHorizontal />
+                      <span>Parameters</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* ---------------- setup: shut unless you go looking ---------------- */}
         <SidebarGroup>
-          <SidebarGroupLabel>Settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {[
-                { href: "/parameters", label: "Parameters", icon: SlidersHorizontal },
-                { href: "/schema", label: "Columns & classes", icon: Settings2 },
-                { href: "/audit", label: "Change log", icon: FileClock },
-              ].map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={pathname.startsWith(item.href)}
-                    tooltip={item.label}
-                    render={
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </Link>
-                    }
-                  />
-                </SidebarMenuItem>
-              ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="Setup"
+                  render={
+                    <button
+                      onClick={() => setSetupOpen((v) => !v)}
+                      className="w-full flex items-center gap-2 text-muted-foreground"
+                    >
+                      <ChevronRight className={`w-4 h-4 transition-transform ${setupOpen ? "rotate-90" : ""}`} />
+                      <span className="flex-1 text-left">Setup</span>
+                      {calc?.error_count ? (
+                        <span className="num rounded-full bg-destructive/15 px-1.5 text-[10px] font-bold text-destructive">
+                          {calc.error_count}
+                        </span>
+                      ) : null}
+                    </button>
+                  }
+                />
+              </SidebarMenuItem>
+
+              {setupOpen ? (
+                <>
+                  {SETUP.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={pathname.startsWith(item.href)}
+                        tooltip={item.label}
+                        render={
+                          <Link href={item.href}>
+                            <item.icon />
+                            <span>{item.label}</span>
+                          </Link>
+                        }
+                      />
+                    </SidebarMenuItem>
+                  ))}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      tooltip="Recalculate"
+                      render={
+                        <button
+                          onClick={() => { setRecalcing(true); recalculate().finally(() => setRecalcing(false)); }}
+                          disabled={recalcing}
+                          className="w-full flex items-center gap-2 text-primary disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${recalcing ? "animate-spin" : ""}`} />
+                          <span>{recalcing ? "Recalculating…" : "Recalculate"}</span>
+                        </button>
+                      }
+                    />
+                  </SidebarMenuItem>
+                </>
+              ) : null}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="px-2 pb-4 space-y-1">
-        <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-500 group-data-[collapsible=icon]:hidden">
-          <div className="flex items-center gap-1.5">
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${calc?.error_count ? "bg-red-500" : "bg-[#3E9B4F]"}`} />
-            {calc ? `${calc.node_count ?? 0} values · ${calc.duration_ms ?? 0} ms` : "not calculated"}
+        {/* Only worth saying when something is actually wrong. */}
+        {calc?.error_count ? (
+          <Link
+            href="/schema"
+            className="block rounded-lg bg-destructive/10 px-3 py-2 text-[11px] font-semibold text-destructive group-data-[collapsible=icon]:hidden"
+          >
+            {calc.error_count} formula error(s)
+          </Link>
+        ) : null}
+
+        <div className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:hidden">
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-xs font-semibold text-foreground">{user?.name ?? "—"}</span>
+            <span className="text-xs capitalize text-muted-foreground">{user?.role ?? ""}</span>
           </div>
-          {calc?.error_count ? (
-            <div className="mt-0.5 text-red-600">{calc.error_count} formula error(s)</div>
-          ) : null}
+          <button
+            onClick={handleLogout}
+            title="Sign out"
+            className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
 
         <SidebarMenuButton
-          tooltip="Recalculate"
+          tooltip="Sign out"
+          className="hidden group-data-[collapsible=icon]:flex"
           render={
-            <button
-              onClick={() => { setRecalcing(true); recalculate().finally(() => setRecalcing(false)); }}
-              disabled={recalcing}
-              className="w-full flex items-center gap-2 text-[#2B4C86] disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${recalcing ? "animate-spin" : ""}`} />
-              <span>{recalcing ? "Recalculating…" : "Recalculate"}</span>
-            </button>
-          }
-        />
-
-        <SidebarMenuButton
-          tooltip="Profile"
-          render={
-            <Link href="/parameters">
-              <User />
-              <div className="flex flex-col leading-tight">
-                <span className="text-xs font-semibold text-slate-700 truncate">{user?.name ?? "—"}</span>
-                <span className="text-xs text-slate-400 capitalize">{user?.role ?? ""}</span>
-              </div>
-            </Link>
-          }
-        />
-
-        <SidebarMenuButton
-          tooltip="Logout"
-          render={
-            <button onClick={handleLogout} className="w-full flex items-center gap-2 text-red-500 hover:text-red-700">
+            <button onClick={handleLogout} className="w-full flex items-center gap-2 text-destructive">
               <LogOut className="w-4 h-4" />
-              <span>Logout</span>
+              <span>Sign out</span>
             </button>
           }
         />

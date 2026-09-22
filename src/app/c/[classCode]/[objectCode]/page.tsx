@@ -29,7 +29,7 @@ export default async function ObjectPage({ params }: PageProps<"/c/[classCode]/[
   }
 
   return (
-    <div className="flex flex-col flex-1 bg-white p-4 md:p-6 min-h-screen">
+    <div className="flex flex-col flex-1 bg-background p-4 md:p-6 min-h-screen">
       <div className="w-full space-y-5">
         <PageHeader
           icon={Package}
@@ -37,12 +37,12 @@ export default async function ObjectPage({ params }: PageProps<"/c/[classCode]/[
           subtitle={object.notes ?? object.class_name}
           actions={
             <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="outline" className="border-blue-200 bg-blue-50/60 text-[#2B4C86] font-mono font-bold text-xs">
+              <Badge variant="outline" className="border-blue-200 bg-accent/60 text-foreground font-mono font-bold text-xs">
                 {object.code}
               </Badge>
               <Link
                 href={`/c/${classCode}`}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[#3E5FA0]"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-primary"
               >
                 ← {object.class_name}
               </Link>
@@ -51,8 +51,8 @@ export default async function ObjectPage({ params }: PageProps<"/c/[classCode]/[
         />
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-4 py-3 font-bold text-slate-700">Cost sheet</div>
+          <section className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+            <div className="border-b border-border px-4 py-3 font-bold text-foreground">Cost sheet</div>
             <table className="w-full text-[13px]">
               <tbody>
                 {groups.map((g) => (
@@ -60,17 +60,17 @@ export default async function ObjectPage({ params }: PageProps<"/c/[classCode]/[
                     <tr>
                       <td
                         colSpan={2}
-                        className="bg-[#F8FAFD] px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#2B4C86]"
+                        className="bg-muted px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-foreground"
                       >
                         {g.label}
                       </td>
                     </tr>
                     {g.fields.map((f) => (
-                      <tr key={f.id} className="border-b border-slate-100">
+                      <tr key={f.id} className="border-b border-border/70">
                         <td className="px-4 py-1.5" title={f.description ?? undefined}>
                           {f.label}
-                          {f.suffix ? <span className="ml-1 text-slate-500">{f.suffix}</span> : null}
-                          <div className="font-mono text-[10px] text-slate-400">{f.key}</div>
+                          {f.suffix ? <span className="ml-1 text-muted-foreground">{f.suffix}</span> : null}
+                          <div className="font-mono text-[10px] text-muted-foreground">{f.key}</div>
                         </td>
                         <EditableCell
                           objectId={object.id}
@@ -93,10 +93,10 @@ export default async function ObjectPage({ params }: PageProps<"/c/[classCode]/[
           <div className="flex flex-col gap-5">
             <BomEditor parentId={object.id} lines={lines} components={components} />
 
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-4 py-3">
-                <span className="font-bold text-slate-700">What this feeds</span>
-                <span className="ml-2 text-[11px] font-normal text-slate-500">
+            <section className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+              <div className="border-b border-border px-4 py-3">
+                <span className="font-bold text-foreground">What this feeds</span>
+                <span className="ml-2 text-[11px] font-normal text-muted-foreground">
                   values that change when {object.cost_field ?? "this"} changes
                 </span>
               </div>
@@ -105,12 +105,12 @@ export default async function ObjectPage({ params }: PageProps<"/c/[classCode]/[
                   {impact.map((i) => (
                     <li key={i.ref} className="flex justify-between gap-3">
                       <span className="truncate">{i.ref.replace(/^field:/, "")}</span>
-                      <span className="text-slate-400">depth {i.depth}</span>
+                      <span className="text-muted-foreground">depth {i.depth}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="px-4 py-3 text-[12px] text-slate-500">Nothing depends on this yet.</p>
+                <p className="px-4 py-3 text-[12px] text-muted-foreground">Nothing depends on this yet.</p>
               )}
             </section>
           </div>

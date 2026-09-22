@@ -37,6 +37,13 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-foreground: var(--tertiary-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -47,63 +54,175 @@
 }
 
 /*
-  Gaia theme tokens - same palette as the stock app.
-  Primary  = Gaia blue  (#4A6FA5 / #3E5FA0)
-  Accent   = Gaia green (#3E9B4F)
-  Neutrals = slate-tinted rather than pure black/white.
+  Supabase's actual semantic color engine, adapted from their open-source
+  design system: a handful of inputs (hue, chroma, surface lightness) and
+  every other token - background, card, border, muted, the works - derived
+  from them in OKLCH, the same way apps.studio/styles + packages/ui do it.
+  Source: packages/ui/build/css/source/semantic.css (the derivation) with
+  packages/ui/build/css/themes/light.css's constants (their real light theme -
+  soft-gray canvas, --chroma 0, --surface-hue 34 - decoupled from --primary-hue
+  below, which is set to blue rather than their green). No light/dark toggle,
+  so these sit on :root directly rather than under a [data-theme] variant.
+  https://github.com/supabase/supabase/tree/master/packages/ui/build/css
 */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.279 0.041 260.031);
+  /* 258 is the logo's own blue (#4A6FA5) converted to OKLCH hue, so the
+     accent color and the brand mark actually match. */
+  --hue: 258;
+  --surface-hue: 34;
+  --primary-hue: 258;
+  --chroma: 0;
+  --surface: 0.995;
+  --elevation-step: 0.024;
+  --foreground-lightness: 0.1;
+  --muted-foreground-level: 0.65;
+  --tertiary-foreground-level: 0.5;
+  --field-alpha: 0.015;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.279 0.041 260.031);
+  --contrast: 0.53;
+  --contrast-delta: calc((var(--contrast) - 0.5) / 0.5);
+  --contrast-up: max(0, var(--contrast-delta));
+  --contrast-down: max(0, calc(var(--contrast-delta) * -1));
+  --contrast-text-floor: 0.9;
+  --contrast-border-floor: 0.05;
+  --contrast-text: calc(1 - (1 - var(--contrast-text-floor)) * var(--contrast-down));
+  --contrast-border-linear: calc(
+    var(--contrast-border-floor) + (1 - var(--contrast-border-floor)) * var(--contrast)
+  );
+  --contrast-border: calc(var(--contrast-border-linear) * var(--contrast-border-linear));
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.279 0.041 260.031);
+  --elevation-1: 1;
+  --elevation-2: 1.5;
+  --elevation-3: 2;
+  --elevation-4: 3;
+  --tone-span: calc(var(--foreground-lightness) - var(--surface));
+  --surface-overlay-unit: calc(
+    var(--elevation-step) / max(var(--tone-span), calc(var(--tone-span) * -1))
+  );
+  --muted-alpha: calc(var(--surface-overlay-unit) * var(--elevation-1));
+  --accent-alpha: calc(var(--surface-overlay-unit) * var(--elevation-2));
+  --tertiary-alpha: calc(var(--surface-overlay-unit) * var(--elevation-3));
 
-  --primary: #4a6fa5;
-  --primary-foreground: #ffffff;
+  --brand-hue-reference: 159;
+  --status-hue-pull: 0.15;
+  --warning-hue: clamp(
+    65, calc(75 + (var(--primary-hue) - var(--brand-hue-reference)) * var(--status-hue-pull)), 95
+  );
+  --destructive-hue: clamp(
+    12, calc(25 + (var(--primary-hue) - var(--brand-hue-reference)) * var(--status-hue-pull)), 42
+  );
+  --info-hue: clamp(
+    272, calc(288 + (var(--primary-hue) - var(--brand-hue-reference)) * var(--status-hue-pull)), 302
+  );
 
-  --secondary: oklch(0.97 0.014 254.604);
-  --secondary-foreground: #2b4c86;
+  --expressive-chroma: 0.14;
+  --warning-lightness: 0.68;
+  --destructive-lightness: 0.52;
+  --info-lightness: 0.54;
 
-  --muted: oklch(0.984 0.003 247.858);
-  --muted-foreground: oklch(0.554 0.046 257.417);
+  --background: oklch(var(--surface) calc(var(--chroma) * 0.5) var(--surface-hue));
+  --foreground-chroma: calc(var(--chroma) * 0.55);
+  --foreground: oklch(
+    calc(var(--surface) + var(--tone-span) * var(--contrast-text)) var(--foreground-chroma)
+      var(--surface-hue)
+  );
+  --foreground-contrast: oklch(var(--surface) calc(var(--chroma) * 0.55) var(--surface-hue));
 
-  --accent: oklch(0.982 0.018 155.826);
-  --accent-foreground: oklch(0.527 0.154 150.069);
+  --card: oklch(from var(--background) calc(l + var(--elevation-step) * var(--elevation-1)) c h);
+  --card-foreground: var(--foreground);
+  --popover: oklch(from var(--background) calc(l + var(--elevation-step) * var(--elevation-2)) c h);
+  --popover-foreground: var(--foreground);
 
-  --destructive: oklch(0.577 0.245 27.325);
+  --primary: oklch(0.76 0.15 var(--primary-hue));
+  --primary-foreground: oklch(
+    min(var(--surface), var(--foreground-lightness)) calc(var(--chroma) * 0.45) var(--primary-hue)
+  );
 
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: #4a6fa5;
+  --secondary: oklch(
+    from var(--background) calc(l + var(--elevation-step) * var(--elevation-3)) c h
+  );
+  --secondary-foreground: var(--foreground);
+  --tertiary: oklch(from var(--foreground) l c h / var(--tertiary-alpha));
+  --tertiary-foreground-mix: calc(
+    var(--tertiary-foreground-level) + (1 - var(--tertiary-foreground-level)) * var(--contrast-up) -
+      var(--tertiary-foreground-level) * 0.5 * var(--contrast-down)
+  );
+  --tertiary-foreground: oklch(
+    calc(var(--surface) + var(--tone-span) * var(--tertiary-foreground-mix))
+      var(--foreground-chroma) var(--surface-hue)
+  );
+  --muted: oklch(from var(--foreground) l c h / var(--muted-alpha));
+  --muted-foreground-mix: calc(
+    var(--muted-foreground-level) + (1 - var(--muted-foreground-level)) * var(--contrast-up) -
+      var(--muted-foreground-level) * 0.5 * var(--contrast-down)
+  );
+  --muted-foreground: oklch(
+    calc(var(--surface) + var(--tone-span) * var(--muted-foreground-mix)) var(--foreground-chroma)
+      var(--surface-hue)
+  );
+  --accent: oklch(from var(--foreground) l c h / var(--accent-alpha));
+  --accent-foreground: var(--foreground);
 
-  --chart-1: #4a6fa5;
-  --chart-2: oklch(0.527 0.154 150.069);
-  --chart-3: oklch(0.554 0.046 257.417);
-  --chart-4: oklch(0.704 0.04 256.788);
-  --chart-5: #3e5fa0;
+  --field: oklch(0 0 0 / var(--field-alpha));
+  --control-raised: oklch(1 0 0 / calc(var(--muted-alpha) * 0.65));
 
-  --radius: 0.625rem;
+  --warning: oklch(var(--warning-lightness) var(--expressive-chroma) var(--warning-hue));
+  --destructive: oklch(
+    var(--destructive-lightness) var(--expressive-chroma) var(--destructive-hue)
+  );
+  --warning-foreground: oklch(
+    from var(--warning) clamp(0.12, calc((0.62 - l) * 100), 0.99) calc(c * 0.08) h
+  );
+  --destructive-foreground: oklch(
+    from var(--destructive) clamp(0.12, calc((0.62 - l) * 100), 0.99) calc(c * 0.08) h
+  );
+  --info: oklch(var(--info-lightness) var(--expressive-chroma) var(--info-hue));
+  --info-foreground: oklch(
+    from var(--info) clamp(0.12, calc((0.62 - l) * 100), 0.99) calc(c * 0.08) h
+  );
 
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.279 0.041 260.031);
-  --sidebar-primary: #4a6fa5;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.97 0.014 254.604);
-  --sidebar-accent-foreground: #2b4c86;
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: #4a6fa5;
+  --border-destructive: oklch(from var(--destructive) l c h / 30%);
+  --border-warning: oklch(from var(--warning) l c h / 30%);
+  --border-info: oklch(from var(--info) l c h / 30%);
+  --border-brand: oklch(from var(--primary) l c h / 30%);
 
-  /* costing sheet chrome, derived from the same palette */
-  --sheet-line: oklch(0.929 0.013 255.508);
-  --sheet-line-strong: #b9c6ea;
-  --sheet-total: #f2f6fd;
-  --sheet-formula: #2f7d6a;
-  --sheet-danger: #b42318;
-  --sheet-danger-soft: #fef3f2;
+  /*
+   * Deliberately near-transparent - a hairline hint rather than a drawn line.
+   * Structure comes from spacing and the (already faint) surface/card step,
+   * not from visible borders.
+   */
+  --border: oklch(from var(--foreground) l calc(c * 0.3) h / 5%);
+  --input: oklch(from var(--foreground) l calc(c * 0.3) h / 7%);
+  --border-control-hover: oklch(from var(--foreground) l calc(c * 0.3) h / 14%);
+  --ring: oklch(from var(--primary) l c h / 55%);
+
+  --radius: 0.5rem;
+
+  /* Sidebar mirrors the page background exactly - Supabase aliases
+     --background-dash-sidebar straight to --background, no separate panel
+     tone - so the chrome reads as one continuous surface. */
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--foreground);
+  --sidebar-primary-foreground: var(--warning);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --chart-1: var(--primary);
+  --chart-2: var(--info);
+  --chart-3: var(--warning);
+  --chart-4: var(--tertiary-foreground);
+  --chart-5: var(--primary);
+
+  /* costing sheet chrome, derived from the same tokens */
+  --sheet-line: var(--border);
+  --sheet-line-strong: var(--border-control-hover);
+  --sheet-total: var(--accent);
+  --sheet-formula: var(--primary);
+  --sheet-danger: var(--destructive);
+  --sheet-danger-soft: oklch(from var(--destructive) l c h / 12%);
 }
 
 @layer base {
@@ -115,6 +234,7 @@
   }
   html {
     @apply font-sans;
+    color-scheme: light;
   }
 }
 
@@ -150,11 +270,11 @@
   position: sticky;
   top: 0;
   z-index: 3;
-  background: #f8fafd;
+  background: var(--secondary);
   border-bottom: 1px solid var(--sheet-line-strong);
   padding-left: 0.5rem;
   padding-right: 0.5rem;
-  color: #2b4c86;
+  color: var(--tertiary-foreground);
 }
 .sheet .sticky-col {
   position: sticky;
@@ -166,13 +286,13 @@
 }
 .sheet thead .sticky-col {
   z-index: 4;
-  background: #f8fafd;
+  background: var(--secondary);
 }
 .sheet tbody tr:hover td {
-  background: #f6f9ff;
+  background: var(--muted);
 }
 .sheet tbody tr:hover .sticky-col {
-  background: #f6f9ff;
+  background: var(--muted);
 }
 .num {
   font-variant-numeric: tabular-nums;
@@ -183,9 +303,9 @@
   width: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--border-control-hover);
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--tertiary-foreground);
 }

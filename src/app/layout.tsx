@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConditionalShell } from "@/components/conditional-shell";
 import { getClasses, getLastCalc } from "@/lib/data";
 import type { SidebarClass } from "@/components/app-sidebar";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Gaia Costing",
@@ -27,8 +30,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   }
 
   return (
-    <html lang="en">
-      <body className="bg-white text-slate-800">
+    <html lang="en" className={inter.variable}>
+      <body className="bg-background text-foreground antialiased">
         <ConditionalShell classes={classes} calc={calc}>
           {children}
         </ConditionalShell>

@@ -11,7 +11,7 @@ export default async function DailyPage() {
   const days = await getDays();
 
   return (
-    <div className="flex flex-col flex-1 bg-white p-4 md:p-6 min-h-screen">
+    <div className="flex flex-col flex-1 bg-background p-4 md:p-6 min-h-screen">
       <div className="w-full space-y-5">
         <PageHeader
           icon={CalendarDays}
@@ -21,43 +21,37 @@ export default async function DailyPage() {
 
         <NewDayForm />
 
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-slate-200 bg-[#F8FAFD] text-[10px] uppercase tracking-wider text-[#2B4C86]">
+              <tr className="border-b border-border bg-secondary text-[10px] font-mono uppercase tracking-wide text-tertiary-foreground">
                 <th className="px-4 py-2 text-left font-bold">Date</th>
-                <th className="px-3 py-2 text-right font-bold">Milk processed (L)</th>
+                <th className="px-3 py-2 text-right font-bold">Milk (L)</th>
                 <th className="px-3 py-2 text-right font-bold">Shared cost ₹</th>
-                <th className="px-3 py-2 text-right font-bold">Conversion ₹/L</th>
                 <th className="px-3 py-2 text-right font-bold">Products</th>
-                <th className="px-3 py-2 text-right font-bold">Production cost ₹</th>
                 <th className="px-3 py-2 text-right font-bold">Cost ₹/L</th>
               </tr>
             </thead>
             <tbody>
               {days.map((d) => (
-                <tr key={d.day_id} className="border-b border-slate-100 hover:bg-blue-50/40">
+                <tr key={d.day_id} className="border-b border-border/70 hover:bg-muted">
                   <td className="px-4 py-1.5">
-                    <Link href={`/daily/${d.day}`} className="font-semibold text-[#2B4C86] hover:underline">
+                    <Link href={`/daily/${d.day}`} className="font-semibold text-foreground hover:underline">
                       {d.day}
                     </Link>
                   </td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.milk_processed_l, 1)}</td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.total_overhead, 2)}</td>
-                  <td className="num px-3 py-1.5 text-right font-semibold text-[#3E5FA0]">
-                    {formatNumber(d.conversion_rate, 4)}
-                  </td>
-                  <td className="num px-3 py-1.5 text-right text-slate-500">{d.products_made}</td>
+                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.milk_processed_l, 0)}</td>
+                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.total_overhead, 0)}</td>
+                  <td className="num px-3 py-1.5 text-right text-muted-foreground">{d.products_made}</td>
                   <td className="num px-3 py-1.5 text-right font-semibold">
-                    {formatNumber(d.total_production_cost, 2)}
+                    {formatNumber(d.cost_per_litre, 2)}
                   </td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.cost_per_litre, 2)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {days.length === 0 ? (
-            <p className="px-4 py-6 text-center text-[13px] text-slate-500">
+            <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">
               No days recorded yet. Add today above to get started.
             </p>
           ) : null}

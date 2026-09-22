@@ -28,8 +28,8 @@ export function perKgToPerLitre(rate: number, kgPerLitre = DEFAULT_KG_PER_LITRE)
 
 /**
  * SNF from a lactometer reading, for centres that record CLR rather than SNF
- * directly: SNF% = CLR/4 + 0.21 x Fat% + 0.36.
+ * directly: SNF% = CLR/4 + 0.20 x Fat% + 0.70.
  */
 export function snfFromClr(clr: number, fatPct: number): number {
-  return clr / 4 + 0.21 * fatPct + 0.36;
+  return clr / 4 + 0.2 * fatPct + 0.7;
 }
