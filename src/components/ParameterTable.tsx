@@ -37,7 +37,7 @@ export function ParameterTable({ parameters }: { parameters: Param[] }) {
         <div className="flex-1" />
         <button
           onClick={() => setAdding((v) => !v)}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:border-[#4A6FA5] hover:text-[#2B4C86]"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:border-primary hover:text-foreground"
         >
           + Parameter
         </button>
@@ -50,32 +50,32 @@ export function ParameterTable({ parameters }: { parameters: Param[] }) {
             setError(res.ok ? null : res.error);
             if (res.ok) setAdding(false);
           })}
-          className="mb-4 flex flex-wrap items-center gap-2 rounded border border-slate-200 bg-blue-50 px-3 py-2"
+          className="mb-4 flex flex-wrap items-center gap-2 rounded border border-border bg-accent px-3 py-2"
         >
-          <input name="key" required placeholder="key_name" className="w-48 rounded border border-slate-200 bg-white px-2 py-1 font-mono" />
-          <input name="label" required placeholder="Label" className="w-64 rounded border border-slate-200 bg-white px-2 py-1" />
-          <input name="group_name" placeholder="Group" className="w-40 rounded border border-slate-200 bg-white px-2 py-1" />
-          <input name="value" placeholder="Value or =formula" className="w-48 rounded border border-slate-200 bg-white px-2 py-1" />
-          <button className="rounded bg-[#4A6FA5] px-3 py-1 text-white">Add</button>
-          <button type="button" onClick={() => setAdding(false)} className="text-slate-500">Cancel</button>
+          <input name="key" required placeholder="key_name" className="w-48 rounded border border-border bg-card px-2 py-1 font-mono" />
+          <input name="label" required placeholder="Label" className="w-64 rounded border border-border bg-card px-2 py-1" />
+          <input name="group_name" placeholder="Group" className="w-40 rounded border border-border bg-card px-2 py-1" />
+          <input name="value" placeholder="Value or =formula" className="w-48 rounded border border-border bg-card px-2 py-1" />
+          <button className="rounded border border-border bg-white px-3 py-1 text-foreground hover:bg-accent">Add</button>
+          <button type="button" onClick={() => setAdding(false)} className="text-muted-foreground">Cancel</button>
         </form>
       ) : null}
 
-      {error ? <div className="mb-3 rounded bg-red-50 px-3 py-2 text-red-600">{error}</div> : null}
+      {error ? <div className="mb-3 rounded bg-destructive/10 px-3 py-2 text-destructive">{error}</div> : null}
 
       <div className="grid gap-5 xl:grid-cols-2">
         {[...groups].map(([group, list]) => (
-          <section key={group} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="border-b border-slate-200 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <section key={group} className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+            <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               {group}
             </div>
             <table className="w-full">
               <tbody>
                 {list.map((p) => (
-                  <tr key={p.id} className="group border-b border-slate-100">
+                  <tr key={p.id} className="group border-b border-border/70">
                     <td className="px-3 py-1.5" title={p.description ?? undefined}>
                       {p.label}
-                      <div className="font-mono text-[10px] text-slate-500">P.{p.key}</div>
+                      <div className="font-mono text-[10px] text-muted-foreground">P.{p.key}</div>
                     </td>
                     <td className="w-44 px-2 py-1.5 text-right">
                       <ParamInput
@@ -83,13 +83,13 @@ export function ParameterTable({ parameters }: { parameters: Param[] }) {
                         onError={setError}
                       />
                     </td>
-                    <td className="w-24 px-2 py-1.5 text-right text-[11px] text-slate-500">
+                    <td className="w-24 px-2 py-1.5 text-right text-[11px] text-muted-foreground">
                       {p.formula ? (
                         <span className="num" title={`= ${p.formula}`}>
                           = {formatNumber(p.computed_num, p.decimals)}
                         </span>
                       ) : p.suffix === "%" && p.value_num !== null ? (
-                        <span className="num font-semibold text-[#2B4C86]">
+                        <span className="num font-semibold text-foreground">
                           {formatNumber(Number(p.value_num) * 100, 2)}%
                         </span>
                       ) : (
@@ -103,7 +103,7 @@ export function ParameterTable({ parameters }: { parameters: Param[] }) {
                             const res = await deleteParameter(p.id);
                             setError(res.ok ? null : res.error);
                           })}
-                          className="invisible text-[11px] text-slate-500 group-hover:visible hover:text-red-600"
+                          className="invisible text-[11px] text-muted-foreground group-hover:visible hover:text-destructive"
                         >
                           ✕
                         </button>
@@ -135,9 +135,9 @@ function ParamInput({ param, onError }: { param: Param; onError: (e: string | nu
         });
       }}
       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      className={`num w-full rounded border border-slate-100 bg-slate-50 px-2 py-1 text-right focus:border-[#4A6FA5] focus:outline-none ${
-        param.formula ? "text-[#2F7D6A]" : ""
-      } ${param.error ? "border-red-400 text-red-600" : ""}`}
+      className={`num w-full rounded border border-border/70 bg-input/30 px-2 py-1 text-right focus:border-primary focus:outline-none ${
+        param.formula ? "text-primary" : ""
+      } ${param.error ? "border-red-400 text-destructive" : ""}`}
     />
   );
 }

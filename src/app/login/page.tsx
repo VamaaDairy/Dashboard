@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { ClipboardIllustration, GaiaLogo } from "@/components/brand";
+import { Eye, EyeOff } from "lucide-react";
+import { GaiaLogo } from "@/components/brand";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -39,86 +40,75 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-b from-white to-slate-50 font-sans px-6 py-10 box-border">
-      <div className="w-full max-w-6xl flex items-center justify-between gap-10 flex-wrap">
-        {/* Left illustration */}
-        <div className="flex-1 min-w-[280px] max-w-[520px] basis-[420px]">
-          <ClipboardIllustration className="w-full h-auto" />
+    <div className="flex min-h-screen w-full items-center justify-center bg-background px-6 py-10">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex justify-center">
+          <GaiaLogo className="h-auto w-40" />
         </div>
 
-        {/* Right login card */}
-        <div className="flex-1 min-w-[300px] max-w-[420px] basis-[380px]">
-          <div className="mb-2">
-            <GaiaLogo className="w-full h-auto max-w-[300px]" />
-          </div>
-
-          <h1 className="text-4xl font-bold text-neutral-800 mt-2 mb-2">Login</h1>
-          <p className="text-gray-400 text-[15px] mb-7">
-            Welcome back, please login to the costing workspace.
+        <div className="rounded-xl border border-border bg-card p-7 shadow-2xl shadow-black/40">
+          <h1 className="text-lg font-semibold text-foreground">Sign in</h1>
+          <p className="mt-1 mb-6 text-sm text-muted-foreground">
+            Welcome back to the costing workspace.
           </p>
 
           {errors.general && (
-            <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-medium">
+            <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm font-medium text-destructive">
               {errors.general}
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <label htmlFor="username" className="block text-sm font-semibold text-neutral-800 mb-2">
-              <span className="text-red-500">*</span> User Name :
-            </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter User Name"
-              className={`w-full box-border px-4 py-3.5 text-sm rounded-lg bg-slate-50 outline-none border ${
-                errors.username ? "border-red-500 mb-1" : "border-slate-200 mb-5"
-              }`}
-            />
-            {errors.username && <div className="text-red-500 text-xs mb-4">{errors.username}</div>}
-
-            <label htmlFor="password" className="block text-sm font-semibold text-neutral-800 mb-2">
-              <span className="text-red-500">*</span> Password :
-            </label>
-            <div className={`relative ${errors.password ? "mb-1" : "mb-7"}`}>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="username" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                User name
+              </label>
               <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter Password"
-                className={`w-full box-border pl-4 pr-11 py-3.5 text-sm rounded-lg bg-slate-50 outline-none border ${
-                  errors.password ? "border-red-500" : "border-slate-200"
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="you@example.com"
+                className={`w-full rounded-lg border bg-input/30 px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/30 ${
+                  errors.username ? "border-destructive" : "border-border"
                 }`}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer text-gray-400 flex items-center p-0"
-              >
-                {showPassword ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke="currentColor" strokeWidth="1.8" />
-                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M3 3l18 18M10.6 10.7a3 3 0 0 0 4.2 4.2M6.6 6.7C4.3 8.2 2.7 10.4 2 12c0 0 3.5 7 10 7 1.9 0 3.5-.5 4.9-1.3M9.9 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7-.4.8-1.1 1.9-2.1 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </button>
+              {errors.username && <p className="mt-1.5 text-xs text-destructive">{errors.username}</p>}
             </div>
-            {errors.password && <div className="text-red-500 text-xs mb-6">{errors.password}</div>}
+
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className={`w-full rounded-lg border bg-input/30 px-3.5 py-2.5 pr-10 text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/30 ${
+                    errors.password ? "border-destructive" : "border-border"
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {errors.password && <p className="mt-1.5 text-xs text-destructive">{errors.password}</p>}
+            </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 text-[15px] font-semibold text-white bg-blue-800 hover:bg-blue-900 disabled:opacity-60 disabled:cursor-not-allowed border-none rounded-lg cursor-pointer transition-colors duration-150"
+              className="w-full rounded-lg border border-border bg-white py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
         </div>

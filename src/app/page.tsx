@@ -28,21 +28,21 @@ export default async function TodayPage() {
   });
 
   return (
-    <div className="flex flex-col flex-1 bg-white p-4 md:p-6 min-h-screen">
+    <div className="flex flex-col flex-1 bg-background p-4 md:p-6 min-h-screen">
       <div className="w-full space-y-5">
         <PageHeader icon={Home} title="Today" subtitle={pretty} />
 
         {/* Nothing has been defined yet - say so once, here, with the way in. */}
         {classes.length === 0 ? (
-          <div className="rounded-2xl border border-[#4A6FA5]/30 bg-[#F2F6FD] px-5 py-4">
-            <h2 className="font-bold text-[#2B4C86]">Set up what you make</h2>
-            <p className="mt-1 text-[13px] text-slate-600">
+          <div className="rounded-lg border border-primary/30 bg-accent px-5 py-4">
+            <h2 className="font-bold text-foreground">Set up what you make</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">
               There are no products or rates in here yet. Define the kinds of things you cost and
               the columns they carry, then production entry has something to record against.
             </p>
             <Link
               href="/schema"
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#4A6FA5] px-4 py-2 font-semibold text-white hover:bg-[#3E5FA0]"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2 font-semibold text-foreground hover:bg-accent"
             >
               Open setup
               <ArrowRight className="h-4 w-4" />
@@ -52,19 +52,19 @@ export default async function TodayPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {/* ---------------- milk in ---------------- */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-[#2B4C86]">
+          <section className="rounded-lg border border-border bg-card p-5 shadow-xs">
+            <div className="flex items-center gap-2 text-foreground">
               <Droplets className="h-4 w-4" />
               <h2 className="font-bold">Milk in</h2>
             </div>
 
             {todayMilk ? (
               <>
-                <div className="num mt-3 text-[30px] font-black leading-none text-slate-800">
+                <div className="num mt-3 text-[30px] font-black leading-none text-foreground">
                   {formatNumber(todayMilk.qty_litre, 0)}
-                  <span className="ml-1 text-sm font-bold text-slate-400">litres</span>
+                  <span className="ml-1 text-sm font-bold text-muted-foreground">litres</span>
                 </div>
-                <p className="mt-1.5 text-[12px] text-slate-500">
+                <p className="mt-1.5 text-[12px] text-muted-foreground">
                   {todayMilk.batch_count} collection(s) from {todayMilk.center_count} centre(s)
                   {todayMilk.landed_per_litre
                     ? ` · ₹${formatNumber(todayMilk.landed_per_litre, 2)} landed per litre`
@@ -72,34 +72,34 @@ export default async function TodayPage() {
                 </p>
               </>
             ) : (
-              <p className="mt-3 text-[13px] text-slate-500">
+              <p className="mt-3 text-[13px] text-muted-foreground">
                 Nothing collected today yet.
               </p>
             )}
 
             <Link
-              href="/procurement/farmer"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#4A6FA5] px-4 py-2 font-semibold text-white hover:bg-[#3E5FA0]"
+              href="/procurement/vamaa"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2 font-semibold text-foreground hover:bg-accent"
             >
-              {todayMilk ? "Add collections" : "Record collections"}
+              {todayMilk ? "Open collections" : "View collections"}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </section>
 
           {/* ---------------- production out ---------------- */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-[#2B4C86]">
+          <section className="rounded-lg border border-border bg-card p-5 shadow-xs">
+            <div className="flex items-center gap-2 text-foreground">
               <CalendarDays className="h-4 w-4" />
               <h2 className="font-bold">Production</h2>
             </div>
 
             {todayProduction ? (
               <>
-                <div className="num mt-3 text-[30px] font-black leading-none text-slate-800">
+                <div className="num mt-3 text-[30px] font-black leading-none text-foreground">
                   {formatNumber(todayProduction.milk_processed_l, 0)}
-                  <span className="ml-1 text-sm font-bold text-slate-400">litres processed</span>
+                  <span className="ml-1 text-sm font-bold text-muted-foreground">litres processed</span>
                 </div>
-                <p className="mt-1.5 text-[12px] text-slate-500">
+                <p className="mt-1.5 text-[12px] text-muted-foreground">
                   {todayProduction.products_made} product(s)
                   {todayProduction.cost_per_litre
                     ? ` · ₹${formatNumber(todayProduction.cost_per_litre, 2)} per litre`
@@ -107,7 +107,7 @@ export default async function TodayPage() {
                 </p>
                 <Link
                   href={`/daily/${todayProduction.day}`}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#4A6FA5] px-4 py-2 font-semibold text-white hover:bg-[#3E5FA0]"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2 font-semibold text-foreground hover:bg-accent"
                 >
                   Open today
                   <ArrowRight className="h-4 w-4" />
@@ -115,7 +115,7 @@ export default async function TodayPage() {
               </>
             ) : (
               <>
-                <p className="mt-3 text-[13px] text-slate-500">
+                <p className="mt-3 text-[13px] text-muted-foreground">
                   Today has not been started. Enter the milk processed to open it.
                 </p>
                 <div className="mt-4">
@@ -127,16 +127,16 @@ export default async function TodayPage() {
         </div>
 
         {/* ---------------- the last two weeks, four columns, nothing more ---------------- */}
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h2 className="font-bold text-slate-700">Recent days</h2>
-            <Link href="/reports" className="text-[12px] font-semibold text-[#2B4C86] hover:underline">
+        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="font-bold text-foreground">Recent days</h2>
+            <Link href="/reports" className="text-[12px] font-semibold text-foreground hover:underline">
               Cost by product →
             </Link>
           </div>
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-slate-200 bg-[#F8FAFD] text-[10px] uppercase tracking-wider text-[#2B4C86]">
+              <tr className="border-b border-border bg-secondary text-[10px] font-mono uppercase tracking-wide text-tertiary-foreground">
                 <th className="px-4 py-2 text-left font-bold">Date</th>
                 <th className="px-3 py-2 text-right font-bold">Milk (L)</th>
                 <th className="px-3 py-2 text-right font-bold">Products</th>
@@ -145,14 +145,14 @@ export default async function TodayPage() {
             </thead>
             <tbody>
               {days.map((d) => (
-                <tr key={d.day_id} className="border-b border-slate-100 hover:bg-blue-50/40">
+                <tr key={d.day_id} className="border-b border-border/70 hover:bg-muted">
                   <td className="px-4 py-1.5">
-                    <Link href={`/daily/${d.day}`} className="font-semibold text-[#2B4C86] hover:underline">
+                    <Link href={`/daily/${d.day}`} className="font-semibold text-foreground hover:underline">
                       {d.day}
                     </Link>
                   </td>
                   <td className="num px-3 py-1.5 text-right">{formatNumber(d.milk_processed_l, 0)}</td>
-                  <td className="num px-3 py-1.5 text-right text-slate-500">{d.products_made}</td>
+                  <td className="num px-3 py-1.5 text-right text-muted-foreground">{d.products_made}</td>
                   <td className="num px-3 py-1.5 text-right font-semibold">
                     {formatNumber(d.cost_per_litre, 2)}
                   </td>
@@ -161,7 +161,7 @@ export default async function TodayPage() {
             </tbody>
           </table>
           {days.length === 0 ? (
-            <p className="px-4 py-6 text-center text-[13px] text-slate-500">
+            <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">
               No days recorded yet.
             </p>
           ) : null}

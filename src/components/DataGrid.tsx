@@ -60,26 +60,26 @@ export function DataGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2">
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter rows"
-          className="w-56 rounded border border-slate-200 bg-slate-50 px-2 py-1 outline-none focus:border-[#4A6FA5]"
+          className="w-56 rounded border border-border bg-input/30 px-2 py-1 outline-none focus:border-primary"
         />
-        <span className="text-[11px] text-slate-500">
+        <span className="text-[11px] text-muted-foreground">
           {visible.length} of {rows.length} rows · {fields.length} columns
         </span>
         <div className="flex-1" />
         <button
           onClick={() => setAdding((v) => !v)}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium hover:border-[#4A6FA5] hover:text-[#2B4C86]"
+          className="rounded-lg border border-border px-3 py-1.5 font-medium hover:border-primary hover:text-foreground"
         >
           + Row
         </button>
         <Link
           href={`/schema#${classCode}`}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium hover:border-[#4A6FA5] hover:text-[#2B4C86]"
+          className="rounded-lg border border-border px-3 py-1.5 font-medium hover:border-primary hover:text-foreground"
         >
           + Column
         </Link>
@@ -92,27 +92,27 @@ export function DataGrid({
             setError(res.ok ? null : res.error);
             if (res.ok) setAdding(false);
           })}
-          className="flex items-center gap-2 border-b border-slate-200 bg-blue-50 px-4 py-2"
+          className="flex items-center gap-2 border-b border-border bg-accent px-4 py-2"
         >
           <input type="hidden" name="class_id" value={classId} />
           <input
             name="code" required placeholder="code_like_this" autoFocus
-            className="w-48 rounded border border-slate-200 bg-white px-2 py-1 font-mono"
+            className="w-48 rounded border border-border bg-card px-2 py-1 font-mono"
           />
           <input
             name="name" required placeholder="Display name"
-            className="w-72 rounded border border-slate-200 bg-white px-2 py-1"
+            className="w-72 rounded border border-border bg-card px-2 py-1"
           />
           <button
             disabled={pending}
-            className="rounded-lg bg-[#4A6FA5] px-3 py-1.5 text-white font-medium hover:bg-[#3E5FA0] disabled:opacity-50"
+            className="rounded-lg border border-border bg-white px-3 py-1.5 text-foreground font-medium hover:bg-accent disabled:opacity-50"
           >
             Add
           </button>
-          <button type="button" onClick={() => setAdding(false)} className="text-slate-500">
+          <button type="button" onClick={() => setAdding(false)} className="text-muted-foreground">
             Cancel
           </button>
-          {error ? <span className="text-red-600">{error}</span> : null}
+          {error ? <span className="text-destructive">{error}</span> : null}
         </form>
       ) : null}
 
@@ -125,7 +125,7 @@ export function DataGrid({
                 <th
                   key={i}
                   colSpan={g.span}
-                  className="bg-white px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+                  className="bg-card px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
                 >
                   {g.label}
                 </th>
@@ -138,10 +138,10 @@ export function DataGrid({
                 <th
                   key={f.id}
                   title={f.description ?? (f.default_formula ? `= ${f.default_formula}` : undefined) ?? undefined}
-                  className={`px-2 py-1.5 text-right font-semibold ${f.is_total ? "bg-[#F2F6FD]" : ""}`}
+                  className={`px-2 py-1.5 text-right font-semibold ${f.is_total ? "bg-accent" : ""}`}
                 >
                   {f.label}
-                  {f.suffix ? <span className="ml-1 text-slate-500">{f.suffix}</span> : null}
+                  {f.suffix ? <span className="ml-1 text-muted-foreground">{f.suffix}</span> : null}
                 </th>
               ))}
               <th className="px-2 py-1.5" />
@@ -149,15 +149,15 @@ export function DataGrid({
           </thead>
           <tbody>
             {visible.map((row) => (
-              <tr key={row.id} className="group hover:bg-blue-50/40">
+              <tr key={row.id} className="group hover:bg-muted">
                 <td className="sticky-col px-2 py-1">
                   <Link
                     href={`/c/${classCode}/${row.code}`}
-                    className="hover:text-[#2B4C86] hover:underline"
+                    className="hover:text-foreground hover:underline"
                   >
                     {row.name}
                   </Link>
-                  <div className="font-mono text-[10px] text-slate-500">{row.code}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground">{row.code}</div>
                 </td>
                 {fields.map((f) => (
                   <EditableCell
@@ -179,7 +179,7 @@ export function DataGrid({
                       const res = await deleteObject(row.id);
                       setError(res.ok ? null : res.error);
                     })}
-                    className="invisible text-[11px] text-slate-500 group-hover:visible hover:text-red-600"
+                    className="invisible text-[11px] text-muted-foreground group-hover:visible hover:text-destructive"
                     title="Delete row"
                   >
                     ✕
@@ -192,10 +192,10 @@ export function DataGrid({
       </div>
 
       {error ? (
-        <div className="border-t border-slate-200 bg-red-50 px-4 py-2 text-red-600">{error}</div>
+        <div className="border-t border-border bg-destructive/10 px-4 py-2 text-destructive">{error}</div>
       ) : null}
-      <div className="border-t border-slate-200 bg-white px-4 py-1.5 text-[11px] text-slate-500">
-        Click any cell to edit. Start with <span className="font-mono text-[#2F7D6A]">=</span> for a
+      <div className="border-t border-border bg-card px-4 py-1.5 text-[11px] text-muted-foreground">
+        Click any cell to edit. Start with <span className="font-mono text-primary">=</span> for a
         formula — e.g. <span className="font-mono">=qty_per_pc * O.toned_milk.total_cost_per_l</span>.
         Clear a cell to fall back to the column default.
       </div>

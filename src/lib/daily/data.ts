@@ -64,6 +64,43 @@ export async function getDay(date: string) {
   };
 }
 
+export interface DailyCostDay {
+  day_id: string;
+  day: string;
+  milk_processed_l: number | null;
+  heads: Record<string, { head_id: string; amount: number | null }>;
+}
+
+/** Just the given overhead heads, one row per day, for a dedicated cost page. */
+export async function getDailyCostDays(codes: string[], limit = 60): Promise<DailyCostDay[]> {
+  const id = await activeScenarioId();
+  const rows = await query<{
+    day_id: string; day: string; milk_processed_l: number | null;
+    code: string; head_id: string; amount: number | null;
+  }>(
+    `select d.id as day_id, to_char(d.day, 'YYYY-MM-DD') as day, d.milk_processed_l,
+            h.code, h.id as head_id, o.amount
+       from production_day d
+       cross join overhead_head h
+       left join daily_overhead o on o.day_id = d.id and o.head_id = h.id
+      where d.scenario_id = $1 and h.scenario_id = $1 and h.code = any($2)
+      order by d.day desc
+      limit $3 * cardinality($2)`,
+    [id, codes, limit],
+  );
+
+  const byDay = new Map<string, DailyCostDay>();
+  for (const r of rows) {
+    let day = byDay.get(r.day_id);
+    if (!day) {
+      day = { day_id: r.day_id, day: r.day, milk_processed_l: r.milk_processed_l, heads: {} };
+      byDay.set(r.day_id, day);
+    }
+    day.heads[r.code] = { head_id: r.head_id, amount: r.amount };
+  }
+  return [...byDay.values()].sort((a, b) => (a.day < b.day ? 1 : -1)).slice(0, limit);
+}
+
 export async function getRecentDayTotals(limit = 14) {
   const id = await activeScenarioId();
   return query<{ day: string; cost_per_litre: number | null; milk_processed_l: number | null; total_production_cost: number | null }>(

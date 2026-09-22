@@ -4,13 +4,12 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Beaker, Boxes, CalendarDays, ChevronRight, Droplets, FileClock, HandCoins, Home, LogOut,
-  Package, RefreshCw, Settings2, SlidersHorizontal, Truck, Wallet,
+  Beaker, Boxes, CalendarDays, ChevronRight, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
+  Package, RefreshCw, Settings2, SlidersHorizontal, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
@@ -29,15 +28,12 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
  */
 const DAILY = [
   { href: "/", label: "Today", icon: Home, exact: true },
-  { href: "/procurement", label: "Milk in", icon: Droplets },
+  { href: "/procurement/vamaa", label: "Milk in", icon: Droplets },
+  { href: "/tanks", label: "Tanks", icon: Cylinder },
   { href: "/daily", label: "Production", icon: CalendarDays },
-];
-
-/** Reached from inside milk procurement, where they make sense. */
-const PROCUREMENT_LINKS = [
-  { href: "/procurement/farmer", label: "Price to farmer", icon: Wallet },
-  { href: "/procurement/transport", label: "Tanker to plant", icon: Truck },
-  { href: "/procurement/commission", label: "Sachiv commission", icon: HandCoins },
+  { href: "/fuel", label: "Fuel", icon: Fuel },
+  { href: "/labour", label: "Labour", icon: Users },
+  { href: "/electricity", label: "Electricity", icon: Zap },
 ];
 
 /** Opened when the model itself changes - rarely, and never during a normal day. */
@@ -79,8 +75,6 @@ export function AppSidebar({
     router.push("/login");
   }
 
-  const inProcurement = pathname.startsWith("/procurement");
-
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-3 px-4 pt-5 pb-3">
@@ -106,23 +100,6 @@ export function AppSidebar({
                       </Link>
                     }
                   />
-                  {item.href === "/procurement" && inProcurement ? (
-                    <SidebarMenuSub>
-                      {PROCUREMENT_LINKS.map((sub) => (
-                        <SidebarMenuSubItem key={sub.href}>
-                          <SidebarMenuSubButton
-                            isActive={pathname === sub.href}
-                            render={
-                              <Link href={sub.href}>
-                                <sub.icon />
-                                <span>{sub.label}</span>
-                              </Link>
-                            }
-                          />
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  ) : null}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -146,7 +123,7 @@ export function AppSidebar({
                         <Link href={href}>
                           <Icon />
                           <span className="flex-1">{c.label}</span>
-                          <span className="num text-[11px] text-slate-400">{c.count}</span>
+                          <span className="num text-[11px] text-muted-foreground">{c.count}</span>
                         </Link>
                       }
                     />
@@ -179,12 +156,12 @@ export function AppSidebar({
                   render={
                     <button
                       onClick={() => setSetupOpen((v) => !v)}
-                      className="w-full flex items-center gap-2 text-slate-500"
+                      className="w-full flex items-center gap-2 text-muted-foreground"
                     >
                       <ChevronRight className={`w-4 h-4 transition-transform ${setupOpen ? "rotate-90" : ""}`} />
                       <span className="flex-1 text-left">Setup</span>
                       {calc?.error_count ? (
-                        <span className="num rounded-full bg-red-100 px-1.5 text-[10px] font-bold text-red-600">
+                        <span className="num rounded-full bg-destructive/15 px-1.5 text-[10px] font-bold text-destructive">
                           {calc.error_count}
                         </span>
                       ) : null}
@@ -216,7 +193,7 @@ export function AppSidebar({
                         <button
                           onClick={() => { setRecalcing(true); recalculate().finally(() => setRecalcing(false)); }}
                           disabled={recalcing}
-                          className="w-full flex items-center gap-2 text-[#2B4C86] disabled:opacity-50"
+                          className="w-full flex items-center gap-2 text-primary disabled:opacity-50"
                         >
                           <RefreshCw className={`w-4 h-4 ${recalcing ? "animate-spin" : ""}`} />
                           <span>{recalcing ? "Recalculating…" : "Recalculate"}</span>
@@ -236,7 +213,7 @@ export function AppSidebar({
         {calc?.error_count ? (
           <Link
             href="/schema"
-            className="block rounded-lg bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-600 group-data-[collapsible=icon]:hidden"
+            className="block rounded-lg bg-destructive/10 px-3 py-2 text-[11px] font-semibold text-destructive group-data-[collapsible=icon]:hidden"
           >
             {calc.error_count} formula error(s)
           </Link>
@@ -244,13 +221,13 @@ export function AppSidebar({
 
         <div className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:hidden">
           <div className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-xs font-semibold text-slate-700">{user?.name ?? "—"}</span>
-            <span className="text-xs capitalize text-slate-400">{user?.role ?? ""}</span>
+            <span className="truncate text-xs font-semibold text-foreground">{user?.name ?? "—"}</span>
+            <span className="text-xs capitalize text-muted-foreground">{user?.role ?? ""}</span>
           </div>
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="ml-auto rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+            className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -260,7 +237,7 @@ export function AppSidebar({
           tooltip="Sign out"
           className="hidden group-data-[collapsible=icon]:flex"
           render={
-            <button onClick={handleLogout} className="w-full flex items-center gap-2 text-red-500">
+            <button onClick={handleLogout} className="w-full flex items-center gap-2 text-destructive">
               <LogOut className="w-4 h-4" />
               <span>Sign out</span>
             </button>

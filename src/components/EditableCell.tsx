@@ -75,8 +75,8 @@ export function EditableCell({
             if (e.key === "Enter") { e.preventDefault(); commit((e.target as HTMLInputElement).value); }
             if (e.key === "Escape") { e.preventDefault(); setEditing(false); setDraft(""); }
           }}
-          className={`w-full min-w-[7rem] bg-blue-50 px-2 py-1 outline-2 -outline-offset-2 outline-[#4A6FA5] ${
-            draft.startsWith("=") || (draft === "" && isFormula) ? "font-mono text-[#2F7D6A]" : "num"
+          className={`w-full min-w-[7rem] bg-accent px-2 py-1 outline-2 -outline-offset-2 outline-primary ${
+            draft.startsWith("=") || (draft === "" && isFormula) ? "font-mono text-primary" : "num"
           }`}
         />
       </td>
@@ -100,31 +100,31 @@ export function EditableCell({
         undefined
       }
       className={`cursor-cell px-2 py-1 ${align === "right" ? "text-right" : "text-left"} ${
-        isTotal ? "bg-[#F2F6FD] font-semibold" : ""
-      } ${cell?.error || error ? "bg-red-50 text-red-600" : ""} ${
+        isTotal ? "bg-accent font-semibold" : ""
+      } ${cell?.error || error ? "bg-destructive/10 text-destructive" : ""} ${
         pending ? "opacity-50" : ""
-      } hover:bg-blue-50`}
+      } hover:bg-muted`}
     >
       <span className={dataType === "text" ? "" : "num"}>
         {display}
         {suffix === "%" && display !== "" ? "" : null}
       </span>
       {!isFormula && rollupGroup ? (
-        <span className="ml-1 inline-block align-top text-[9px] leading-none text-slate-500" title={`Sum of every column tagged "${rollupGroup}"`}>
+        <span className="ml-1 inline-block align-top text-[9px] leading-none text-muted-foreground" title={`Sum of every column tagged "${rollupGroup}"`}>
           Σ
         </span>
       ) : null}
       {isFormula ? (
         <span
           className={`ml-1 inline-block align-top text-[9px] leading-none ${
-            cell?.overridden ? "text-[#2B4C86]" : "text-[#2F7D6A]/70"
+            cell?.overridden ? "text-foreground" : "text-primary/70"
           }`}
           title={cell?.overridden ? "Formula overridden on this row" : "Formula from the column default"}
         >
           {cell?.overridden ? "◆" : "ƒ"}
         </span>
       ) : null}
-      {error ? <div className="text-[10px] text-red-600">{error}</div> : null}
+      {error ? <div className="text-[10px] text-destructive">{error}</div> : null}
     </td>
   );
 }

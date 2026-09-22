@@ -58,12 +58,12 @@ export function DayEntry({
 
   return (
     <div className="space-y-5">
-      {error ? <div className="rounded-xl bg-red-50 px-4 py-2 text-red-600">{error}</div> : null}
+      {error ? <div className="rounded-xl bg-destructive/10 px-4 py-2 text-destructive">{error}</div> : null}
 
       {/* ---------------- milk + the day's rate ---------------- */}
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        <div className="rounded-lg border border-border bg-card p-4 shadow-xs">
+          <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
             Milk processed today
           </label>
           <div className="mt-1 flex items-baseline gap-2">
@@ -77,46 +77,46 @@ export function DayEntry({
               }}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
               placeholder="0"
-              className="num w-40 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[22px] font-bold text-slate-800 focus:border-[#4A6FA5] focus:outline-none"
+              className="num w-40 rounded-lg border border-border bg-input/30 px-3 py-2 text-[22px] font-bold text-foreground focus:border-primary focus:outline-none"
             />
-            <span className="text-sm font-semibold text-slate-400">litres</span>
+            <span className="text-sm font-semibold text-muted-foreground">litres</span>
           </div>
-          <p className="mt-1.5 text-[11px] text-slate-500">
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
             Every shared cost below is divided by this.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        <div className="rounded-lg border border-border bg-card p-4 shadow-xs">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
             Total shared cost
           </div>
-          <div className="num mt-2 text-[26px] font-black text-slate-800">
+          <div className="num mt-2 text-[26px] font-black text-foreground">
             ₹{formatNumber(costing.totalOverhead, 2)}
           </div>
-          <p className="mt-1.5 text-[11px] text-slate-500">Coal, power, labour, transport…</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">Coal, power, labour, transport…</p>
         </div>
 
-        <div className="rounded-2xl border-2 border-[#4A6FA5] bg-[#F2F6FD] p-4 shadow-sm">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-[#2B4C86]">
+        <div className="rounded-lg border-2 border-primary bg-accent p-4 shadow-xs">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-foreground">
             Conversion cost today
           </div>
-          <div className="num mt-2 text-[26px] font-black text-[#3E5FA0]">
+          <div className="num mt-2 text-[26px] font-black text-primary">
             ₹{formatNumber(costing.conversionRate, 4)}
-            <span className="ml-1 text-sm font-bold text-slate-500">/ litre</span>
+            <span className="ml-1 text-sm font-bold text-muted-foreground">/ litre</span>
           </div>
-          <p className="mt-1.5 text-[11px] text-slate-500">
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
             Shared cost ÷ milk processed. Every product carries this.
           </p>
         </div>
       </div>
 
       {/* ---------------- shared costs ---------------- */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className="font-bold text-slate-700">Today&apos;s shared costs</h2>
+      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="font-bold text-foreground">Today&apos;s shared costs</h2>
           <button
             onClick={() => setAddingHead((v) => !v)}
-            className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-[12px] font-medium hover:border-[#4A6FA5] hover:text-[#2B4C86]"
+            className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium hover:border-primary hover:text-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Cost head
           </button>
@@ -129,17 +129,17 @@ export function DayEntry({
               setError(res.ok ? null : res.error);
               if (res.ok) setAddingHead(false);
             })}
-            className="flex flex-wrap items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2.5"
+            className="flex flex-wrap items-center gap-2 border-b border-blue-200 bg-accent px-4 py-2.5"
           >
             <input type="hidden" name="day_id" value={dayId} />
             <input name="label" required placeholder="e.g. Diesel for generator"
-              className="w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5" />
+              className="w-64 rounded-lg border border-border bg-card px-3 py-1.5" />
             <input name="unit" placeholder="unit (litres, kg…)"
-              className="w-40 rounded-lg border border-slate-200 bg-white px-3 py-1.5" />
-            <button className="rounded-lg bg-[#4A6FA5] px-3 py-1.5 font-medium text-white hover:bg-[#3E5FA0]">
+              className="w-40 rounded-lg border border-border bg-card px-3 py-1.5" />
+            <button className="rounded-lg border border-border bg-white px-3 py-1.5 font-medium text-foreground hover:bg-accent">
               Add
             </button>
-            <button type="button" onClick={() => setAddingHead(false)} className="text-slate-500">
+            <button type="button" onClick={() => setAddingHead(false)} className="text-muted-foreground">
               Cancel
             </button>
           </form>
@@ -147,7 +147,7 @@ export function DayEntry({
 
         <table className="w-full text-[13px]">
           <thead>
-            <tr className="border-b border-slate-200 bg-[#F8FAFD] text-[10px] uppercase tracking-wider text-[#2B4C86]">
+            <tr className="border-b border-border bg-secondary text-[10px] font-mono uppercase tracking-wide text-tertiary-foreground">
               <th className="px-4 py-2 text-left font-bold">Cost head</th>
               <th className="px-3 py-2 text-right font-bold">Qty used</th>
               <th className="px-3 py-2 text-right font-bold">Rate</th>
@@ -158,10 +158,10 @@ export function DayEntry({
           </thead>
           <tbody>
             {heads.map((h) => (
-              <tr key={h.id} className="group border-b border-slate-100">
+              <tr key={h.id} className="group border-b border-border/70">
                 <td className="px-4 py-1.5">
                   {h.label}
-                  {h.unit ? <span className="ml-1.5 text-[11px] text-slate-400">({h.unit})</span> : null}
+                  {h.unit ? <span className="ml-1.5 text-[11px] text-muted-foreground">({h.unit})</span> : null}
                 </td>
                 <td className="px-3 py-1.5 text-right">
                   <Cell value={h.qty} onCommit={(v) => run(() => setOverhead(dayId, h.id, "qty", v))} />
@@ -173,7 +173,7 @@ export function DayEntry({
                   <Cell value={h.amount} bold
                     onCommit={(v) => run(() => setOverhead(dayId, h.id, "amount", v))} />
                 </td>
-                <td className="num px-3 py-1.5 text-right text-slate-500">
+                <td className="num px-3 py-1.5 text-right text-muted-foreground">
                   {milkProcessed && h.amount
                     ? formatNumber(Number(h.amount) / Number(milkProcessed), 4)
                     : ""}
@@ -181,7 +181,7 @@ export function DayEntry({
                 <td className="px-2 py-1.5">
                   <button
                     onClick={() => run(() => deleteOverheadHead(h.id, dayId))}
-                    className="invisible text-slate-400 group-hover:visible hover:text-red-600"
+                    className="invisible text-muted-foreground group-hover:visible hover:text-destructive"
                     title="Remove this cost head"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -189,12 +189,12 @@ export function DayEntry({
                 </td>
               </tr>
             ))}
-            <tr className="bg-[#F2F6FD] font-bold">
+            <tr className="bg-accent font-bold">
               <td className="px-4 py-2">Total</td>
               <td />
               <td />
               <td className="num px-3 py-2 text-right">₹{formatNumber(costing.totalOverhead, 2)}</td>
-              <td className="num px-3 py-2 text-right text-[#3E5FA0]">
+              <td className="num px-3 py-2 text-right text-primary">
                 {formatNumber(costing.conversionRate, 4)}
               </td>
               <td />
@@ -204,10 +204,10 @@ export function DayEntry({
       </section>
 
       {/* ---------------- production ---------------- */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="font-bold text-slate-700">What was produced today</h2>
-          <p className="text-[11px] text-slate-500">
+      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="font-bold text-foreground">What was produced today</h2>
+          <p className="text-[11px] text-muted-foreground">
             Enter quantities against the products you made. Cost per unit is worked out from the
             milk in each one, today&apos;s conversion rate, and its own materials and packing.
           </p>
@@ -215,7 +215,7 @@ export function DayEntry({
         <div className="max-h-[28rem] overflow-auto">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="sticky top-0 border-b border-slate-200 bg-[#F8FAFD] text-[10px] uppercase tracking-wider text-[#2B4C86]">
+              <tr className="sticky top-0 border-b border-border bg-secondary text-[10px] font-mono uppercase tracking-wide text-tertiary-foreground">
                 <th className="px-4 py-2 text-left font-bold">Product</th>
                 <th className="px-3 py-2 text-right font-bold">Qty made</th>
                 <th className="px-3 py-2 text-right font-bold">Milk / unit</th>
@@ -231,7 +231,7 @@ export function DayEntry({
               {products.map((p) => {
                 const c = costByProduct.get(p.id);
                 return (
-                  <tr key={p.id} className={`border-b border-slate-100 ${c ? "" : "text-slate-400"}`}>
+                  <tr key={p.id} className={`border-b border-border/70 ${c ? "" : "text-muted-foreground"}`}>
                     <td className="px-4 py-1.5">{p.name}</td>
                     <td className="px-3 py-1.5 text-right">
                       <Cell value={p.qty_produced || null} bold
@@ -243,7 +243,7 @@ export function DayEntry({
                     <td className="num px-3 py-1.5 text-right">
                       {c ? formatNumber(c.material_cost, 2) : ""}
                     </td>
-                    <td className="num px-3 py-1.5 text-right text-[#3E5FA0]">
+                    <td className="num px-3 py-1.5 text-right text-primary">
                       {c ? formatNumber(c.conversion_cost, 2) : ""}
                     </td>
                     <td className="num px-3 py-1.5 text-right">
@@ -252,7 +252,7 @@ export function DayEntry({
                     <td className="num px-3 py-1.5 text-right font-bold">
                       {c ? formatNumber(c.unit_cost, 2) : ""}
                     </td>
-                    <td className="num px-3 py-1.5 text-right font-bold text-[#2B4C86]">
+                    <td className="num px-3 py-1.5 text-right font-bold text-foreground">
                       {c ? formatNumber(c.cost_per_kg, 2) : ""}
                     </td>
                     <td className="num px-3 py-1.5 text-right font-bold">
@@ -263,7 +263,7 @@ export function DayEntry({
               })}
             </tbody>
             <tfoot>
-              <tr className="bg-[#F2F6FD] font-bold">
+              <tr className="bg-accent font-bold">
                 <td className="px-4 py-2">
                   {madeToday.length} product{madeToday.length === 1 ? "" : "s"} made
                 </td>
@@ -271,7 +271,7 @@ export function DayEntry({
                 <td className="num px-3 py-2 text-right">
                   {formatNumber(costing.milkAccountedFor, 1)} L
                 </td>
-                <td colSpan={5} className="px-3 py-2 text-right text-[11px] font-normal text-slate-500">
+                <td colSpan={5} className="px-3 py-2 text-right text-[11px] font-normal text-muted-foreground">
                   milk accounted for by production
                 </td>
                 <td className="num px-3 py-2 text-right">
@@ -300,8 +300,8 @@ function Cell({
       onBlur={(e) => { if (e.target.value !== initial) onCommit(e.target.value); }}
       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
       placeholder="—"
-      className={`num w-24 rounded-lg border border-transparent bg-transparent px-2 py-1 text-right hover:border-slate-200 focus:border-[#4A6FA5] focus:bg-white focus:outline-none ${
-        bold ? "font-bold text-slate-800" : "text-slate-600"
+      className={`num w-24 rounded-lg border border-transparent bg-transparent px-2 py-1 text-right hover:border-border focus:border-primary focus:bg-card focus:outline-none ${
+        bold ? "font-bold text-foreground" : "text-muted-foreground"
       }`}
     />
   );
