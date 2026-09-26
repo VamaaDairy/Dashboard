@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { saveTank, deleteTank } from "@/app/tanks/actions";
+import { saveTank } from "@/app/tanks/actions";
 import {
-  ActionForm, DeleteButton, Empty, Field, Num, Section, SubmitButton, Text, THead, Th,
+  ActionForm, Empty, Field, Num, Section, SubmitButton, Text, THead, Th,
 } from "./ui";
 import { formatNumber } from "@/lib/format";
 import type { TankRow } from "@/lib/tanks/data";
@@ -37,7 +37,6 @@ export function TankList({ tanks }: { tanks: TankRow[] }) {
             <Th>SNF %</Th>
             <Th>₹/L</Th>
             <Th>Value ₹</Th>
-            <Th />
           </THead>
           <tbody>
             {tanks.map((t) => (
@@ -60,12 +59,9 @@ export function TankList({ tanks }: { tanks: TankRow[] }) {
                 <Num value={t.snf_pct} />
                 <Num value={t.cost_per_litre} decimals={3} />
                 <Num value={t.qty_litre * t.cost_per_litre} decimals={0} className="font-black text-foreground" />
-                <td className="px-2 py-1.5 text-right">
-                  <DeleteButton onDelete={() => deleteTank(t.id)} confirmLabel={`the tank "${t.name}"`} />
-                </td>
               </tr>
             ))}
-            {tanks.length === 0 ? <Empty colSpan={8}>No tanks yet. Add the first one above.</Empty> : null}
+            {tanks.length === 0 ? <Empty colSpan={7}>No tanks yet. Add the first one above.</Empty> : null}
           </tbody>
           {tanks.length > 0 ? (
             <tfoot>
@@ -80,7 +76,6 @@ export function TankList({ tanks }: { tanks: TankRow[] }) {
                   decimals={0}
                   className="font-black text-foreground"
                 />
-                <td />
               </tr>
             </tfoot>
           ) : null}

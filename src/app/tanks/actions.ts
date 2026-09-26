@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { one, query, tx } from "@/lib/db";
+import { query, tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import { recomputeTank, type Direction } from "@/lib/tanks/engine";
 
@@ -70,17 +70,6 @@ export async function saveTank(form: FormData): Promise<Result> {
                (select coalesce(max(sort_order), 0) + 1 from tank where scenario_id = $1))`,
       [await activeScenarioId(), code, ...fields],
     );
-  });
-}
-
-export async function deleteTank(id: string): Promise<Result> {
-  return guard(async () => {
-    const used = await one<{ n: number }>(
-      `select count(*)::int as n from tank_movement where tank_id = $1`, [id]);
-    if (Number(used?.n)) {
-      throw new Error(`${used?.n} movement(s) are recorded against this tank - deactivate it instead`);
-    }
-    await query(`delete from tank where id = $1`, [id]);
   });
 }
 
