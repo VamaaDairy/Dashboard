@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Beaker, Boxes, CalendarDays, ChevronRight, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
+  Beaker, Boxes, CalendarDays, ChevronRight, Contact, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
   Package, RefreshCw, Settings2, SlidersHorizontal, Truck, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
-  SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarMenuItem,
   SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
@@ -30,8 +30,15 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
 const DAILY = [
   { href: "/", label: "Today", icon: Home, exact: true },
   { href: "/procurement/vamaa", label: "Milk in", icon: Droplets },
+  { href: "/farmers", label: "Farmers", icon: Contact },
   { href: "/tanks", label: "Tanks", icon: Cylinder },
-  { href: "/daily", label: "Production", icon: CalendarDays },
+  {
+    href: "/daily", label: "Production", icon: CalendarDays,
+    children: [
+      { href: "/daily", label: "Daily batches", exact: true },
+      { href: "/daily/products", label: "Products & ingredients" },
+    ],
+  },
   {
     href: "/fuel", label: "Fuel", icon: Fuel,
     children: [
@@ -78,6 +85,30 @@ export function AppSidebar({
     SETUP.some((s) => pathname.startsWith(s.href)),
   );
 
+  // Which sections with sub-items are expanded. The one you're in opens by
+  // itself; the rest remember how you left them (per browser, best effort).
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(DAILY.filter((i) => "children" in i).map((i) => [i.href, pathname.startsWith(i.href)])),
+  );
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("sidebar-open-sections") ?? "{}") as Record<string, boolean>;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring a saved preference after mount
+      setOpenSections((s) => ({ ...s, ...saved }));
+    } catch { /* storage unavailable - keep the defaults */ }
+  }, []);
+  useEffect(() => {
+    const here = DAILY.find((i) => "children" in i && pathname.startsWith(i.href));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- open the section you've just navigated into
+    if (here) setOpenSections((s) => (s[here.href] ? s : { ...s, [here.href]: true }));
+  }, [pathname]);
+  const toggleSection = (href: string) =>
+    setOpenSections((s) => {
+      const next = { ...s, [href]: !s[href] };
+      try { localStorage.setItem("sidebar-open-sections", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -116,11 +147,21 @@ export function AppSidebar({
                     }
                   />
                   {"children" in item && item.children ? (
+                    <SidebarMenuAction
+                      onClick={() => toggleSection(item.href)}
+                      aria-expanded={!!openSections[item.href]}
+                      aria-label={`${openSections[item.href] ? "Hide" : "Show"} ${item.label} sections`}
+                      title={`${openSections[item.href] ? "Hide" : "Show"} ${item.label} sections`}
+                    >
+                      <ChevronRight className={`transition-transform ${openSections[item.href] ? "rotate-90" : ""}`} />
+                    </SidebarMenuAction>
+                  ) : null}
+                  {"children" in item && item.children && openSections[item.href] ? (
                     <SidebarMenuSub>
                       {item.children.map((sub) => (
                         <SidebarMenuSubItem key={sub.href}>
                           <SidebarMenuSubButton
-                            isActive={pathname.startsWith(sub.href)}
+                            isActive={"exact" in sub && sub.exact ? pathname === sub.href : pathname.startsWith(sub.href)}
                             render={<Link href={sub.href}>{sub.label}</Link>}
                           />
                         </SidebarMenuSubItem>
