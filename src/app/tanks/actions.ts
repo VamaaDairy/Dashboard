@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { one, query, tx } from "@/lib/db";
+import { query, tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import { recomputeTank, type Direction } from "@/lib/tanks/engine";
+import { today } from "@/lib/dates";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -55,10 +56,14 @@ export async function saveTank(form: FormData): Promise<Result> {
     ];
 
     if (id) {
-      await query(
-        `update tank set name = $2, capacity_litre = $3, is_active = $4, notes = $5 where id = $1`,
-        [id, ...fields],
-      );
+      await tx(async (client) => {
+        await client.query(
+          `update tank set name = $2, capacity_litre = $3, is_active = $4, notes = $5 where id = $1`,
+          [id, ...fields],
+        );
+        // a smaller capacity must still hold every balance the ledger has reached
+        await recomputeTank(client, id);
+      });
       return;
     }
 
@@ -73,17 +78,6 @@ export async function saveTank(form: FormData): Promise<Result> {
   });
 }
 
-export async function deleteTank(id: string): Promise<Result> {
-  return guard(async () => {
-    const used = await one<{ n: number }>(
-      `select count(*)::int as n from tank_movement where tank_id = $1`, [id]);
-    if (Number(used?.n)) {
-      throw new Error(`${used?.n} movement(s) are recorded against this tank - deactivate it instead`);
-    }
-    await query(`delete from tank where id = $1`, [id]);
-  });
-}
-
 export async function addMovement(form: FormData): Promise<Result> {
   return guard(async () => {
     const tankId = text(form, "tank_id");
@@ -95,12 +89,18 @@ export async function addMovement(form: FormData): Promise<Result> {
     const qty = numberField(form, "qty_litre");
     if (qty === null || qty <= 0) throw new Error("Enter the quantity in litres");
 
+    const date = text(form, "movement_date") || today();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Pick a date");
+
     if (direction === "in") {
       const fat = numberField(form, "fat_pct");
       const snf = numberField(form, "snf_pct");
       const cost = numberField(form, "cost_per_litre");
       if (fat === null || snf === null) throw new Error("Enter the fat % and SNF % of what's going in");
+      if (fat < 0 || fat > 20) throw new Error(`Fat ${fat}% doesn't look right - enter it as a percentage, e.g. 4.5`);
+      if (snf < 0 || snf > 20) throw new Error(`SNF ${snf}% doesn't look right - enter it as a percentage, e.g. 8.5`);
       if (cost === null) throw new Error("Enter the cost per litre of what's going in");
+      if (cost < 0) throw new Error("Cost per litre can't be negative");
 
       await tx(async (client) => {
         await client.query(
@@ -108,11 +108,7 @@ export async function addMovement(form: FormData): Promise<Result> {
              (scenario_id, tank_id, movement_date, direction, qty_litre, fat_pct, snf_pct,
               cost_per_litre, notes)
            values ($1, $2, $3, 'in', $4, $5, $6, $7, $8)`,
-          [
-            await activeScenarioId(), tankId,
-            text(form, "movement_date") || new Date().toISOString().slice(0, 10),
-            qty, fat, snf, cost, optionalText(form, "notes"),
-          ],
+          [await activeScenarioId(), tankId, date, qty, fat, snf, cost, optionalText(form, "notes")],
         );
         await recomputeTank(client, tankId);
       });
@@ -123,11 +119,7 @@ export async function addMovement(form: FormData): Promise<Result> {
       await client.query(
         `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes)
          values ($1, $2, $3, 'out', $4, $5)`,
-        [
-          await activeScenarioId(), tankId,
-          text(form, "movement_date") || new Date().toISOString().slice(0, 10),
-          qty, optionalText(form, "notes"),
-        ],
+        [await activeScenarioId(), tankId, date, qty, optionalText(form, "notes")],
       );
       await recomputeTank(client, tankId);
     });

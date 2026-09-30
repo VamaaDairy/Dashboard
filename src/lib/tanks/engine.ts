@@ -52,14 +52,20 @@ function apply(balance: Balance, m: MovementRow): Balance {
  * so a backdated entry is folded in correctly rather than just appended.
  *
  * Throws (the caller should roll back) if any movement would take the tank
- * negative - milk that was never recorded as coming in cannot leave it.
+ * negative - milk that was never recorded as coming in cannot leave it - or
+ * past its capacity, when one is set.
  */
 export async function recomputeTank(client: PoolClient, tankId: string): Promise<void> {
-  const { rows } = await client.query<MovementRow>(
-    `select id, direction, qty_litre, fat_pct, snf_pct, cost_per_litre
+  const tank = await client.query<{ capacity_litre: number | null; name: string }>(
+    `select capacity_litre, name from tank where id = $1`, [tankId]);
+  const capacity = tank.rows[0]?.capacity_litre ?? null;
+
+  const { rows } = await client.query<MovementRow & { movement_date: string }>(
+    `select id, to_char(movement_date, 'YYYY-MM-DD') as movement_date,
+            direction, qty_litre, fat_pct, snf_pct, cost_per_litre
        from tank_movement
       where tank_id = $1
-      order by movement_date, created_at`,
+      order by movement_date, created_at, id`,
     [tankId],
   );
 
@@ -71,8 +77,15 @@ export async function recomputeTank(client: PoolClient, tankId: string): Promise
 
     if (balance.qty_litre < -0.005) {
       throw new Error(
-        `This would take the tank below zero on ${m.direction === "out" ? "a withdrawal" : "an entry"} ` +
+        `This would take ${tank.rows[0]?.name ?? "the tank"} below zero on ${m.movement_date} ` +
           `(only ${before.qty_litre.toFixed(1)} L was in it at that point).`,
+      );
+    }
+    if (capacity !== null && balance.qty_litre > Number(capacity) + 0.005) {
+      throw new Error(
+        `This would overfill ${tank.rows[0]?.name ?? "the tank"} on ${m.movement_date}: ` +
+          `${balance.qty_litre.toFixed(1)} L in a ${Number(capacity).toFixed(0)} L tank ` +
+          `(${before.qty_litre.toFixed(1)} L was already in it).`,
       );
     }
 

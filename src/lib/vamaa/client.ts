@@ -81,9 +81,19 @@ function config() {
   return { baseUrl, apiKey, orgId, username, password };
 }
 
-const globalForVamaa = globalThis as unknown as { vamaaToken?: string };
+const globalForVamaa = globalThis as unknown as { vamaaToken?: string; vamaaLogin?: Promise<string> };
 
-async function login(): Promise<string> {
+/**
+ * Logs in once for everyone waiting. A fresh login appears to invalidate the
+ * previous token, so two requests that each logged in on a 401 at the same
+ * time would knock each other's token out - they share one login instead.
+ */
+function login(): Promise<string> {
+  globalForVamaa.vamaaLogin ??= freshLogin().finally(() => { globalForVamaa.vamaaLogin = undefined; });
+  return globalForVamaa.vamaaLogin;
+}
+
+async function freshLogin(): Promise<string> {
   const { baseUrl, username, password } = config();
   const res = await fetch(`${baseUrl}/api/auth_token`, {
     method: "POST",
@@ -113,8 +123,10 @@ async function authedGet<T>(path: string, params: Record<string, string>): Promi
 
   let res = await call(token);
   if (res.status === 401) {
-    // Token expired or was never valid for this process - log in fresh, once.
-    res = await call(await login());
+    // Token expired or was replaced. If another request has already logged in
+    // since this one started, use its token; otherwise log in fresh, once.
+    const latest = globalForVamaa.vamaaToken;
+    res = await call(latest && latest !== token ? latest : await login());
   }
   if (!res.ok) {
     throw new Error(`Vamaa API ${path} failed (${res.status}): ${await res.text()}`);

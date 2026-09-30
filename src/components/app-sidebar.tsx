@@ -5,11 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, Boxes, CalendarDays, ChevronRight, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
-  Package, RefreshCw, Settings2, SlidersHorizontal, Users, Zap,
+  Package, RefreshCw, Settings2, SlidersHorizontal, Truck, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
@@ -31,7 +32,21 @@ const DAILY = [
   { href: "/procurement/vamaa", label: "Milk in", icon: Droplets },
   { href: "/tanks", label: "Tanks", icon: Cylinder },
   { href: "/daily", label: "Production", icon: CalendarDays },
-  { href: "/fuel", label: "Fuel", icon: Fuel },
+  {
+    href: "/fuel", label: "Fuel", icon: Fuel,
+    children: [
+      { href: "/fuel/milk-to-plant", label: "Milk to plant" },
+      { href: "/fuel/delivery", label: "Delivery outside plant" },
+      { href: "/fuel/production", label: "Production in plant" },
+    ],
+  },
+  {
+    href: "/transport", label: "Transport", icon: Truck,
+    children: [
+      { href: "/transport/milk-to-plant", label: "Milk to plant" },
+      { href: "/transport/delivery", label: "Delivery outside plant" },
+    ],
+  },
   { href: "/labour", label: "Labour", icon: Users },
   { href: "/electricity", label: "Electricity", icon: Zap },
 ];
@@ -100,6 +115,18 @@ export function AppSidebar({
                       </Link>
                     }
                   />
+                  {"children" in item && item.children ? (
+                    <SidebarMenuSub>
+                      {item.children.map((sub) => (
+                        <SidebarMenuSubItem key={sub.href}>
+                          <SidebarMenuSubButton
+                            isActive={pathname.startsWith(sub.href)}
+                            render={<Link href={sub.href}>{sub.label}</Link>}
+                          />
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  ) : null}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
