@@ -4,13 +4,13 @@ import { revalidatePath } from "next/cache";
 import { tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import { recomputeTank } from "@/lib/tanks/engine";
-import { fetchCollections } from "@/lib/vamaa/client";
+import { ensureDays, storedCollections } from "@/lib/vamaa/sync";
 import { collectionMilk, collectionRef } from "@/lib/vamaa/keys";
 import type { Result } from "@/app/tanks/actions";
 
 /**
  * Puts one Milk in collection into a tank (or takes it back out, when
- * `tankId` is empty). The collection is fetched again here rather than trusted
+ * `tankId` is empty). The collection is read from the saved copy rather than trusted
  * from the page, so the tank always gets the app's own litres, fat and SNF.
  * Moving it to another tank takes it out of the first one; both tanks' ledgers
  * are replayed, so a tank that would overfill refuses and nothing changes.
@@ -24,7 +24,9 @@ export async function assignCollectionToTank(date: string, ref: string, tankId: 
 
     let insert: { litres: number; fat: number; snf: number; costPerLitre: number; notes: string } | null = null;
     if (tankId) {
-      const rows = await fetchCollections(shortName, date);
+      // the saved copy, topped up from the app if this day is recent and stale
+      await ensureDays(date, date).catch(() => undefined);
+      const rows = await storedCollections(date);
       const row = rows.find((r) => collectionRef(r, date) === ref);
       if (!row) throw new Error("That collection is no longer in the Vamaa data for this date - reload the page");
       const milk = collectionMilk(row);

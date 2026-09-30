@@ -1,61 +1,41 @@
-import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { NewDayForm } from "@/components/NewDayForm";
-import { formatNumber } from "@/lib/format";
-import { getDays } from "@/lib/daily/data";
+import { BulkProductionDay } from "@/components/production/BulkProductionDay";
+import { getBatches, getBulkProducts, getIngredientOptions, getProductionDays } from "@/lib/production/data";
+import { kgPerLitre } from "@/lib/procurement/data";
+import { today } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-export default async function DailyPage() {
-  const days = await getDays();
+/** Bulk batch production for one day - every product made in bulk, before packing into sizes. */
+export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
+  const { date: raw } = await searchParams;
+  const now = today();
+  const date = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : now;
+
+  const [products, batches, ingredients, history, k] = await Promise.all([
+    getBulkProducts(), getBatches(date), getIngredientOptions(), getProductionDays(), kgPerLitre(),
+  ]);
 
   return (
-    <div className="flex flex-col flex-1 bg-background p-4 md:p-6 min-h-screen">
+    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="w-full space-y-5">
         <PageHeader
           icon={CalendarDays}
-          title="Daily production cost"
-          subtitle="One row per day: milk processed, what the plant spent, and what that made each product cost."
+          title="Production"
+          subtitle="Bulk batches made each day - the milk, ingredients and labour that went into every product before packing."
         />
-
-        <NewDayForm />
-
-        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border bg-secondary text-[10px] font-mono uppercase tracking-wide text-tertiary-foreground">
-                <th className="px-4 py-2 text-left font-bold">Date</th>
-                <th className="px-3 py-2 text-right font-bold">Milk (L)</th>
-                <th className="px-3 py-2 text-right font-bold">Shared cost ₹</th>
-                <th className="px-3 py-2 text-right font-bold">Products</th>
-                <th className="px-3 py-2 text-right font-bold">Cost ₹/L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((d) => (
-                <tr key={d.day_id} className="border-b border-border/70 hover:bg-muted">
-                  <td className="px-4 py-1.5">
-                    <Link href={`/daily/${d.day}`} className="font-semibold text-foreground hover:underline">
-                      {d.day}
-                    </Link>
-                  </td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.milk_processed_l, 0)}</td>
-                  <td className="num px-3 py-1.5 text-right">{formatNumber(d.total_overhead, 0)}</td>
-                  <td className="num px-3 py-1.5 text-right text-muted-foreground">{d.products_made}</td>
-                  <td className="num px-3 py-1.5 text-right font-semibold">
-                    {formatNumber(d.cost_per_litre, 2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {days.length === 0 ? (
-            <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">
-              No days recorded yet. Add today above to get started.
-            </p>
-          ) : null}
-        </section>
+        {/* keyed by date so the table starts from that day's saved values */}
+        <BulkProductionDay
+          key={date}
+          date={date}
+          today={now}
+          products={products}
+          batches={batches}
+          ingredients={ingredients}
+          kgPerLitre={k}
+          history={history}
+        />
       </div>
     </div>
   );
