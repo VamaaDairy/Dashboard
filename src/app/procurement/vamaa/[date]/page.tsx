@@ -4,6 +4,7 @@ import { VamaaDateNav } from "@/components/procurement/VamaaDateNav";
 import { VamaaCollectionsTable, VamaaFarmersTable } from "@/components/procurement/VamaaData";
 import { fetchCollections, fetchFarmers, type VamaaCollection, type VamaaFarmer } from "@/lib/vamaa/client";
 import { kgPerLitre } from "@/lib/procurement/data";
+import { getCollectionTanks, getTanks } from "@/lib/tanks/data";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function VamaaPage({ params }: PageProps<"/procurement/vama
   let collections: VamaaCollection[] = [];
   let farmers: VamaaFarmer[] = [];
   let error: string | null = null;
-  const k = await kgPerLitre();
+  const [k, tanks, inTank] = await Promise.all([kgPerLitre(), getTanks(), getCollectionTanks(date)]);
 
   if (!shortName) {
     error = "VAMAA_CENTER_SHORT_NAME is not set in .env - nothing to fetch yet.";
@@ -35,7 +36,7 @@ export default async function VamaaPage({ params }: PageProps<"/procurement/vama
         <PageHeader
           icon={Cloud}
           title="Vamaa live data"
-          subtitle={`Straight from the mobile-dairy API for centre ${shortName ?? "—"} — nothing stored, nothing recalculated.`}
+          subtitle={`Straight from the mobile-dairy API for centre ${shortName ?? "—"}. Pick a tank on each collection to put it into that tank.`}
           actions={<VamaaDateNav date={date} />}
         />
 
@@ -45,7 +46,13 @@ export default async function VamaaPage({ params }: PageProps<"/procurement/vama
           </div>
         ) : (
           <>
-            <VamaaCollectionsTable date={date} rows={collections} kgPerLitre={k} />
+            <VamaaCollectionsTable
+              date={date}
+              rows={collections}
+              kgPerLitre={k}
+              tanks={tanks.filter((t) => t.is_active).map((t) => ({ id: t.id, name: t.name }))}
+              inTank={inTank}
+            />
             <VamaaFarmersTable rows={farmers} />
           </>
         )}

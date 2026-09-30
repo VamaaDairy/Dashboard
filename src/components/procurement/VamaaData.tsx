@@ -1,27 +1,41 @@
 import { Empty, Section, THead, Th } from "./ui";
-import { litresToKg, snfFromClr } from "@/lib/units";
+import { TankPicker } from "./TankPicker";
+import { kgOfSolid, litresToKg, snfFromClr } from "@/lib/units";
 import { formatNumber } from "@/lib/format";
+import { collectionRef } from "@/lib/vamaa/keys";
 import type { VamaaCollection, VamaaFarmer } from "@/lib/vamaa/client";
 
-/** Every field the API returns for a day's collections, unfiltered and untransformed. */
+/**
+ * Every field the API returns for a day's collections, plus the tank each one
+ * was put into (picked by hand) and its kg fat and kg SNF.
+ */
 export function VamaaCollectionsTable({
-  date, rows, kgPerLitre,
+  date, rows, kgPerLitre, tanks, inTank,
 }: {
   date: string;
   rows: VamaaCollection[];
   kgPerLitre: number;
+  tanks: { id: string; name: string }[];
+  inTank: Record<string, string>;   // collection ref -> tank id
 }) {
-  const totalQty = rows.reduce((t, r) => t + (Number(r.quantity) || 0), 0);
+  const qty = (r: VamaaCollection) => Number(r.quantity) || 0;
+  const snf = (r: VamaaCollection) => snfFromClr(Number(r.clr) || 0, Number(r.fat) || 0);
+  const kgFat = (r: VamaaCollection) => kgOfSolid(qty(r), Number(r.fat) || 0, kgPerLitre) ?? 0;
+  const kgSnf = (r: VamaaCollection) => kgOfSolid(qty(r), snf(r), kgPerLitre) ?? 0;
+
+  const totalQty = rows.reduce((t, r) => t + qty(r), 0);
   const totalKg = litresToKg(totalQty, kgPerLitre);
+  const inTanks = rows.filter((r) => inTank[collectionRef(r, date)]).reduce((t, r) => t + qty(r), 0);
 
   return (
     <Section
       title={`Collections on ${date}`}
-      description={`Exactly what /api/v1/export_collection returns for this centre and date, except SNF, which is calculated from CLR and Fat (CLR/4 + 0.20×Fat + 0.70) rather than shown as sent. Kg is the other added column: quantity (litres) × ${formatNumber(kgPerLitre, 2)} kg/L.`}
+      description={`Pick a tank on each row to put that milk into it - its litres, fat, SNF and cost (amount ÷ litres) go into the tank on ${date} and blend in by volume. Change the tank to move it, or pick "—" to take it back out. Everything else is exactly what /api/v1/export_collection returns, except SNF, calculated from CLR and Fat (CLR/4 + 0.20×Fat + 0.70). Kg = litres × ${formatNumber(kgPerLitre, 2)} kg/L; kg fat and kg SNF = kg × the percentage.`}
     >
       <div className="overflow-x-auto">
         <table className="w-full whitespace-nowrap text-[12px]">
           <THead>
+            <Th align="left">Tank</Th>
             <Th align="left">Farmer code</Th>
             <Th align="left">Shift</Th>
             <Th align="left">Type</Th>
@@ -29,6 +43,8 @@ export function VamaaCollectionsTable({
             <Th>Kg</Th>
             <Th>Fat</Th>
             <Th>SNF</Th>
+            <Th>Kg fat</Th>
+            <Th>Kg SNF</Th>
             <Th>CLR</Th>
             <Th>Temp</Th>
             <Th>Water</Th>
@@ -56,6 +72,14 @@ export function VamaaCollectionsTable({
                 key={`${r.farmer_code}-${r.shift}-${r.qty_time}-${i}`}
                 className="border-b border-border/70 hover:bg-muted"
               >
+                <td className="px-2 py-1">
+                  <TankPicker
+                    date={date}
+                    collectionRef={collectionRef(r, date)}
+                    current={inTank[collectionRef(r, date)]}
+                    tanks={tanks}
+                  />
+                </td>
                 <td className="px-3 py-1.5 font-semibold text-foreground">{r.farmer_code}</td>
                 <td className="px-3 py-1.5">{r.shift}</td>
                 <td className="px-3 py-1.5">{r.type}</td>
@@ -64,9 +88,9 @@ export function VamaaCollectionsTable({
                   {formatNumber(litresToKg(Number(r.quantity) || 0, kgPerLitre), 2)}
                 </td>
                 <td className="num px-3 py-1.5 text-right">{r.fat}</td>
-                <td className="num px-3 py-1.5 text-right">
-                  {formatNumber(snfFromClr(Number(r.clr) || 0, Number(r.fat) || 0), 2)}
-                </td>
+                <td className="num px-3 py-1.5 text-right">{formatNumber(snf(r), 2)}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold">{formatNumber(kgFat(r), 2)}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold">{formatNumber(kgSnf(r), 2)}</td>
                 <td className="num px-3 py-1.5 text-right">{r.clr}</td>
                 <td className="num px-3 py-1.5 text-right">{r.temp}</td>
                 <td className="num px-3 py-1.5 text-right">{r.water}</td>
@@ -91,17 +115,31 @@ export function VamaaCollectionsTable({
                 <td className="px-3 py-1.5 text-muted-foreground">{r.updated}</td>
               </tr>
             ))}
-            {rows.length === 0 ? <Empty colSpan={27}>No collections returned for this date.</Empty> : null}
+            {rows.length === 0 ? <Empty colSpan={30}>No collections returned for this date.</Empty> : null}
           </tbody>
           {rows.length > 0 ? (
             <tfoot>
               <tr className="bg-accent font-semibold">
+                <td className="px-3 py-2 text-[11px]">
+                  <span className="text-foreground">{formatNumber(inTanks, 2)} L in tanks</span>
+                  {totalQty - inTanks > 0.005 ? (
+                    <div className="text-muted-foreground">{formatNumber(totalQty - inTanks, 2)} L not yet</div>
+                  ) : null}
+                </td>
                 <td className="px-3 py-2" colSpan={3}>
                   {rows.length} record{rows.length === 1 ? "" : "s"}
                 </td>
                 <td className="num px-3 py-2 text-right">{totalQty.toFixed(2)}</td>
                 <td className="num px-3 py-2 text-right text-muted-foreground">{formatNumber(totalKg, 2)}</td>
-                <td colSpan={22} />
+                <td className="num px-3 py-2 text-right text-[11px] text-muted-foreground">
+                  {totalQty > 0 ? `${formatNumber((rows.reduce((t, r) => t + kgFat(r), 0) / (totalKg || 1)) * 100, 2)}% avg` : ""}
+                </td>
+                <td className="num px-3 py-2 text-right text-[11px] text-muted-foreground">
+                  {totalQty > 0 ? `${formatNumber((rows.reduce((t, r) => t + kgSnf(r), 0) / (totalKg || 1)) * 100, 2)}% avg` : ""}
+                </td>
+                <td className="num px-3 py-2 text-right">{formatNumber(rows.reduce((t, r) => t + kgFat(r), 0), 2)}</td>
+                <td className="num px-3 py-2 text-right">{formatNumber(rows.reduce((t, r) => t + kgSnf(r), 0), 2)}</td>
+                <td colSpan={20} />
               </tr>
             </tfoot>
           ) : null}

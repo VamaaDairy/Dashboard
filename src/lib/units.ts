@@ -17,6 +17,17 @@ export function kgToLitres(kg: number, kgPerLitre = DEFAULT_KG_PER_LITRE): numbe
   return kg / kgPerLitre;
 }
 
+/**
+ * Kilograms of fat (or SNF) in a quantity of milk: litres x kg per litre x
+ * the percentage. Null when the percentage isn't known.
+ */
+export function kgOfSolid(
+  litres: number, pct: number | null | undefined, kgPerLitre = DEFAULT_KG_PER_LITRE,
+): number | null {
+  if (pct === null || pct === undefined || !Number.isFinite(Number(pct))) return null;
+  return (litres * kgPerLitre * Number(pct)) / 100;
+}
+
 /** A rate quoted per litre, restated per kilogram (and back). */
 export function perLitreToPerKg(rate: number, kgPerLitre = DEFAULT_KG_PER_LITRE): number {
   return rate / kgPerLitre;
