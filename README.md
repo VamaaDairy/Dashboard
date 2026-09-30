@@ -22,16 +22,24 @@ npm run db:setup       # creates the database, applies every migration, bootstra
 npm run dev
 ```
 
-`db:setup` leaves you with the **entire structure and none of the content**: all 24 tables,
-6 views and 41 functions, and exactly two rows — one empty scenario for the model to hang off,
+`db:setup` leaves you with the **entire structure and none of the content**: all 35 tables,
+8 views and 41 functions, and exactly two rows — one empty scenario for the model to hang off,
 and the login from `.env`. No classes, fields, parameters, objects, BOM lines, procurement or
 daily records. You build those from the app, which is the point: the model lives in the database,
 not in the code.
 
 It talks to Postgres through `pg` using `DATABASE_URL`, so it needs neither `psql` on your
-PATH nor a database role matching your OS user. Re-running it is safe — migrations are skipped
-once the schema is there and the bootstrap rows are only inserted when missing. `npm run db:reset`
-is the destructive one: it drops every table and rebuilds from empty.
+PATH nor a database role matching your OS user. **Run it again after every pull** — it applies
+only the migrations this database hasn't had yet, each one recorded in `schema_migrations` in the
+same transaction (see `db/migrations.ts`), and only inserts the bootstrap rows when missing.
+A database built before that ledger existed is recognised on the first run: files whose tables
+are already there are recorded, not re-run. `npm run db:reset` is the destructive one: it drops
+every table and rebuilds from empty.
+
+Vamaa data (collections and the farmer list) is kept in `vamaa_collection` / `vamaa_farmer` and
+read from there by every page; the app is only called for days that aren't stored yet or are
+recent enough to have been corrected. On a new database the first page that needs history fetches
+it - about 35 seconds for everything since September 2022.
 
 Sign in with whatever you put in `ADMIN_EMAIL` / `ADMIN_PASSWORD`. `npx tsx db/set-password.ts
 <email> <password>` changes it later without touching anything else.
@@ -62,7 +70,8 @@ than the stock app's database, so the two stay independent.
 
 | Script | What it does |
 | --- | --- |
-| `npm run db:setup` | Creates the database, applies `db/*.sql`, adds the two bootstrap rows |
+| `npm run db:setup` | Creates the database if needed, applies any `db/*.sql` not yet applied, adds the two bootstrap rows |
+| `npm run db:apply -- <file>` | Applies one migration and records it (refused if already applied) |
 | `npm run db:reset` | The same, but **drops every table first** |
 | `npm run db:seed` | **Wipes** and reloads the model from `db/seed.ts`, then calculates |
 | `npm run db:verify` | Checks every value against `db/excel-expected.json` |
