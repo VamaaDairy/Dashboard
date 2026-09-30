@@ -3,8 +3,8 @@
  * (`daily_overhead`, divided by `production_day.milk_processed_l` to give
  * that day's shared conversion rate - see `db/002_daily.sql`).
  *
- * Fuel is split into procurement (collection) and delivery (market dispatch)
- * per Darshan's request - both created with amount-only entry for now; the
+ * Fuel is split into procurement (collection), delivery (market dispatch) and
+ * production in plant per Darshan's request - all created with amount-only entry for now; the
  * qty/rate calculation for each gets defined later and can be added without
  * a migration (it's just how the day-entry form is filled in).
  *
@@ -23,6 +23,8 @@ const HEADS: Array<{ code: string; label: string; unit: string | null; notes?: s
     notes: "Vehicle fuel for milk collection/pickup - calculation method to be confirmed" },
   { code: "fuel_delivery", label: "Fuel - Delivery", unit: null,
     notes: "Vehicle fuel for market delivery/dispatch - calculation method to be confirmed" },
+  { code: "fuel_production", label: "Fuel - Production in plant", unit: null,
+    notes: "Fuel used inside the plant for production - calculation method to be confirmed" },
   { code: "other_overhead", label: "Other Plant Cost", unit: "day" },
 ];
 
