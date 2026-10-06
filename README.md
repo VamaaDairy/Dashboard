@@ -197,3 +197,21 @@ Everything else in the file is accounted for: the loose cells that no formula re
 (`100/5.8` beside masala chaach, `((420×15)+200)/15` beside the ghee tin) and the margin notes
 (curd dilution ratios, the ghee pack-transport derivations, "assumption random, no basis" against
 the shrikhand making charge) are carried as notes on the rows they belong to rather than dropped.
+
+## Deploying to Vercel
+
+`vercel.json` builds with `npm run db:setup && npm run build`, so every deploy first applies any new
+migrations (only the ones the database hasn't had) and then builds. Functions run in Cleveland (`cle1`),
+next to the Neon database in AWS us-east-2 - pages make many small queries, so the server sits by the
+database - with up to 60 s per request. If the database moves region, move `regions` with it.
+
+1. **A hosted Postgres.** The local database on this PC can't be reached from Vercel. Create one on
+   Neon, Supabase or Vercel Postgres and copy its connection string (use the pooled one, with
+   `?sslmode=require`).
+2. **Copy your data across** (optional - a new database starts empty):
+   `pg_dump -Fc costing_erp > costing.dump` then `pg_restore --no-owner -d "<hosted url>" costing.dump`.
+3. **Environment variables** in the Vercel project (Settings → Environment Variables):
+   `DATABASE_URL`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`, and for Milk in
+   `VAMAA_API_BASE_URL`, `VAMAA_API_KEY`, `VAMAA_ORG_ID`, `VAMAA_USERNAME`, `VAMAA_PASSWORD`,
+   `VAMAA_CENTER_SHORT_NAME`.
+4. Import the GitHub repo in Vercel and deploy.

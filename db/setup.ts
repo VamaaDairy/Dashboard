@@ -38,7 +38,16 @@ const connect = async (url: string) => {
 };
 
 async function ensureDatabase() {
-  const admin = await connect(adminUrl.toString());
+  // Hosted Postgres (Neon, Supabase, Vercel...) hands out a database that
+  // already exists and often won't let you reach the maintenance one - then
+  // there is nothing to create, so carry on with the database we were given.
+  let admin: Client;
+  try {
+    admin = await connect(adminUrl.toString());
+  } catch {
+    console.log(`can't reach the maintenance database - using ${dbName} as it is`);
+    return false;
+  }
   try {
     const { rowCount } = await admin.query("select 1 from pg_database where datname = $1", [dbName]);
     if (rowCount) {
