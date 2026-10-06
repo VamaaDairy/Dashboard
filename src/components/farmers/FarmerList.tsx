@@ -7,11 +7,13 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Empty, Section, THead, Th } from "@/components/tanks/ui";
 import { formatNumber } from "@/lib/format";
+import { perLitreToPerKg } from "@/lib/units";
 import { shortDate } from "./charts";
 import { TransporterPicker } from "./TransporterPicker";
 import type { FarmerSummary } from "@/lib/farmers/data";
 
 export interface FarmerListRow {
+  center: string;
   code: string;
   name: string;
   mobile: string;
@@ -34,23 +36,29 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 
 export function FarmerList({
-  farmers, from, to, transporters,
+  farmers, from, to, transporters, kgPerLitre, centers,
 }: {
   farmers: FarmerListRow[];
   from: string;
   to: string;
   transporters: { id: string; name: string }[];
+  kgPerLitre: number;
+  centers: { center: string; name: string; kind: "village" | "tanker" }[];
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<SortKey>("litres");
   const [by, setBy] = useState("");   // "" all, "none" unassigned, or a transporter id
+  const [centre, setCentre] = useState("");   // "" every centre
+  const centreName = (c: string) => centers.find((x) => x.center === c)?.name ?? c;
+  const href = (f: FarmerListRow) => `/farmers/${encodeURIComponent(f.code)}?center=${encodeURIComponent(f.center)}`;
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const hit = farmers
       .filter((f) => !needle || [f.code, f.name, f.mobile].some((s) => s.toLowerCase().includes(needle)))
-      .filter((f) => !by || (by === "none" ? !f.transporter_id : f.transporter_id === by));
+      .filter((f) => !by || (by === "none" ? !f.transporter_id : f.transporter_id === by))
+      .filter((f) => !centre || f.center === centre);
     const val = (f: FarmerListRow): number | string => {
       switch (sort) {
         case "litres": return -(f.recent?.litres ?? -1);
@@ -63,9 +71,9 @@ export function FarmerList({
     };
     return [...hit].sort((a, b) => {
       const x = val(a), y = val(b);
-      return x < y ? -1 : x > y ? 1 : a.code.localeCompare(b.code);
+      return x < y ? -1 : x > y ? 1 : (a.center + a.code).localeCompare(b.center + b.code);
     });
-  }, [farmers, q, sort, by]);
+  }, [farmers, q, sort, by, centre]);
 
   const supplying = farmers.filter((f) => f.recent).length;
   const unassigned = farmers.filter((f) => f.recent && !f.transporter_id).length;
@@ -76,6 +84,17 @@ export function FarmerList({
       description={`${farmers.length} registered · ${supplying} supplied milk in the last 30 days (${shortDate(from)} – ${shortDate(to)})${unassigned ? ` · ${unassigned} of them have no transporter yet` : ""}. Pick each farmer's transporter to share its fuel cost by litres. Click a farmer for their profile.`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          {centers.length > 1 ? (
+            <select
+              value={centre}
+              onChange={(e) => setCentre(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-white px-2 text-[12px] font-semibold text-foreground"
+              aria-label="Filter by centre"
+            >
+              <option value="">All centres</option>
+              {centers.map((c) => <option key={c.center} value={c.center}>{c.name} ({c.center})</option>)}
+            </select>
+          ) : null}
           <select
             value={by}
             onChange={(e) => setBy(e.target.value)}
@@ -104,6 +123,7 @@ export function FarmerList({
       <div className="overflow-x-auto">
         <table className="w-full whitespace-nowrap text-[13px]">
           <THead>
+            <Th align="left">Centre</Th>
             <Th align="left">Code</Th>
             <Th align="left">Farmer</Th>
             <Th align="left">Mobile</Th>
@@ -112,6 +132,8 @@ export function FarmerList({
             <Th>Litres · 30 days</Th>
             <Th>Fat %</Th>
             <Th>SNF %</Th>
+            <Th>Price ₹ / L</Th>
+            <Th>₹ / kg</Th>
             <Th>Kg fat</Th>
             <Th>Days</Th>
             <Th>Transport ₹</Th>
@@ -123,24 +145,31 @@ export function FarmerList({
               const r = f.recent;
               return (
                 <tr
-                  key={f.code}
-                  onClick={() => router.push(`/farmers/${encodeURIComponent(f.code)}`)}
+                  key={`${f.center}|${f.code}`}
+                  onClick={() => router.push(href(f))}
                   className={`cursor-pointer border-b border-border/70 hover:bg-muted/60 ${r ? "" : "text-muted-foreground"}`}
                 >
+                  <td className="px-3 py-2.5 text-muted-foreground">{centreName(f.center)}</td>
                   <td className="num px-3 py-2.5 text-muted-foreground">{f.code}</td>
                   <td className="px-3 py-2.5">
-                    <Link href={`/farmers/${encodeURIComponent(f.code)}`} className={`font-semibold hover:underline ${r ? "text-foreground" : "text-muted-foreground"}`} onClick={(e) => e.stopPropagation()}>
+                    <Link href={href(f)} className={`font-semibold hover:underline ${r ? "text-foreground" : "text-muted-foreground"}`} onClick={(e) => e.stopPropagation()}>
                       {f.name || "—"}
                     </Link>
                   </td>
                   <td className="num px-3 py-2.5">{f.mobile || "—"}</td>
                   <td className="px-3 py-2.5">{f.milk_type || "—"}</td>
                   <td className="px-2 py-1.5">
-                    <TransporterPicker code={f.code} current={f.transporter_id} transporters={transporters} className="min-w-40" />
+                    {centers.find((c) => c.center === f.center)?.kind === "tanker" ? (
+                      <span className="px-1 text-[12px] text-muted-foreground">Tanker supplier</span>
+                    ) : (
+                      <TransporterPicker center={f.center} code={f.code} current={f.transporter_id} transporters={transporters} className="min-w-40" />
+                    )}
                   </td>
                   <td className="num px-3 py-2.5 text-right font-semibold text-foreground">{r ? formatNumber(r.litres, 0) : "—"}</td>
                   <td className="num px-3 py-2.5 text-right">{r ? formatNumber(r.fat_pct, 2) : "—"}</td>
                   <td className="num px-3 py-2.5 text-right">{r ? formatNumber(r.snf_pct, 2) : "—"}</td>
+                  <td className="num px-3 py-2.5 text-right font-semibold text-foreground">{r && r.priced_litres ? formatNumber(r.amount / r.priced_litres, 2) : "—"}</td>
+                  <td className="num px-3 py-2.5 text-right">{r && r.priced_litres ? formatNumber(perLitreToPerKg(r.amount / r.priced_litres, kgPerLitre), 2) : "—"}</td>
                   <td className="num px-3 py-2.5 text-right">{r ? formatNumber(r.kg_fat, 1) : "—"}</td>
                   <td className="num px-3 py-2.5 text-right">{r ? r.days : "—"}</td>
                   <td className="num px-3 py-2.5 text-right text-foreground">{f.transport?.cost ? formatNumber(f.transport.cost, 0) : "—"}</td>
@@ -151,7 +180,7 @@ export function FarmerList({
                 </tr>
               );
             })}
-            {rows.length === 0 ? <Empty colSpan={13}>No farmer matches.</Empty> : null}
+            {rows.length === 0 ? <Empty colSpan={16}>No farmer matches.</Empty> : null}
           </tbody>
         </table>
       </div>

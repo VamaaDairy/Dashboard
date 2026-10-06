@@ -29,14 +29,29 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
  */
 const DAILY = [
   { href: "/", label: "Today", icon: Home, exact: true },
-  { href: "/procurement/vamaa", label: "Milk in", icon: Droplets },
+  {
+    href: "/procurement", label: "Milk in", icon: Droplets,
+    children: [
+      { href: "/procurement/vamaa", label: "Collections" },
+      { href: "/procurement/rate-chart", label: "Rate chart" },
+      { href: "/procurement/dashboard", label: "Dashboard" },
+    ],
+  },
   { href: "/farmers", label: "Farmers", icon: Contact },
-  { href: "/tanks", label: "Tanks", icon: Cylinder },
+  {
+    href: "/tanks", label: "Tanks", icon: Cylinder,
+    children: [
+      { href: "/tanks", label: "Daily", exact: true },
+      { href: "/tanks/dashboard", label: "Dashboard" },
+    ],
+  },
   {
     href: "/daily", label: "Production", icon: CalendarDays,
     children: [
       { href: "/daily", label: "Daily batches", exact: true },
+      { href: "/daily/sku", label: "SKU packing" },
       { href: "/daily/products", label: "Products & ingredients" },
+      { href: "/daily/dashboard", label: "Dashboard" },
     ],
   },
   {
@@ -45,6 +60,7 @@ const DAILY = [
       { href: "/fuel/milk-to-plant", label: "Milk to plant" },
       { href: "/fuel/delivery", label: "Delivery outside plant" },
       { href: "/fuel/production", label: "Production in plant" },
+      { href: "/fuel/dashboard", label: "Dashboard" },
     ],
   },
   {

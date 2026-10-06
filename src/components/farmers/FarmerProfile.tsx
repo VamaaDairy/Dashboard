@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Section } from "@/components/tanks/ui";
 import { formatNumber } from "@/lib/format";
 import { addDays } from "@/lib/dates";
+import { perLitreToPerKg } from "@/lib/units";
 import {
   CalendarHeatmap, ColumnChart, Donut, GAIA, SplitBar, TrendChart, shortDate,
   type BarDatum, type HeatDay, type TipRow,
@@ -62,6 +63,7 @@ export function FarmerProfile({
   farmer, days, transport, range, from, to, today, kgPerLitre, notice,
 }: {
   farmer: {
+    center: string; centerName: string; isTanker: boolean;
     code: string; name: string; mobile: string | null; milkType: string | null;
     bank: string | null; branch: string | null; account: string | null; ifsc: string | null; joined: string | null;
   };
@@ -81,7 +83,7 @@ export function FarmerProfile({
   const [custom, setCustom] = useState({ from, to });
   const [showTable, setShowTable] = useState(false);
 
-  const go = (qs: string) => start(() => router.push(`/farmers/${encodeURIComponent(farmer.code)}?${qs}`));
+  const go = (qs: string) => start(() => router.push(`/farmers/${encodeURIComponent(farmer.code)}?center=${encodeURIComponent(farmer.center)}&${qs}`));
 
   const byDay = useMemo(() => new Map(days.map((d) => [d.day, d])), [days]);
   const allDays = useMemo(() => {
@@ -100,7 +102,11 @@ export function FarmerProfile({
       litres, kgFat, kgSnf, amount,
       fat: kgMilk ? (kgFat / kgMilk) * 100 : null,
       snf: kgMilk ? (kgSnf / kgMilk) * 100 : null,
-      rate: litres ? amount / litres : null,
+      // ₹ per litre over only the litres that had a price (off-chart readings have none)
+      rate: (() => {
+        const priced = days.reduce((s, d) => s + (d.price ? d.amount / d.price : 0), 0);
+        return priced ? amount / priced : null;
+      })(),
       morning: days.reduce((s, d) => s + d.morning_litres, 0),
       evening: days.reduce((s, d) => s + d.evening_litres, 0),
       perDay: days.length ? litres / days.length : 0,
@@ -125,11 +131,12 @@ export function FarmerProfile({
   const m = METRICS.find((x) => x.key === metric)!;
 
   const months: BarDatum[] = useMemo(() => {
-    const map = new Map<string, { litres: number; kgFat: number; kgSnf: number; days: number }>();
+    const map = new Map<string, { litres: number; kgFat: number; kgSnf: number; days: number; amount: number; priced: number }>();
     for (const d of days) {
       const key = d.day.slice(0, 7);
-      const e = map.get(key) ?? { litres: 0, kgFat: 0, kgSnf: 0, days: 0 };
+      const e = map.get(key) ?? { litres: 0, kgFat: 0, kgSnf: 0, days: 0, amount: 0, priced: 0 };
       e.litres += d.litres; e.kgFat += d.kg_fat; e.kgSnf += d.kg_snf; e.days += 1;
+      e.amount += d.amount; e.priced += d.price ? d.amount / d.price : 0;
       map.set(key, e);
     }
     const keys: string[] = [];
@@ -139,7 +146,7 @@ export function FarmerProfile({
       d = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, "0")}`;
     }
     return keys.map((key) => {
-      const e = map.get(key) ?? { litres: 0, kgFat: 0, kgSnf: 0, days: 0 };
+      const e = map.get(key) ?? { litres: 0, kgFat: 0, kgSnf: 0, days: 0, amount: 0, priced: 0 };
       const kg = e.litres * kgPerLitre;
       const [y, mo] = key.split("-").map(Number);
       return {
@@ -150,6 +157,9 @@ export function FarmerProfile({
           { label: "litres", value: formatNumber(e.litres, 0), color: GAIA.blue },
           { label: "fat", value: kg ? `${formatNumber((e.kgFat / kg) * 100, 2)}%` : "—" },
           { label: "SNF", value: kg ? `${formatNumber((e.kgSnf / kg) * 100, 2)}%` : "—" },
+          { label: "₹ / L", value: e.priced ? formatNumber(e.amount / e.priced, 2) : "—" },
+          { label: "₹ / kg", value: e.priced ? formatNumber(perLitreToPerKg(e.amount / e.priced, kgPerLitre), 2) : "—" },
+          { label: "₹ paid", value: formatNumber(e.amount, 0) },
           { label: "days supplied", value: String(e.days) },
         ],
       };
@@ -164,9 +174,15 @@ export function FarmerProfile({
   const litresPoints = allDays.map((day) => ({ day, value: byDay.get(day)?.litres ?? 0 }));
   const fatPoints = allDays.map((day) => ({ day, value: byDay.get(day)?.fat_pct ?? null }));
   const snfPoints = allDays.map((day) => ({ day, value: byDay.get(day)?.snf_pct ?? null }));
+  const pricePoints = allDays.map((day) => ({ day, value: byDay.get(day)?.price ?? null }));
   const extraTip = (day: string): TipRow[] => {
     const d = byDay.get(day);
     return d ? [{ label: "fat", value: `${formatNumber(d.fat_pct, 2)}%` }, { label: "SNF", value: `${formatNumber(d.snf_pct, 2)}%` }] : [];
+  };
+  // the price curve's hover: the same price per kg, then the quality behind it
+  const priceTip = (day: string): TipRow[] => {
+    const d = byDay.get(day);
+    return d?.price ? [{ label: "₹ / kg", value: formatNumber(perLitreToPerKg(d.price, kgPerLitre), 2) }, ...extraTip(day)] : extraTip(day);
   };
 
   const rangeText = `${shortDate(from)} – ${shortDate(to)}`;
@@ -177,7 +193,7 @@ export function FarmerProfile({
         <PageHeader
           icon={Contact}
           title={farmer.name || `Farmer ${farmer.code}`}
-          subtitle={`Code ${farmer.code}${farmer.milkType ? ` · ${farmer.milkType} milk` : ""}${farmer.joined ? ` · registered ${farmer.joined}` : ""}`}
+          subtitle={`${farmer.centerName} · code ${farmer.code}${farmer.milkType ? ` · ${farmer.milkType} milk` : ""}${farmer.joined ? ` · registered ${farmer.joined}` : ""}`}
           actions={<Link href="/farmers" className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">← All farmers</Link>}
         />
 
@@ -208,17 +224,23 @@ export function FarmerProfile({
             </Button>
           </form>
           <span className="text-[12px] text-muted-foreground">{rangeText} · {allDays.length} days</span>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-[12px] font-semibold text-muted-foreground">Transporter</span>
-            <TransporterPicker code={farmer.code} current={transport.current} transporters={transport.options} className="w-48" />
-          </div>
+          {farmer.isTanker ? (
+            <span className="ml-auto rounded-md bg-muted px-2.5 py-1 text-[12px] font-semibold text-foreground">
+              Tanker supplier · tanker price not set yet
+            </span>
+          ) : (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-[12px] font-semibold text-muted-foreground">Transporter</span>
+              <TransporterPicker center={farmer.center} code={farmer.code} current={transport.current} transporters={transport.options} className="w-48" />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="Milk" value={`${formatNumber(t.litres, 0)} L`} sub={`${formatNumber(t.perDay, 1)} L a day on days supplied`} />
           <Stat label="Kg fat" value={formatNumber(t.kgFat, 1)} sub={t.fat !== null ? `avg ${formatNumber(t.fat, 2)}% fat` : "—"} />
           <Stat label="Kg SNF" value={formatNumber(t.kgSnf, 1)} sub={t.snf !== null ? `avg ${formatNumber(t.snf, 2)}% SNF` : "—"} />
-          <Stat label="Paid" value={`₹${formatNumber(t.amount, 0)}`} sub={t.rate !== null ? `avg ₹${formatNumber(t.rate, 2)} / L` : "—"} />
+          <Stat label="Paid" value={`₹${formatNumber(t.amount, 0)}`} sub={t.rate !== null ? `avg ₹${formatNumber(t.rate, 2)} / L · ₹${formatNumber(perLitreToPerKg(t.rate, kgPerLitre), 2)} / kg` : "—"} />
           <Stat label="Days supplied" value={`${days.length}`} sub={`of ${allDays.length} days (${formatNumber(allDays.length ? (days.length / allDays.length) * 100 : 0, 0)}%)`} />
           <Stat
             label="Average fat · SNF"
@@ -270,6 +292,15 @@ export function FarmerProfile({
             <div className="px-2 py-3"><TrendChart points={snfPoints} color={GAIA.green} unit="% SNF" decimals={2} zeroBased={false} height={180} /></div>
           </Section>
         </div>
+
+        <Section
+          title="Price ₹ / L each day"
+          description="What this farmer was paid per litre (hover for ₹ per kg). From 1 Oct 2026 it's calculated from the rate chart (fat and CLR); before that it's the price the Vamaa app sent. Gaps are days with no milk or no price."
+        >
+          <div className="px-2 py-3">
+            <TrendChart points={pricePoints} color={GAIA.blue} unit="₹ / L" decimals={2} zeroBased={false} height={180} extraTip={priceTip} />
+          </div>
+        </Section>
 
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
@@ -324,7 +355,7 @@ export function FarmerProfile({
                   <table className="w-full whitespace-nowrap text-[12px]">
                     <thead className="sticky top-0 bg-secondary text-[10px] uppercase tracking-wide text-tertiary-foreground">
                       <tr>
-                        {["Date", "Litres", "Morning", "Evening", "Fat %", "SNF %", "Kg fat", "Kg SNF", "Paid ₹", "Transport ₹"].map((h, i) => (
+                        {["Date", "Litres", "Morning", "Evening", "Fat %", "SNF %", "Kg fat", "Kg SNF", "₹ / L", "₹ / kg", "Paid ₹", "Transport ₹"].map((h, i) => (
                           <th key={h} className={`px-3 py-2 font-medium ${i ? "text-right" : "text-left"}`}>{h}</th>
                         ))}
                       </tr>
@@ -340,6 +371,8 @@ export function FarmerProfile({
                           <td className="px-3 py-1.5 text-right">{formatNumber(d.snf_pct, 2)}</td>
                           <td className="px-3 py-1.5 text-right">{formatNumber(d.kg_fat, 2)}</td>
                           <td className="px-3 py-1.5 text-right">{formatNumber(d.kg_snf, 2)}</td>
+                          <td className="px-3 py-1.5 text-right">{d.price ? formatNumber(d.price, 2) : "—"}</td>
+                          <td className="px-3 py-1.5 text-right">{d.price ? formatNumber(perLitreToPerKg(d.price, kgPerLitre), 2) : "—"}</td>
                           <td className="px-3 py-1.5 text-right">{formatNumber(d.amount, 0)}</td>
                           <td className="px-3 py-1.5 text-right">
                             {transport.byDay[d.day] !== undefined ? formatNumber(transport.byDay[d.day], 2) : "—"}

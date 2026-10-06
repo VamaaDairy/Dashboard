@@ -1,25 +1,28 @@
 import { Fuel } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { DailyCostTable } from "@/components/DailyCostTable";
-import { getDailyCostDays } from "@/lib/daily/data";
+import { PlantFuelDay } from "@/components/fuel/PlantFuelDay";
+import { getPlantFuelDay, getPlantFuelHistory, getPlantFuelRates, getPlantFuels } from "@/lib/fuel/plant";
+import { today } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-const COLUMNS = [{ code: "fuel_production", label: "Production in plant fuel" }] as const;
-
-/** Fuel burned inside the plant. No transporters here, just the day's amount. */
-export default async function ProductionFuelPage() {
-  const days = await getDailyCostDays(COLUMNS.map((c) => c.code));
+/** Fuel burned in the plant - coal, and any other fuel added below it - day by day. */
+export default async function ProductionFuelPage({ searchParams }: PageProps<"/fuel/production">) {
+  const { date: raw } = await searchParams;
+  const now = today();
+  const date = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : now;
+  const [entry, fuels, rates, history] = await Promise.all([getPlantFuelDay(date), getPlantFuels(), getPlantFuelRates(), getPlantFuelHistory()]);
 
   return (
-    <div className="flex flex-col flex-1 bg-background p-4 md:p-6 min-h-screen">
-      <div className="w-full space-y-5">
+    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
+      <div className="w-full max-w-5xl space-y-5">
         <PageHeader
           icon={Fuel}
           title="Fuel · Production in plant"
-          subtitle="Fuel used inside the plant for production, day by day. Divided across that day's production by milk processed."
+          subtitle="Coal and any other fuel burned in the plant each day. Enter the quantity; each fuel keeps its price until you change it."
         />
-        <DailyCostTable days={days} columns={COLUMNS} />
+        {/* keyed by date so the entry starts from that day's saved values */}
+        <PlantFuelDay key={date} date={date} today={now} entry={entry} fuels={fuels} rates={rates} history={history} />
       </div>
     </div>
   );

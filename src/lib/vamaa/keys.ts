@@ -11,6 +11,7 @@ interface CollectionLike {
   quantity: number;
   fat: number;
   clr: number;
+  snf?: number;
   amount: number;
   rate: number;
 }
@@ -25,18 +26,29 @@ export function collectionRef(r: CollectionLike, date: string): string {
 }
 
 /**
- * What a collection brings into a tank: litres, fat %, SNF % (from CLR and
- * fat, as the Milk in page shows it) and cost per litre (what the farmer is
- * paid: amount / litres, or the rate if there is no amount).
+ * SNF % of a collection. Village centres record CLR, so SNF is calculated
+ * from CLR and fat (CLR/4 + 0.20 x fat + 0.70). Tankers - and some centres -
+ * record no CLR and send SNF directly, so that is used as sent.
+ */
+export function collectionSnf(r: { fat: number | string; clr: number | string; snf?: number | string }): number {
+  const fat = Number(r.fat) || 0;
+  const clr = Number(r.clr) || 0;
+  if (clr > 0) return snfFromClr(clr, fat);
+  return Number(r.snf) || 0;
+}
+
+/**
+ * What a collection brings into a tank: litres, fat %, SNF % (as the Milk in
+ * page shows it) and cost per litre (replaced by the collection's price when
+ * it goes into a tank - see assignCollectionToTank).
  */
 export function collectionMilk(r: CollectionLike) {
   const litres = Number(r.quantity) || 0;
-  const fat = Number(r.fat) || 0;
   const amount = Number(r.amount) || 0;
   return {
     litres,
-    fat,
-    snf: snfFromClr(Number(r.clr) || 0, fat),
+    fat: Number(r.fat) || 0,
+    snf: collectionSnf(r),
     costPerLitre: litres > 0 && amount > 0 ? amount / litres : Number(r.rate) || 0,
   };
 }

@@ -28,7 +28,7 @@ export interface MovementRow {
   balance_snf_pct: number;
   balance_cost_per_litre: number;
   notes: string | null;
-  source: string | null;          // 'vamaa' when it came from Milk in; null when entered here
+  source: string | null;          // 'vamaa' from Milk in, 'production' drawn for a batch; null when entered here
 }
 
 export async function getTanks(): Promise<TankRow[]> {

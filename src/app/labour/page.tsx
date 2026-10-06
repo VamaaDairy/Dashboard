@@ -1,24 +1,28 @@
 import { Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { DailyCostTable } from "@/components/DailyCostTable";
-import { getDailyCostDays } from "@/lib/daily/data";
+import { LabourDay } from "@/components/daily/HeadDayEntry";
+import { getHeadDay, getHeadDays } from "@/lib/daily/heads";
+import { today } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-const COLUMNS = [{ code: "labour", label: "Labour" }] as const;
-
-export default async function LabourPage() {
-  const days = await getDailyCostDays(COLUMNS.map((c) => c.code));
+/** Labour day by day: how many labourers worked and the total paid. */
+export default async function LabourPage({ searchParams }: PageProps<"/labour">) {
+  const { date: raw } = await searchParams;
+  const now = today();
+  const date = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : now;
+  const [entry, history] = await Promise.all([getHeadDay("labour", date), getHeadDays("labour")]);
 
   return (
-    <div className="flex flex-col flex-1 bg-background p-4 md:p-6 min-h-screen">
-      <div className="w-full space-y-5">
+    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
+      <div className="w-full max-w-5xl space-y-5">
         <PageHeader
           icon={Users}
           title="Labour"
-          subtitle="Labour cost, day by day. Divided across that day's production by milk processed."
+          subtitle="Labourers and the total paid each day. Divided across that day's production by milk processed."
         />
-        <DailyCostTable days={days} columns={COLUMNS} />
+        {/* keyed by date so the entry starts from that day's saved values */}
+        <LabourDay key={date} date={date} today={now} entry={entry} history={history} />
       </div>
     </div>
   );
