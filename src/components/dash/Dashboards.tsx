@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import {
-  CAT3, CalendarHeatmap, ColumnChart, DivergingColumns, GAIA, MatrixHeatmap, SplitBar, StackedColumns, TrendChart, shortDate,
+  CalendarHeatmap, ColumnChart, DivergingColumns, GAIA, MatrixHeatmap, SplitBar, StackedColumns, TrendChart, shortDate,
 } from "@/components/farmers/charts";
 import { Panel, PeriodBar, Tiles, dayList } from "@/components/dash/Dash";
 import { THead, Th } from "@/components/tanks/ui";
 import { formatNumber } from "@/lib/format";
 import type { MilkInDay, MilkQuality, PlantFuelUse, TankFlowDay, TankLevel, TransportDay } from "@/lib/dash/data";
+import { COST } from "@/lib/costing/colors";
 
 const rs = (v: number, d = 0) => `₹${formatNumber(v, d)}`;
 const sum = <T,>(xs: T[], f: (x: T) => number) => xs.reduce((t, x) => t + f(x), 0);
@@ -131,6 +132,29 @@ export function TanksDashboard({ from, to, today, flows, stock, levels }: {
         </Panel>
       </div>
 
+      <Panel title="How milk moved through each tank" description="Over the period: milk received from farmers and tankers, moved in from another tank, moved on, and drawn for production.">
+        <div className="overflow-x-auto">
+          <table className="w-full whitespace-nowrap text-[13px]">
+            <THead><Th align="left">Tank</Th><Th>Received L</Th><Th>Moved in L</Th><Th>Moved on L</Th><Th>Drawn for batches L</Th><Th>Days used</Th></THead>
+            <tbody>
+              {tanks.map(([id, name]) => {
+                const fs = flows.filter((f) => f.tank_id === id);
+                return (
+                  <tr key={id} className="border-b border-border/70 hover:bg-muted/60">
+                    <td className="px-3 py-1.5 font-semibold text-foreground">{name}</td>
+                    <td className={td}>{formatNumber(sum(fs, (f) => f.in_farmers + f.in_other), 0)}</td>
+                    <td className={td}>{formatNumber(sum(fs, (f) => f.in_transfer), 0)}</td>
+                    <td className={td}>{formatNumber(sum(fs, (f) => f.out_transfer), 0)}</td>
+                    <td className={`${td} font-semibold text-foreground`}>{formatNumber(sum(fs, (f) => f.out_production), 0)}</td>
+                    <td className={`${td} text-muted-foreground`}>{fs.length}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
       <Panel title="Litres in each tank at the end of the day" description="Only days a tank moved. Darker = fuller.">
         <MatrixHeatmap days={dates} unit="L" emptyLabel="no movement" showTotal={false}
           rows={tanks.map(([id, name]) => ({ key: id, label: name, cells: Object.fromEntries(flows.filter((f) => f.tank_id === id).map((f) => [f.day, f.close === null ? null : Number(f.close)])) }))} />
@@ -214,13 +238,13 @@ export function FuelDashboard({ from, to, today, runs, plant, milk }: {
             <li key={k} className="rounded-lg bg-muted/50 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-[11px] font-semibold text-muted-foreground">#{i + 1} · {SECTION[w.section]}</div>
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><span className="inline-block h-2 w-2 rounded-sm" style={{ background: w.section === "delivery" ? COST.fuel_delivery.color : COST.fuel_procurement.color }} />#{i + 1} · {SECTION[w.section]}</div>
                   <div className="text-[14px] font-semibold text-foreground">{w.name}</div>
                 </div>
                 <div className="num text-right text-[16px] font-bold text-foreground">{rs(w.cost)}</div>
               </div>
               <div className="mt-2 h-1.5 w-full rounded-full bg-white">
-                <div className="h-1.5 rounded-full" style={{ width: `${(w.cost / top) * 100}%`, background: w.section === "delivery" ? CAT3[0] : CAT3[1] }} />
+                <div className="h-1.5 rounded-full" style={{ width: `${(w.cost / top) * 100}%`, background: w.section === "delivery" ? COST.fuel_delivery.color : COST.fuel_procurement.color }} />
               </div>
               <div className="num mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                 {w.km ? <span>{formatNumber(w.km, 0)} km · {rs(w.cost / w.km, 2)}/km</span> : null}
@@ -235,8 +259,8 @@ export function FuelDashboard({ from, to, today, runs, plant, milk }: {
 
       <Panel title="Fuel & transport, day by day" description="Each day's three costs stacked. Delivery goes onto the SKUs; the other two are spread over the litres of milk processed.">
         <StackedColumns days={dates} unit="₹"
-          series={[{ label: "Delivery", color: CAT3[0] }, { label: "Milk to plant", color: CAT3[1] }, { label: "Coal & plant fuel", color: CAT3[2] }]}
-          values={Object.fromEntries(daily.map((d) => [d.day, [d.del, d.mtp, d.plant]]))} />
+          series={[{ label: "Coal & plant fuel", color: COST.fuel_production.color }, { label: "Delivery", color: COST.fuel_delivery.color }, { label: "Milk to plant", color: COST.fuel_procurement.color }]}
+          values={Object.fromEntries(daily.map((d) => [d.day, [d.plant, d.del, d.mtp]]))} />
       </Panel>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -252,7 +276,7 @@ export function FuelDashboard({ from, to, today, runs, plant, milk }: {
           </div>
         </Panel>
         <Panel title="Coal burned" description="Kg a day - it follows the milk processed.">
-          <ColumnChart color={GAIA.orange} unit="kg"
+          <ColumnChart color={COST.fuel_production.color} unit="kg"
             data={dates.map((d) => ({
               key: d, label: shortDate(d).replace(/ \d+$/, ""), value: dmap.get(d)!.coal,
               tip: [{ label: "kg coal", value: formatNumber(dmap.get(d)!.coal, 0) }, { label: "₹", value: formatNumber(dmap.get(d)!.plant, 0) }],

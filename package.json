@@ -16,7 +16,8 @@
     "db:seed:overhead-heads": "tsx db/seed-overhead-heads.ts",
     "db:seed:rate-chart": "tsx db/seed-rate-chart.ts",
     "db:verify": "tsx db/verify.ts",
-    "db:seed:demo": "tsx --conditions=react-server db/seed-demo.ts"
+    "db:seed:demo": "tsx --conditions=react-server db/seed-demo.ts",
+    "db:seed:sku-packing": "tsx --conditions=react-server db/seed-sku-packing.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

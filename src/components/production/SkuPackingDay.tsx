@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, Package, Plus, Search, Settings2, Trash2 } from "lucide-react";
-import { saveSku, saveSkuDay, type MaterialLine } from "@/app/daily/sku-actions";
+import { saveSku, saveSkuDay, saveSkuPacking, type MaterialLine } from "@/app/daily/sku-actions";
+import { standardMaterial } from "@/lib/production/packing";
 import { Empty, Section, THead, Th } from "@/components/tanks/ui";
 import { DateBar } from "@/components/tanks/TankDayBoard";
 import {
@@ -14,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
 import type { BulkProduct } from "@/lib/production/data";
-import type { BulkYield, PackMaterial, PackagingOption, SkuDayRow, SkuHistoryDay } from "@/lib/production/sku";
+import type { BulkYield, PackMaterial, PackagingOption, PackingListLine, SkuDayRow, SkuHistoryDay } from "@/lib/production/sku";
 
 type Entry = { cases: string; loose_pcs: string };
 type MLine = MaterialLine & { custom?: boolean };
@@ -29,8 +30,9 @@ const val = (s: string) => {
 const cell = "w-20 rounded-md border border-border bg-white px-1.5 py-1 text-right text-[13px] focus:border-foreground/40 focus:outline-none disabled:bg-muted/50 disabled:text-tertiary-foreground";
 
 export function SkuPackingDay({
-  date, today, skus, bulkProducts, yields, history, materials, lastMaterials, packaging,
+  date, today, skus, bulkProducts, yields, history, materials, lastMaterials, packaging, packingLists,
 }: {
+  packingLists: Record<string, PackingListLine[]>;
   date: string;
   today: string;
   skus: SkuDayRow[];
@@ -62,6 +64,11 @@ export function SkuPackingDay({
   };
 
   const pcsOf = (s: SkuDayRow) => val(entries[s.sku_id].cases) * s.pcs_per_case + val(entries[s.sku_id].loose_pcs);
+  const stdLines = (s: SkuDayRow): MLine[] =>
+    standardMaterial(packingLists[s.sku_id] ?? [], pcsOf(s), val(entries[s.sku_id].cases))
+      .map((m) => ({ packaging_id: m.packaging_id, name: m.name, qty: String(m.qty), unit: m.unit, price: String(m.price) }));
+  // what the day's material will be: what was entered, else the standing list (Save day fills it in the same way)
+  const effective = (s: SkuDayRow) => (mats[s.sku_id].length ? mats[s.sku_id] : pcsOf(s) > 0 ? stdLines(s) : []);
   const bulkOf = (s: SkuDayRow) => (s.bulk_qty_per_pc === null ? null : pcsOf(s) * Number(s.bulk_qty_per_pc));
   const productById = useMemo(() => new Map(bulkProducts.map((p) => [p.id, p])), [bulkProducts]);
   const categories = useMemo(() => ["All", ...new Set(skus.map((s) => s.category))], [skus]);
@@ -78,9 +85,11 @@ export function SkuPackingDay({
     return {
       packed: packed.length,
       pcs: packed.reduce((t, s) => t + pcsOf(s), 0),
-      cases: packed.reduce((t, s) => t + val(entries[s.sku_id].cases), 0),
-      material: skus.reduce((t, s) => t + materialCost(mats[s.sku_id]), 0),
-      noMaterial: packed.filter((s) => mats[s.sku_id].length === 0).length,
+      // product packed - kg and litres, never pieces added across SKUs
+      kg: packed.filter((s) => productById.get(s.bulk_product_id ?? "")?.unit === "kg").reduce((t, s) => t + (bulkOf(s) ?? 0), 0),
+      litres: packed.filter((s) => productById.get(s.bulk_product_id ?? "")?.unit === "L").reduce((t, s) => t + (bulkOf(s) ?? 0), 0),
+      material: skus.reduce((t, s) => t + materialCost(effective(s)), 0),
+      noMaterial: packed.filter((s) => effective(s).length === 0).length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, mats, skus]);
@@ -138,11 +147,10 @@ export function SkuPackingDay({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
           { label: "SKUs packed", value: `${totals.packed}`, unit: `of ${skus.length}` },
-          { label: "Cases", value: formatNumber(totals.cases, 0), unit: "" },
-          { label: "Pieces", value: formatNumber(totals.pcs, 0), unit: "pcs" },
+          { label: "Product packed", value: formatNumber(totals.kg, 0), unit: `kg + ${formatNumber(totals.litres, 0)} L` },
           { label: "Packing material", value: `₹${formatNumber(totals.material, 0)}`, unit: totals.noMaterial ? `${totals.noMaterial} SKU${totals.noMaterial > 1 ? "s" : ""} without` : "" },
           { label: "Bulk batches today", value: `${yields.length}`, unit: yields.length ? `${yields.filter((y) => y.output_qty !== null && Number(y.output_qty) > 0).length} with yield` : "" },
         ].map((s) => (
@@ -234,14 +242,16 @@ export function SkuPackingDay({
                         <td className="max-w-60 px-3 py-1.5">
                           <button onClick={() => setPacking(s)}
                             className="inline-flex max-w-full items-center gap-1.5 truncate rounded-md border border-border px-2 py-1 text-left text-[12px] hover:bg-muted"
-                            title={mats[s.sku_id].map((l) => `${l.name} ${l.qty} ${l.unit} @ ₹${l.price}`).join("\n") || "Add packing material"}>
+                            title={effective(s).map((l) => `${l.name} ${l.qty} ${l.unit} @ ₹${l.price}`).join("\n") || "Add packing material"}>
                             <Package className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                             {mats[s.sku_id].length
                               ? <span className="truncate font-semibold text-foreground">{mats[s.sku_id].map((l) => `${l.name} ${formatNumber(val(l.qty), l.unit === "kg" ? 2 : 0)} ${l.unit}`).join(" · ")}</span>
+                              : pcs > 0 && effective(s).length
+                              ? <span className="truncate text-muted-foreground">Standard · {effective(s).map((l) => `${l.name} ${formatNumber(val(l.qty), l.unit === "kg" ? 2 : 0)} ${l.unit}`).join(" · ")}</span>
                               : <span className="text-muted-foreground">{pcs > 0 ? "Add items" : "None"}</span>}
                           </button>
                         </td>
-                        <td className="num px-3 py-1.5 text-right">{mats[s.sku_id].length ? formatNumber(materialCost(mats[s.sku_id]), 0) : "—"}</td>
+                        <td className={`num px-3 py-1.5 text-right ${mats[s.sku_id].length ? "" : "text-muted-foreground"}`}>{effective(s).length ? formatNumber(materialCost(effective(s)), 0) : "—"}</td>
                         <td className="px-2 py-1 text-right">
                           <button onClick={() => setSetup(s)} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title={`Set up ${s.name}`}>
                             <Settings2 className="h-4 w-4" />
@@ -256,11 +266,8 @@ export function SkuPackingDay({
             </tbody>
             <tfoot>
               <tr className="bg-muted/50 font-semibold">
-                <td className="px-3 py-2" colSpan={3}>Total · {totals.packed} SKUs packed</td>
-                <td className="num px-3 py-2 text-right">{formatNumber(totals.cases, 0)}</td>
-                <td />
-                <td className="num px-3 py-2 text-right">{formatNumber(totals.pcs, 0)}</td>
-                <td colSpan={3} />
+                <td className="px-3 py-2" colSpan={6}>{totals.packed} SKUs packed · each counted in its own unit above</td>
+                <td className="num px-3 py-2 text-right" colSpan={3}>{formatNumber(totals.kg, 0)} kg + {formatNumber(totals.litres, 0)} L of product</td>
                 <td className="num px-3 py-2 text-right">{formatNumber(totals.material, 0)}</td>
                 <td />
               </tr>
@@ -318,7 +325,6 @@ export function SkuPackingDay({
               <THead>
                 <Th align="left">Date</Th>
                 <Th>SKUs</Th>
-                <Th>Pieces</Th>
                 <Th>Material ₹</Th>
               </THead>
               <tbody>
@@ -328,11 +334,10 @@ export function SkuPackingDay({
                       <Link href={`/daily/sku?date=${d.day}`} className="font-semibold text-foreground hover:underline">{d.day}</Link>
                     </td>
                     <td className="num px-3 py-1.5 text-right">{d.skus}</td>
-                    <td className="num px-3 py-1.5 text-right">{formatNumber(Number(d.pcs), 0)}</td>
                     <td className="num px-3 py-1.5 text-right">{Number(d.material) ? formatNumber(Number(d.material), 0) : "—"}</td>
                   </tr>
                 ))}
-                {history.length === 0 ? <Empty colSpan={4}>No packing saved yet.</Empty> : null}
+                {history.length === 0 ? <Empty colSpan={3}>No packing saved yet.</Empty> : null}
               </tbody>
             </table>
           </div>
@@ -347,6 +352,7 @@ export function SkuPackingDay({
               sku={packing}
               pcs={pcsOf(packing)}
               lines={mats[packing.sku_id]}
+              standard={stdLines(packing)}
               last={lastMaterials[packing.sku_id] ?? null}
               packaging={packaging}
               onSave={(lines) => {
@@ -362,8 +368,8 @@ export function SkuPackingDay({
       </Dialog>
 
       <Dialog open={setup !== null} onOpenChange={(o) => { if (!o) setSetup(null); }}>
-        <DialogContent className="sm:max-w-lg">
-          {setup ? <SkuSetup key={setup.sku_id} sku={setup} bulkProducts={bulkProducts} onDone={() => { setSetup(null); router.refresh(); }} onClose={() => setSetup(null)} /> : null}
+        <DialogContent className="sm:max-w-2xl">
+          {setup ? <SkuSetup key={setup.sku_id} sku={setup} bulkProducts={bulkProducts} packaging={packaging} list={packingLists[setup.sku_id] ?? []} onDone={() => { setSetup(null); router.refresh(); }} onClose={() => setSetup(null)} /> : null}
         </DialogContent>
       </Dialog>
     </>
@@ -384,15 +390,27 @@ function GroupRows({ category, rows, children }: { category: string; rows: SkuDa
   );
 }
 
-/** One SKU's setup: case size, the bulk product it is filled from, and how much one piece holds. */
+/** One SKU's setup: case size, the bulk product it is filled from, how much one piece holds, and its packing list. */
 function SkuSetup({
-  sku, bulkProducts, onDone, onClose,
+  sku, bulkProducts, packaging, list, onDone, onClose,
 }: {
   sku: SkuDayRow;
   bulkProducts: BulkProduct[];
+  packaging: PackagingOption[];
+  list: PackingListLine[];
   onDone: () => void;
   onClose: () => void;
 }) {
+  const [packList, setPackList] = useState<{ packaging_id: string; qty: string; per: "pc" | "case" }[]>(() =>
+    list.map((l) => ({ packaging_id: l.packaging_id, qty: String(l.qty), per: l.per })));
+  const setLine = (i: number, patch: Partial<{ packaging_id: string; qty: string; per: "pc" | "case" }>) =>
+    setPackList((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+  const option = (id: string) => packaging.find((o) => o.id === id);
+  const perPiece = packList.reduce((t, l) => {
+    const o = option(l.packaging_id);
+    const q = Number(l.qty) || 0;
+    return t + (o?.last_price ?? 0) * (l.per === "case" ? q / Math.max(1, Number(sku.pcs_per_case)) : q);
+  }, 0);
   const [pcs, setPcs] = useState(String(sku.pcs_per_case));
   const [bulk, setBulk] = useState(sku.bulk_product_id ?? "");
   const [perPc, setPerPc] = useState(sku.bulk_qty_per_pc === null ? "" : String(Number(sku.bulk_qty_per_pc)));
@@ -408,6 +426,8 @@ function SkuSetup({
       start(async () => {
         const res = await saveSku(sku.sku_id, { pcs_per_case: pcs, bulk_product_id: bulk, bulk_qty_per_pc: perPc, is_active: active });
         if (!res.ok) { setError(res.error); return; }
+        const res2 = await saveSkuPacking(sku.sku_id, packList);
+        if (!res2.ok) { setError(res2.error); return; }
         onDone();
       });
     }}>
@@ -434,6 +454,45 @@ function SkuSetup({
             How much of the bulk product goes into one piece - 0.5 for a 500 ml pouch of milk, 0.2 for a 200 g cup.
           </span>
         </label>
+        <div className="rounded-lg border border-border p-3 sm:col-span-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[12px] font-semibold text-foreground">Packing material for one {sku.pcs_per_case > 1 ? "piece / case" : "piece"}</span>
+            <span className="num text-[12px] text-muted-foreground">≈ ₹{formatNumber(perPiece, 2)} per piece at current rates</span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Each day&apos;s material is worked out from this list and what was packed. Change it for a single day in the packing material box.</p>
+          <div className="mt-2 space-y-2">
+            {packList.map((l, i) => {
+              const o = option(l.packaging_id);
+              return (
+                <div key={i} className="grid grid-cols-[minmax(0,1fr)_7rem_8rem_auto] items-center gap-2">
+                  <select value={l.packaging_id} onChange={(e) => setLine(i, { packaging_id: e.target.value })}
+                    className="h-9 rounded-lg border border-border bg-white px-2 text-[13px]" aria-label="Packaging item">
+                    <option value="">Choose item</option>
+                    {packaging.map((p) => <option key={p.id} value={p.id}>{p.name} · ₹{formatNumber(p.last_price ?? 0, 2)}/{p.unit === "kg" ? "kg" : "pc"}</option>)}
+                  </select>
+                  <span className="relative">
+                    <Input inputMode="decimal" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} className="h-9 pr-8 text-right" aria-label="Quantity" />
+                    <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-muted-foreground">{o?.unit === "kg" ? "kg" : "pc"}</span>
+                  </span>
+                  <div className="flex h-9 overflow-hidden rounded-lg border border-border text-[12px] font-semibold">
+                    {(["pc", "case"] as const).map((p) => (
+                      <button key={p} type="button" onClick={() => setLine(i, { per: p })}
+                        className={`flex-1 ${l.per === p ? "bg-foreground text-background" : "bg-white text-muted-foreground"}`}>
+                        per {p === "pc" ? "piece" : sku.case_unit.toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => setPackList((ls) => ls.filter((_, k) => k !== i))}
+                    className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground" title="Remove"><Trash2 className="h-4 w-4" /></button>
+                </div>
+              );
+            })}
+            <button type="button" onClick={() => setPackList((ls) => [...ls, { packaging_id: "", qty: "1", per: "pc" }])}
+              className="inline-flex items-center gap-1 text-[12px] font-semibold text-muted-foreground hover:text-foreground">
+              <Plus className="h-3.5 w-3.5" /> Add item
+            </button>
+          </div>
+        </div>
         <label className="flex items-center gap-2 text-[13px] sm:col-span-2">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           On the packing list
@@ -454,18 +513,20 @@ function SkuSetup({
  * Packaging master (with the last price used) or are typed in.
  */
 function MaterialBody({
-  sku, pcs, lines: saved, last, packaging, onSave, onClose,
+  sku, pcs, lines: saved, standard, last, packaging, onSave, onClose,
 }: {
   sku: SkuDayRow;
   pcs: number;
   lines: MLine[];
+  /** the SKU's standing packing list for what is packed today */
+  standard: MLine[];
   last: { day: string; lines: PackMaterial[] } | null;
   packaging: PackagingOption[];
   onSave: (lines: MLine[]) => void;
   onClose: () => void;
 }) {
   const blank = (): MLine => ({ packaging_id: null, name: "", qty: "", unit: "pcs", price: "" });
-  const [lines, setLines] = useState<MLine[]>(() => (saved.length ? saved : [blank()]));
+  const [lines, setLines] = useState<MLine[]>(() => (saved.length ? saved : standard.length ? standard : [blank()]));
   const update = (i: number, patch: Partial<MLine>) => setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
   const used = new Set(lines.map((l) => l.packaging_id).filter(Boolean));
   const total = materialCost(lines);
@@ -484,7 +545,13 @@ function MaterialBody({
       </DialogHeader>
 
       <div className="max-h-[65vh] space-y-3 overflow-auto px-5 py-4">
-        {last && saved.length === 0 ? (
+        {standard.length ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-[12px] text-muted-foreground">
+            <span>Standard list for {formatNumber(pcs, 0)} pcs: {standard.map((l) => `${l.name} ${l.qty} ${l.unit}`).join(" · ")}</span>
+            <button type="button" onClick={() => setLines(standard)} className="font-semibold text-foreground underline">Use standard list</button>
+          </div>
+        ) : null}
+        {last && saved.length === 0 && !standard.length ? (
           <button type="button"
             onClick={() => setLines(last.lines.map(toLine))}
             className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">

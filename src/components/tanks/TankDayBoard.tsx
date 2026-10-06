@@ -213,6 +213,7 @@ export function TankDayBoard({
       </Section>
 
       <TakeOutDialog
+        tanks={days}
         tank={days.find((d) => d.tank_id === takingFrom) ?? null}
         date={date}
         kgPerLitre={kgPerLitre}
@@ -302,7 +303,12 @@ export function MovementTable<M extends MovementRow>({
               <Num value={m.balance_litre} decimals={0} dim />
               <td className="max-w-72 truncate px-3 py-2 text-[12px] text-muted-foreground">{m.notes ?? ""}</td>
               <td className="px-2 py-2 text-right">
-                {m.source === "production" ? (
+                {m.source === "transfer" ? (
+                  <DeleteButton
+                    onDelete={() => deleteMovement(m.id, tankIdOf(m))}
+                    confirmLabel={`the move of ${formatNumber(m.qty_litre, 0)} L on ${m.movement_date} (both tanks)`}
+                  />
+                ) : m.source === "production" ? (
                   <Link href={`/daily?date=${m.movement_date}`} className="text-[10px] text-tertiary-foreground hover:underline" title="Change it on the Production page">Production</Link>
                 ) : m.source ? (
                   <span className="text-[10px] text-tertiary-foreground" title="Change its tank on the Milk in page">Milk in</span>

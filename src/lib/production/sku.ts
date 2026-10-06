@@ -151,3 +151,35 @@ function group(rows: (PackMaterial & { sku_id: string })[]): Record<string, Pack
   for (const { sku_id, ...line } of rows) (out[sku_id] ??= []).push(line);
   return out;
 }
+
+/** One line of a SKU's standing packing list, with the item's unit and current rate (incl. GST). */
+export interface PackingListLine {
+  packaging_id: string;
+  name: string;
+  unit: "kg" | "pcs";
+  qty: number;           // per piece or per case, in the item's unit
+  per: "pc" | "case";
+  rate: number | null;
+}
+
+/** Every SKU's standing packing list, by SKU id. */
+export async function getSkuPackingLists(): Promise<Record<string, PackingListLine[]>> {
+  const rows = await query<PackingListLine & { sku_id: string }>(
+    `select i.sku_id, i.packaging_id, o.name,
+            case when coalesce(u.value_text, u.computed_text) = 'kg' then 'kg' else 'pcs' end as unit,
+            i.qty, i.per, r.value_num as rate
+       from sku_packing_item i
+       join sku s on s.id = i.sku_id
+       join cost_object o on o.id = i.packaging_id
+       left join field_def fu on fu.class_id = o.class_id and fu.key = 'unit'
+       left join field_value u on u.object_id = o.id and u.field_def_id = fu.id
+       left join field_def fr on fr.class_id = o.class_id and fr.key = 'rate'
+       left join field_value r on r.object_id = o.id and r.field_def_id = fr.id
+      where s.scenario_id = $1
+      order by i.sku_id, i.sort_order`,
+    [await activeScenarioId()],
+  );
+  const out: Record<string, PackingListLine[]> = {};
+  for (const { sku_id, ...l } of rows) (out[sku_id] ??= []).push({ ...l, qty: Number(l.qty), rate: l.rate === null ? null : Number(l.rate) });
+  return out;
+}
