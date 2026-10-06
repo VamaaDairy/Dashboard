@@ -20,6 +20,15 @@ import bcrypt from "bcryptjs";
 import { Client } from "pg";
 import { migrate } from "./migrations";
 
+// On Vercel there is no local database to fall back to: without DATABASE_URL the
+// build would only fail later with "connection refused", so say what's missing.
+if (!process.env.DATABASE_URL && process.env.VERCEL) {
+  console.error(
+    "DATABASE_URL is not set for this deployment. Add it in Vercel -> Project -> Settings -> " +
+      "Environment Variables (tick Production and Preview), then redeploy.",
+  );
+  process.exit(1);
+}
 const URL_STR = process.env.DATABASE_URL ?? "postgres://localhost:5432/costing_erp";
 const RESET = process.argv.includes("--reset");
 
