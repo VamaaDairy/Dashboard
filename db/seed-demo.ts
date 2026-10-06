@@ -18,6 +18,7 @@
  *
  *   npm run db:seed:demo             # fill 1-6 Oct
  *   npm run db:seed:demo -- --undo   # take all of it out again, put old values back
+ *   npm run db:seed:demo -- --rebuild-materials   # redo the demo days' packing material from each SKU's packing list
  *
  * Runs through the app's own engine (tank ledger, fuel sync, day costing), so
  * the numbers are exactly what the pages would have produced.
@@ -35,6 +36,8 @@ import { syncMilkProcessed } from "@/lib/production/sync";
 import { syncFuelDays } from "@/lib/transport/sync";
 import { syncPlantFuelDays } from "@/lib/fuel/plant";
 import { freezeDay } from "@/lib/daily/compute";
+import { getSkuPackingLists } from "@/lib/production/sku";
+import { standardMaterial } from "@/lib/production/packing";
 
 const FIRST = "2026-09-01", LAST = "2026-10-06";
 const DATES: string[] = [];
@@ -185,6 +188,20 @@ function materialFor(code: string, pcs: number, cases: number, caseUnit: string)
 
 const TANKER_SUPPLIERS = ["Sai Dairy", "AB Dairy", "Atul Dairy", "Devbhog"];
 
+// Raw milk lands in RMST1/2 and is moved on to the tank each product is made
+// from; paneer goes through the two 500 L coagulation tanks in rounds.
+const PROCESS_TANK: Record<string, string> = {
+  toned_milk: "pmst1", cow_milk: "pmst1", sweet_milk: "pmst1",
+  plain_dahi_14_5_ts: "pmst2", plain_dahi_13_0_ts: "pmst2", kadhi_dahi: "pmst2",
+  sweet_lassi: "pmst3", sweet_lassi_mango: "pmst3", sweet_lassi_strawberry: "pmst3", masala_chaach: "pmst3",
+  sweet_dahi_lychee: "pmst3", sweet_dahi_muskmelon: "pmst3", misti_doi: "pmst3",
+  desi_ghee: "hmst1", cow_ghee: "hmst1",
+  khowa: "hmst2", peda: "hmst2", kesar_peda: "hmst2",
+  shrikhand: "hmst3", rabadi: "hmst3",
+  paneer: "coagulation",
+};
+const COAG_ROUND = 480;   // litres per coagulation round (the tanks hold 500)
+
 // ---------------------------------------------------------------- helpers
 /** Deterministic random numbers per date, so a re-seed gives the same figures. */
 function rng(seed: string) {
@@ -310,6 +327,7 @@ async function seed() {
     `select id, name, section from transporter where scenario_id = $1 and is_active`, [scenario]);
   const coal = (await one<{ id: string }>(`select id from plant_fuel where scenario_id = $1 and code = 'coal'`, [scenario]))!;
   const centreList = await centers();
+  const lists = await getSkuPackingLists();
 
   for (const [di, date] of DATES.entries()) {
     const r = rng(`demo:${date}`);
@@ -358,9 +376,35 @@ async function seed() {
     }
     await withClient(async (c) => { await recomputeTank(c, rm1); await recomputeTank(c, rm2); });
 
-    // --- bulk batches: milk drawn from RMST2 first, then RMST1
+    // --- move raw milk on: RMST2 first, then RMST1, into the tank each group of products is made from
     const bal = new Map<string, number>((await query<{ id: string; q: number }>(
       `select id, qty_litre as q from tank where id = any($1)`, [[rm1, rm2]])).map((t) => [t.id, Number(t.q)]));
+    const transfer = async (toId: string, litres: number, hour: number) => {
+      let left = litres;
+      for (const fromId of [rm2, rm1]) {
+        const take = Math.min(left, Math.floor((bal.get(fromId) ?? 0) * 10) / 10);
+        if (take <= 0) continue;
+        const toName = [...tanks.entries()].find(([, id]) => id === toId)?.[0]?.toUpperCase() ?? "tank";
+        const fromName = fromId === rm1 ? "RMST1" : "RMST2";
+        const out = (await one<{ id: string }>(
+          `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, created_at)
+           values ($1, $2, $3, 'out', $4, $5, 'transfer', ${stamp(hour)}) returning id`,
+          [scenario, fromId, date, take, `Moved to ${toName}`]))!;
+        await query(
+          `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, transfer_of, created_at)
+           values ($1, $2, $3, 'in', $4, $5, 'transfer', $6, ${stamp(hour)})`,
+          [scenario, toId, date, take, `From ${fromName}`, out.id]);
+        await rec("tank_movement", out.id);   // the 'in' goes with it on undo
+        bal.set(fromId, (bal.get(fromId) ?? 0) - take);
+        left -= take;
+      }
+      if (left > 0.05) throw new Error(`${date}: not enough raw milk to move ${litres} L`);
+    };
+    const need = new Map<string, number>();
+    for (const p of plan) if (PROCESS_TANK[p.code] !== "coagulation") need.set(PROCESS_TANK[p.code], (need.get(PROCESS_TANK[p.code]) ?? 0) + p.litres);
+    for (const [code, litres] of need) await transfer(tanks.get(code)!, litres, 10);
+
+    // --- bulk batches: each drawn from its own tank
     const batchIds: string[] = [];
     const yields = new Map<string, number>();
     for (const p of plan) {
@@ -381,19 +425,27 @@ async function seed() {
           [b.id, s.ingredient_id, s.name, qty, s.unit, i]);
       }
 
-      let left = p.litres;
-      for (const tank of [rm2, rm1]) {
-        const take = Math.min(left, Math.floor((bal.get(tank) ?? 0) * 10) / 10);
-        if (take <= 0) continue;
+      const draw = async (tankId: string, litres: number, hour: number) => {
         await query(
           `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, bulk_batch_id, created_at)
-           values ($1, $2, $3, 'out', $4, $5, 'production', $6, ${stamp(14)})`,
-          [scenario, tank, date, take, `Production · ${product.name}`, b.id]);
-        bal.set(tank, (bal.get(tank) ?? 0) - take);
-        left -= take;
+           values ($1, $2, $3, 'out', $4, $5, 'production', $6, ${stamp(hour)})`,
+          [scenario, tankId, date, litres, `Production · ${product.name}`, b.id]);
+      };
+      if (PROCESS_TANK[p.code] === "coagulation") {
+        // paneer: fill a coagulation tank, curdle it, empty it - round after round, both tanks in turn
+        let left = p.litres, k = 0;
+        while (left > 0.05) {
+          const round = Math.min(COAG_ROUND, left);
+          const coag = tanks.get(k % 2 === 0 ? "coagulation_tank_1" : "coagulation_tank_2")!;
+          await transfer(coag, round, 15);
+          await draw(coag, round, 15);
+          left -= round; k++;
+        }
+      } else {
+        await draw(tanks.get(PROCESS_TANK[p.code])!, p.litres, 14);
       }
-      if (left > 0.05) throw new Error(`${date}: not enough milk in the tanks for ${product.name}`);
     }
+    // the raw tanks fix the blend each move leaves at; the engine carries it into every tank downstream
     await withClient(async (c) => { await recomputeTank(c, rm1); await recomputeTank(c, rm2); await syncBatchMilk(c, batchIds); });
     await syncMilkProcessed(scenario, [date]);
 
@@ -402,10 +454,16 @@ async function seed() {
     for (const [productCode, split] of Object.entries(SKU_SPLIT)) {
       const y = yields.get(productCode);
       if (!y) continue;
-      for (const [skuCode, share] of Object.entries(split)) {
-        const sku = skuByCode.get(skuCode);
-        if (!sku?.bulk_qty_per_pc) continue;
-        const pcs = Math.floor((y * 0.985 * share) / Number(sku.bulk_qty_per_pc));
+      // everything made is packed: each SKU its share, the last one whatever is left
+      const entriesOf = Object.entries(split).filter(([c]) => skuByCode.get(c)?.bulk_qty_per_pc);
+      let packedQty = 0;
+      for (const [k, [skuCode, share]] of entriesOf.entries()) {
+        const sku = skuByCode.get(skuCode)!;
+        const perPc = Number(sku.bulk_qty_per_pc);
+        const pcs = k === entriesOf.length - 1
+          ? Math.max(0, Math.round((y - packedQty) / perPc))
+          : Math.floor((y * share) / perPc);
+        packedQty += pcs * perPc;
         if (pcs <= 0) continue;
         const cases = Math.floor(pcs / sku.pcs_per_case);
         const loose = pcs - cases * sku.pcs_per_case;
@@ -413,12 +471,16 @@ async function seed() {
           `insert into sku_pack_day (scenario_id, sku_id, day, cases, loose_pcs) values ($1, $2, $3, $4, $5) returning id`,
           [scenario, sku.id, date, cases, loose]))!;
         await rec("sku_pack_day", d.id);
-        for (const [i, [item, qty]] of materialFor(skuCode, pcs, cases, sku.case_unit).entries()) {
-          const p = PACKAGING[item];
+        const std = lists[sku.id]?.length
+          ? standardMaterial(lists[sku.id], pcs, cases)
+          : materialFor(skuCode, pcs, cases, sku.case_unit).map(([item, qty]) => ({
+              packaging_id: packItems.get(item) ?? null, name: item, qty, unit: PACKAGING[item].unit === "kg" ? "kg" as const : "pcs" as const, price: PACKAGING[item].rate,
+            }));
+        for (const [i, m0] of std.entries()) {
           const m = (await one<{ id: string }>(
             `insert into sku_pack_material (scenario_id, sku_id, day, packaging_id, name, qty, unit, price, sort_order)
              values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
-            [scenario, sku.id, date, packItems.get(item) ?? null, item, qty, p.unit === "kg" ? "kg" : "pcs", p.rate, i]))!;
+            [scenario, sku.id, date, m0.packaging_id, m0.name, m0.qty, m0.unit, m0.price, i]))!;
           await rec("sku_pack_material", m.id);
           materialRows++;
         }
@@ -525,6 +587,31 @@ async function undo() {
   console.log(`Took out ${rows.length} demo rows and restored the old values.`);
 }
 
-(process.argv.includes("--undo") ? undo() : seed())
+/** Redoes the demo days' packing material from each SKU's standing packing list. */
+async function rebuildMaterials() {
+  const scenario = await activeScenarioId();
+  const lists = await getSkuPackingLists();
+  const old = await query<{ row_id: string }>(`select row_id from demo_seed where tbl = 'sku_pack_material' and old is null`);
+  await query(`delete from sku_pack_material where id = any($1)`, [old.map((o) => o.row_id)]);
+  await query(`delete from demo_seed where tbl = 'sku_pack_material'`);
+  const days = await query<{ sku_id: string; day: string; cases: number; loose_pcs: number; pcs_per_case: number }>(
+    `select d.sku_id, to_char(d.day, 'YYYY-MM-DD') as day, d.cases::float8 as cases, d.loose_pcs::float8 as loose_pcs, s.pcs_per_case
+       from sku_pack_day d join sku s on s.id = d.sku_id
+      where d.id in (select row_id from demo_seed where tbl = 'sku_pack_day')`);
+  let n = 0;
+  for (const d of days) {
+    for (const [i, m0] of standardMaterial(lists[d.sku_id] ?? [], d.cases * d.pcs_per_case + d.loose_pcs, d.cases).entries()) {
+      const m = (await one<{ id: string }>(
+        `insert into sku_pack_material (scenario_id, sku_id, day, packaging_id, name, qty, unit, price, sort_order)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
+        [scenario, d.sku_id, d.day, m0.packaging_id, m0.name, m0.qty, m0.unit, m0.price, i]))!;
+      await rec("sku_pack_material", m.id);
+      n++;
+    }
+  }
+  console.log(`Rebuilt ${n} packing-material lines for ${days.length} SKU days from the packing lists.`);
+}
+
+(process.argv.includes("--undo") ? undo() : process.argv.includes("--rebuild-materials") ? rebuildMaterials() : seed())
   .then(() => pool.end())
   .catch(async (e) => { console.error(e instanceof Error ? e.message : e); await pool.end(); process.exit(1); });

@@ -54,6 +54,15 @@ transport, coal, electricity, labour) and sets typical ingredient and packaging 
 inserts or overwrites is recorded in `demo_seed`; `npm run db:seed:demo -- --undo` takes it all out
 and puts the old values back.
 
+Tank transfers: on the Tanks page the take-out icon can move milk into another tank. The milk leaves at
+the source tank's blend (fat, SNF, ₹/L) and is weighted-averaged into the receiving tank; if the source
+is later recomputed, the new blend follows the milk into every tank downstream. The demo data moves raw
+milk from RMST1/2 into PMST / HMST / coagulation tanks before production draws it.
+
+SKU packing lists: every SKU has its own standing packing list (items, quantity per piece or per case);
+`npm run db:seed:sku-packing` sets the default lists and packaging rates. Saving a day of SKU packing
+without material entered fills it from the list at the Packaging master rate.
+
 Costing: a day's shared costs (every overhead head except delivery fuel) are divided over the litres
 of milk that went into bulk batches that day; each batch carries its litres' share on top of its milk
 (at the tanks' blended ₹/L) and ingredients (at master rates). Delivery fuel goes onto the SKUs packed,
@@ -188,3 +197,21 @@ Everything else in the file is accounted for: the loose cells that no formula re
 (`100/5.8` beside masala chaach, `((420×15)+200)/15` beside the ghee tin) and the margin notes
 (curd dilution ratios, the ghee pack-transport derivations, "assumption random, no basis" against
 the shrikhand making charge) are carried as notes on the rows they belong to rather than dropped.
+
+## Deploying to Vercel
+
+`vercel.json` builds with `npm run db:setup && npm run build`, so every deploy first applies any new
+migrations (only the ones the database hasn't had) and then builds. Functions run in Cleveland (`cle1`),
+next to the Neon database in AWS us-east-2 - pages make many small queries, so the server sits by the
+database - with up to 60 s per request. If the database moves region, move `regions` with it.
+
+1. **A hosted Postgres.** The local database on this PC can't be reached from Vercel. Create one on
+   Neon, Supabase or Vercel Postgres and copy its connection string (use the pooled one, with
+   `?sslmode=require`).
+2. **Copy your data across** (optional - a new database starts empty):
+   `pg_dump -Fc costing_erp > costing.dump` then `pg_restore --no-owner -d "<hosted url>" costing.dump`.
+3. **Environment variables** in the Vercel project (Settings → Environment Variables):
+   `DATABASE_URL`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`, and for Milk in
+   `VAMAA_API_BASE_URL`, `VAMAA_API_KEY`, `VAMAA_ORG_ID`, `VAMAA_USERNAME`, `VAMAA_PASSWORD`,
+   `VAMAA_CENTER_SHORT_NAME`.
+4. Import the GitHub repo in Vercel and deploy.

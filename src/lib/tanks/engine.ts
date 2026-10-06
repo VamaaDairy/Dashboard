@@ -54,8 +54,13 @@ function apply(balance: Balance, m: MovementRow): Balance {
  * Throws (the caller should roll back) if any movement would take the tank
  * negative - milk that was never recorded as coming in cannot leave it - or
  * past its capacity, when one is set.
+ *
+ * Milk moved on to another tank carries this tank's blend: each transfer
+ * 'in' is updated to what its 'out' left at and the receiving tank is
+ * recomputed in turn (`seen` stops a loop of tanks feeding each other).
  */
-export async function recomputeTank(client: PoolClient, tankId: string): Promise<void> {
+export async function recomputeTank(client: PoolClient, tankId: string, seen: Set<string> = new Set()): Promise<void> {
+  seen.add(tankId);
   const tank = await client.query<{ capacity_litre: number | null; name: string }>(
     `select capacity_litre, name from tank where id = $1`, [tankId]);
   const capacity = tank.rows[0]?.capacity_litre ?? null;
@@ -108,6 +113,21 @@ export async function recomputeTank(client: PoolClient, tankId: string): Promise
     `update tank set qty_litre = $2, fat_pct = $3, snf_pct = $4, cost_per_litre = $5 where id = $1`,
     [tankId, balance.qty_litre, balance.fat_pct, balance.snf_pct, balance.cost_per_litre],
   );
+
+  // milk moved on to other tanks carries the blend it left this one at
+  const moved = await client.query<{ tank_id: string; changed: boolean }>(
+    `update tank_movement i
+        set fat_pct = o.fat_pct, snf_pct = o.snf_pct, cost_per_litre = o.cost_per_litre, qty_litre = o.qty_litre
+       from tank_movement o
+      where i.transfer_of = o.id and o.tank_id = $1
+        and (i.fat_pct is distinct from o.fat_pct or i.snf_pct is distinct from o.snf_pct
+             or i.cost_per_litre is distinct from o.cost_per_litre or i.qty_litre is distinct from o.qty_litre)
+      returning i.tank_id, true as changed`,
+    [tankId],
+  );
+  for (const t of new Set(moved.rows.map((r) => r.tank_id))) {
+    if (!seen.has(t)) await recomputeTank(client, t, seen);
+  }
 
   // a backdated change shifts the blend later draws left at, so batches fed from this tank follow
   const fed = await client.query<{ id: string }>(

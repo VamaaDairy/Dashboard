@@ -130,10 +130,56 @@ export async function deleteMovement(id: string, tankId: string): Promise<Result
   return guard(async () => {
     await tx(async (client) => {
       const m = await client.query<{ source: string | null }>(`select source from tank_movement where id = $1`, [id]);
+      if (m.rows[0]?.source === "transfer") {
+        // a transfer goes as a pair: the 'out' on one tank and the 'in' on the other
+        const pair = await client.query<{ out_id: string; tanks: string[] }>(
+          `select coalesce(x.transfer_of, x.id) as out_id,
+                  array[o.tank_id, i.tank_id]::text[] as tanks
+             from tank_movement x
+             join tank_movement o on o.id = coalesce(x.transfer_of, x.id)
+             join tank_movement i on i.transfer_of = o.id
+            where x.id = $1`, [id]);
+        const p = pair.rows[0];
+        if (!p) throw new Error("That transfer is no longer there - reload the page");
+        await client.query(`delete from tank_movement where id = $1`, [p.out_id]);   // the 'in' goes with it
+        for (const t of p.tanks) await recomputeTank(client, t);
+        return;
+      }
       if (m.rows[0]?.source === "production") throw new Error("This milk went into production - change it on the Production page");
       if (m.rows[0]?.source) throw new Error("This came from Milk in - change its tank on the Milk in page");
       await client.query(`delete from tank_movement where id = $1`, [id]);
       await recomputeTank(client, tankId);
+    });
+  });
+}
+
+/**
+ * Moves milk from one tank to another on a date: an 'out' on the first tank
+ * at its blend, and an 'in' on the second carrying exactly that blend and
+ * cost, weighted into whatever the second tank already holds.
+ */
+export async function transferMilk(date: string, fromTank: string, toTank: string, raw: string, notes?: string): Promise<Result> {
+  return guard(async () => {
+    if (!/^d{4}-d{2}-d{2}$/.test(date)) throw new Error("Pick a date");
+    if (!fromTank || !toTank) throw new Error("Pick the tank the milk goes to");
+    if (fromTank === toTank) throw new Error("Pick a different tank to move the milk into");
+    const qty = Number(String(raw ?? "").replace(/,/g, ""));
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error("Enter how many litres to move");
+    const scenario = await activeScenarioId();
+    const names = await query<{ id: string; name: string }>(`select id, name from tank where id = any($1) and scenario_id = $2`, [[fromTank, toTank], scenario]);
+    if (names.length !== 2) throw new Error("A tank picked no longer exists - reload the page");
+    const name = (id: string) => names.find((n) => n.id === id)!.name;
+    await tx(async (client) => {
+      const out = await client.query<{ id: string }>(
+        `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source)
+         values ($1, $2, $3, 'out', $4, $5, 'transfer') returning id`,
+        [scenario, fromTank, date, qty, notes?.trim() || `Moved to ${name(toTank)}`]);
+      await client.query(
+        `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, transfer_of)
+         values ($1, $2, $3, 'in', $4, $5, 'transfer', $6)`,
+        [scenario, toTank, date, qty, notes?.trim() || `From ${name(fromTank)}`, out.rows[0].id]);
+      // the source fixes the blend the milk leaves at, then carries it into the other tank
+      await recomputeTank(client, fromTank);
     });
   });
 }
