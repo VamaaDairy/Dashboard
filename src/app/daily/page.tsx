@@ -20,7 +20,15 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
     getCosting(date, date),
   ]);
   const day = costing.days[0];
-  const shared = { amount: day?.shared ?? 0, litres: day?.milk_litre ?? 0, rate: day?.rate_per_litre ?? null };
+  const SHORT: Record<string, string> = { electricity: "Electricity", labour: "Labour", fuel_production: "Coal", fuel_procurement: "Milk transport" };
+  const shared = {
+    amount: day?.shared ?? 0, litres: day?.milk_litre ?? 0, rate: day?.rate_per_litre ?? null,
+    heads: costing.heads.filter((h) => day?.rates[h.code] !== undefined).map((h) => ({
+      code: h.code, label: SHORT[h.code] ?? h.label,
+      amount: (day?.heads ?? []).filter((x) => x.code === h.code).reduce((t, x) => t + x.amount, 0),
+      rate: day?.rates[h.code] ?? 0,
+    })),
+  };
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
