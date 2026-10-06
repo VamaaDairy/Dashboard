@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import { recomputeTank } from "@/lib/tanks/engine";
-import { ensureDays, storedCollections } from "@/lib/vamaa/sync";
+import { centers, ensureDays, storedCollections } from "@/lib/vamaa/sync";
 import { collectionMilk, collectionRef } from "@/lib/vamaa/keys";
+import { collectionPrice, getChart } from "@/lib/procurement/rate-chart";
 import type { Result } from "@/app/tanks/actions";
 
 /**
@@ -18,8 +19,6 @@ import type { Result } from "@/app/tanks/actions";
 export async function assignCollectionToTank(date: string, ref: string, tankId: string): Promise<Result> {
   try {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Bad date");
-    const shortName = process.env.VAMAA_CENTER_SHORT_NAME;
-    if (!shortName) throw new Error("VAMAA_CENTER_SHORT_NAME is not set in .env");
     const scenario = await activeScenarioId();
 
     let insert: { litres: number; fat: number; snf: number; costPerLitre: number; notes: string } | null = null;
@@ -30,8 +29,14 @@ export async function assignCollectionToTank(date: string, ref: string, tankId: 
       const row = rows.find((r) => collectionRef(r, date) === ref);
       if (!row) throw new Error("That collection is no longer in the Vamaa data for this date - reload the page");
       const milk = collectionMilk(row);
+      // the collection's price, by the same rule as the Milk in page: the rate chart, or the app's price
+      // before it - except a tanker, whose price isn't set yet (the app only sends a placeholder)
+      const centre = (await centers()).find((c) => c.center === row.center_code);
+      const tanker = centre?.kind === "tanker";
+      milk.costPerLitre = tanker ? 0 : collectionPrice(await getChart({ date }), row).rate ?? 0;
       if (milk.litres <= 0) throw new Error("This collection has no quantity to put in a tank");
-      insert = { ...milk, notes: `Milk in · farmer ${row.farmer_code} · ${row.shift === "M" ? "morning" : "evening"} shift` };
+      const who = tanker ? `tanker · supplier ${row.farmer_code}` : `farmer ${row.farmer_code} · ${row.shift === "M" ? "morning" : "evening"} shift`;
+      insert = { ...milk, notes: `Milk in · ${centre?.name ?? row.center_code} · ${who}` };
     }
 
     await tx(async (client) => {

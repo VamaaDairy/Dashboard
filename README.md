@@ -38,8 +38,26 @@ every table and rebuilds from empty.
 
 Vamaa data (collections and the farmer list) is kept in `vamaa_collection` / `vamaa_farmer` and
 read from there by every page; the app is only called for days that aren't stored yet or are
-recent enough to have been corrected. On a new database the first page that needs history fetches
-it - about 35 seconds for everything since September 2022.
+recent enough to have been corrected. Every fetch checks **every centre** listed in
+`vamaa_center` (village centres, and the tanker centre where milk from other dairies is entered on
+the days a tanker arrives) - add a row there to start reading another centre. With no centres
+listed, the single `VAMAA_CENTER_SHORT_NAME` from `.env` is used. On a new database the first page
+that needs history fetches it.
+
+Milk prices up to 30 Sep 2026 are kept as the Vamaa app sent them; from 1 Oct 2026 they are
+calculated locally from the stored rate chart (`npm run db:seed:rate-chart` loads it). Tanker milk
+isn't priced from the farmer chart.
+
+Demo data: `npm run db:seed:demo` fills 1-6 Oct 2026 end to end (real collections into the tanks
+plus demo tanker loads, bulk batches drawn from the tanks, SKU packing with packing material,
+transport, coal, electricity, labour) and sets typical ingredient and packaging rates. Everything it
+inserts or overwrites is recorded in `demo_seed`; `npm run db:seed:demo -- --undo` takes it all out
+and puts the old values back.
+
+Costing: a day's shared costs (every overhead head except delivery fuel) are divided over the litres
+of milk that went into bulk batches that day; each batch carries its litres' share on top of its milk
+(at the tanks' blended ₹/L) and ingredients (at master rates). Delivery fuel goes onto the SKUs packed,
+by quantity. See Production → Dashboard.
 
 Sign in with whatever you put in `ADMIN_EMAIL` / `ADMIN_PASSWORD`. `npx tsx db/set-password.ts
 <email> <password>` changes it later without touching anything else.

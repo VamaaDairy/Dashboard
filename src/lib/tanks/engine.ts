@@ -108,4 +108,34 @@ export async function recomputeTank(client: PoolClient, tankId: string): Promise
     `update tank set qty_litre = $2, fat_pct = $3, snf_pct = $4, cost_per_litre = $5 where id = $1`,
     [tankId, balance.qty_litre, balance.fat_pct, balance.snf_pct, balance.cost_per_litre],
   );
+
+  // a backdated change shifts the blend later draws left at, so batches fed from this tank follow
+  const fed = await client.query<{ id: string }>(
+    `select distinct bulk_batch_id as id from tank_movement where tank_id = $1 and bulk_batch_id is not null`, [tankId]);
+  await syncBatchMilk(client, fed.rows.map((r) => r.id));
+}
+
+/**
+ * Copies onto each batch the milk it drew from the tanks: total litres, the
+ * weighted-average fat and SNF, and what it cost. A batch with no draws is
+ * left with none.
+ */
+export async function syncBatchMilk(client: PoolClient, batchIds: string[]): Promise<void> {
+  if (!batchIds.length) return;
+  await client.query(
+    `update bulk_batch b
+        set milk_litre = x.litres,
+            milk_fat_pct = x.fat, milk_snf_pct = x.snf, milk_cost = x.cost
+       from (select b2.id,
+                    sum(m.qty_litre) as litres,
+                    sum(m.qty_litre * m.fat_pct) / nullif(sum(m.qty_litre), 0) as fat,
+                    sum(m.qty_litre * m.snf_pct) / nullif(sum(m.qty_litre), 0) as snf,
+                    round(sum(m.qty_litre * m.cost_per_litre), 2) as cost
+               from bulk_batch b2
+               left join tank_movement m on m.bulk_batch_id = b2.id
+              where b2.id = any($1)
+              group by b2.id) x
+      where x.id = b.id`,
+    [batchIds],
+  );
 }

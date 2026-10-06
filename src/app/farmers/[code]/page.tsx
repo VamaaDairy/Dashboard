@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
 import { FarmerProfile, type RangeKey } from "@/components/farmers/FarmerProfile";
-import { getFarmerDays, getFarmerTransportDays, getFarmerTransporters } from "@/lib/farmers/data";
+import { farmerKey, getFarmerDays, getFarmerTransportDays, getFarmerTransporters } from "@/lib/farmers/data";
 import { getTransporters } from "@/lib/transport/data";
 import { kgPerLitre } from "@/lib/procurement/data";
 import { addDays, today } from "@/lib/dates";
 import { query } from "@/lib/db";
-import { centerCode, ensureDays, ensureFarmers, storedFarmers } from "@/lib/vamaa/sync";
+import { centers, ensureDays, ensureFarmers, storedFarmers } from "@/lib/vamaa/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +18,26 @@ export default async function FarmerPage({ params, searchParams }: PageProps<"/f
   const sp = await searchParams;
   const now = today();
 
+  // Codes repeat across centres, so the farmer is the centre + code. A link
+  // without a centre lands on the first centre that has this code.
+  const centreList = await centers();
+  const farmers = await storedFarmers();
+  const asked = typeof sp.center === "string" ? sp.center : null;
+  const farmer = farmers.find((f) => f.code === code && (asked === null || f.center === asked));
+  if (!farmer) notFound();
+  const center = farmer.center;
+  const centre = centreList.find((c) => c.center === center);
+
   // The period: a preset, all time, or a custom from / to.
-  const asked = typeof sp.range === "string" ? sp.range : "1y";
-  let range: RangeKey = asked in PRESET_DAYS || asked === "all" || asked === "custom" ? (asked as RangeKey) : "1y";
+  const want = typeof sp.range === "string" ? sp.range : "1y";
+  let range: RangeKey = want in PRESET_DAYS || want === "all" || want === "custom" ? (want as RangeKey) : "1y";
   let from: string, to: string;
   if (range === "custom" && typeof sp.from === "string" && ISO.test(sp.from) && typeof sp.to === "string" && ISO.test(sp.to)) {
     [from, to] = sp.from <= sp.to ? [sp.from, sp.to] : [sp.to, sp.from];
   } else if (range === "all") {
     const first = await query<{ d: string | null }>(
       `select to_char(min(day), 'YYYY-MM-DD') as d from vamaa_collection where center = $1 and farmer_code = $2`,
-      [centerCode(), code],
+      [center, code],
     );
     from = first[0]?.d ?? addDays(now, -364);
     to = now;
@@ -44,19 +54,21 @@ export default async function FarmerPage({ params, searchParams }: PageProps<"/f
     notice = `Couldn't reach the Vamaa app, so this shows what's saved locally: ${e instanceof Error ? e.message : String(e)}`;
   }
 
-  const farmer = (await storedFarmers()).find((f) => f.code === code);
-  if (!farmer) notFound();
   const k = await kgPerLitre();
+  const key = farmerKey(center, code);
   const [days, assigned, transportDays, transporters] = await Promise.all([
-    getFarmerDays(code, from, to, k),
+    getFarmerDays(center, code, from, to, k),
     getFarmerTransporters(),
-    getFarmerTransportDays(code, from, to),
+    getFarmerTransportDays(center, code, from, to),
     getTransporters("milk_to_plant"),
   ]);
 
   return (
     <FarmerProfile
       farmer={{
+        center,
+        centerName: centre?.name ?? center,
+        isTanker: centre?.kind === "tanker",
         code: farmer.code,
         name: farmer.name_en || [farmer.first_name, farmer.last_name].filter(Boolean).join(" "),
         mobile: farmer.mobile,
@@ -69,8 +81,8 @@ export default async function FarmerPage({ params, searchParams }: PageProps<"/f
       }}
       days={days}
       transport={{
-        current: assigned[code],
-        options: transporters.filter((t) => t.is_active || t.id === assigned[code]).map((t) => ({ id: t.id, name: t.name })),
+        current: assigned[key],
+        options: transporters.filter((t) => t.is_active || t.id === assigned[key]).map((t) => ({ id: t.id, name: t.name })),
         byDay: transportDays,
       }}
       range={range}

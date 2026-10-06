@@ -27,6 +27,17 @@ export interface BatchIngredient {
   unit: string;
 }
 
+/** Milk one batch took from one tank: the litres, and the blend it left the tank at. */
+export interface BatchMilk {
+  id: string;
+  tank_id: string;
+  tank_name: string;
+  litres: number;
+  fat_pct: number | null;
+  snf_pct: number | null;
+  cost_per_litre: number | null;
+}
+
 export interface Batch {
   id: string;
   batch_date: string;
@@ -41,13 +52,16 @@ export interface Batch {
   labour_workers: number | null;
   labour_hours: number | null;
   labour_cost: number | null;
+  milk_cost: number | null;
   notes: string | null;
   ingredients: BatchIngredient[];
+  milk: BatchMilk[];
 }
 
 export interface ProductionDaySummary {
   day: string;
   batches: number;
+  complete: number;       // batches with every ingredient entered
   milk_litre: number;
   labour_hours: number;   // worker-hours
   labour_cost: number;
@@ -87,11 +101,11 @@ export async function getIngredientOptions(): Promise<IngredientOption[]> {
 /** Every batch on one date, in the order entered, with its ingredients. */
 export async function getBatches(date: string): Promise<Batch[]> {
   const scenario = await activeScenarioId();
-  const batches = await query<Omit<Batch, "ingredients">>(
+  const batches = await query<Omit<Batch, "ingredients" | "milk">>(
     `select b.id, to_char(b.batch_date, 'YYYY-MM-DD') as batch_date, b.bulk_product_id,
             p.name as product_name, p.unit as product_unit, b.batch_no, b.output_qty,
             b.milk_litre, b.milk_fat_pct, b.milk_snf_pct,
-            b.labour_workers, b.labour_hours, b.labour_cost, b.notes
+            b.labour_workers, b.labour_hours, b.labour_cost, b.milk_cost, b.notes
        from bulk_batch b join bulk_product p on p.id = b.bulk_product_id
       where b.scenario_id = $1 and b.batch_date = $2::date
       order by b.created_at, b.id`,
@@ -103,13 +117,31 @@ export async function getBatches(date: string): Promise<Batch[]> {
       where batch_id = any($1) order by sort_order, name`,
     [batches.map((b) => b.id)],
   );
-  return batches.map((b) => ({ ...b, ingredients: lines.filter((l) => l.batch_id === b.id) }));
+  const milk = await query<BatchMilk & { batch_id: string }>(
+    `select m.id, m.bulk_batch_id as batch_id, m.tank_id, t.name as tank_name, m.qty_litre as litres,
+            m.fat_pct, m.snf_pct, m.cost_per_litre
+       from tank_movement m join tank t on t.id = m.tank_id
+      where m.bulk_batch_id = any($1) order by t.sort_order, m.created_at, m.id`,
+    [batches.map((b) => b.id)],
+  );
+  return batches.map((b) => ({
+    ...b,
+    ingredients: lines.filter((l) => l.batch_id === b.id),
+    milk: milk.filter((m) => m.batch_id === b.id),
+  }));
 }
+
+// SQL twin of batchComplete() for batch b: every standing ingredient entered, or - with no list - milk or any ingredient.
+const COMPLETE = `case when exists (select 1 from bulk_product_ingredient s where s.bulk_product_id = b.bulk_product_id)
+  then not exists (select 1 from bulk_product_ingredient s where s.bulk_product_id = b.bulk_product_id
+                     and not exists (select 1 from bulk_batch_ingredient l
+                                      where l.batch_id = b.id and l.ingredient_id = s.ingredient_id and l.qty > 0))
+  else coalesce(b.milk_litre, 0) > 0 or exists (select 1 from bulk_batch_ingredient l where l.batch_id = b.id and l.qty > 0) end`;
 
 /** The most recent production days, newest first, for the history list. */
 export async function getProductionDays(limit = 30): Promise<ProductionDaySummary[]> {
   const rows = await query<{
-    day: string; batches: number; milk_litre: number; labour_hours: number; labour_cost: number;
+    day: string; batches: number; complete: number; milk_litre: number; labour_hours: number; labour_cost: number;
     name: string; unit: string; qty: number;
   }>(
     `with days as (
@@ -118,6 +150,7 @@ export async function getProductionDays(limit = 30): Promise<ProductionDaySummar
      )
      select to_char(b.batch_date, 'YYYY-MM-DD') as day,
             count(*) over (partition by b.batch_date)::int as batches,
+            count(*) filter (where ${COMPLETE}) over (partition by b.batch_date)::int as complete,
             sum(coalesce(b.milk_litre, 0)) over (partition by b.batch_date) as milk_litre,
             sum(coalesce(b.labour_workers, 1) * coalesce(b.labour_hours, 0)) over (partition by b.batch_date) as labour_hours,
             sum(coalesce(b.labour_cost, 0)) over (partition by b.batch_date) as labour_cost,
@@ -134,7 +167,7 @@ export async function getProductionDays(limit = 30): Promise<ProductionDaySummar
   for (const r of rows) {
     let d = byDay.get(r.day);
     if (!d) {
-      d = { day: r.day, batches: r.batches, milk_litre: r.milk_litre, labour_hours: r.labour_hours, labour_cost: r.labour_cost, output: [] };
+      d = { day: r.day, batches: r.batches, complete: r.complete, milk_litre: r.milk_litre, labour_hours: r.labour_hours, labour_cost: r.labour_cost, output: [] };
       byDay.set(r.day, d);
     }
     const o = d.output.find((x) => x.name === r.name);

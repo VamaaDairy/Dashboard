@@ -129,6 +129,9 @@ export async function addMovement(form: FormData): Promise<Result> {
 export async function deleteMovement(id: string, tankId: string): Promise<Result> {
   return guard(async () => {
     await tx(async (client) => {
+      const m = await client.query<{ source: string | null }>(`select source from tank_movement where id = $1`, [id]);
+      if (m.rows[0]?.source === "production") throw new Error("This milk went into production - change it on the Production page");
+      if (m.rows[0]?.source) throw new Error("This came from Milk in - change its tank on the Milk in page");
       await client.query(`delete from tank_movement where id = $1`, [id]);
       await recomputeTank(client, tankId);
     });

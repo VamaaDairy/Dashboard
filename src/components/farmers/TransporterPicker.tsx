@@ -9,8 +9,9 @@ import { setFarmerTransporter } from "@/app/farmers/actions";
  * shares that transporter's daily fuel cost with the farmer by litres.
  */
 export function TransporterPicker({
-  code, current, transporters, className = "",
+  center, code, current, transporters, className = "",
 }: {
+  center: string;
   code: string;
   current: string | undefined;
   transporters: { id: string; name: string }[];
@@ -32,7 +33,7 @@ export function TransporterPicker({
           const before = value;
           setValue(next);
           start(async () => {
-            const res = await setFarmerTransporter(code, next);
+            const res = await setFarmerTransporter(center, code, next);
             if (!res.ok) { setValue(before); setError(res.error); return; }
             setError(null);
             router.refresh();

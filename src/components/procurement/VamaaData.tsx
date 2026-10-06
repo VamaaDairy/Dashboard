@@ -1,8 +1,9 @@
 import { Empty, Section, THead, Th } from "./ui";
 import { TankPicker } from "./TankPicker";
-import { kgOfSolid, litresToKg, snfFromClr } from "@/lib/units";
+import { kgOfSolid, litresToKg, perLitreToPerKg } from "@/lib/units";
 import { formatNumber } from "@/lib/format";
-import { collectionRef } from "@/lib/vamaa/keys";
+import { collectionRef, collectionSnf } from "@/lib/vamaa/keys";
+import type { CollectionPrice } from "@/lib/procurement/rate-chart";
 import type { VamaaCollection, VamaaFarmer } from "@/lib/vamaa/client";
 
 /**
@@ -10,33 +11,50 @@ import type { VamaaCollection, VamaaFarmer } from "@/lib/vamaa/client";
  * was put into (picked by hand) and its kg fat and kg SNF.
  */
 export function VamaaCollectionsTable({
-  date, rows, kgPerLitre, tanks, inTank,
+  date, rows, kgPerLitre, tanks, inTank, prices, chartFrom, names, centreNames, tankerCentres,
 }: {
   date: string;
   rows: VamaaCollection[];
   kgPerLitre: number;
   tanks: { id: string; name: string }[];
   inTank: Record<string, string>;   // collection ref -> tank id
+  prices: Record<string, CollectionPrice>;   // collection ref -> price
+  chartFrom: string | null;   // first day prices are calculated from the chart
+  names: Record<string, string>;   // "centre|code" -> farmer or supplier name
+  centreNames: Record<string, string>;
+  tankerCentres: string[];
 }) {
   const qty = (r: VamaaCollection) => Number(r.quantity) || 0;
-  const snf = (r: VamaaCollection) => snfFromClr(Number(r.clr) || 0, Number(r.fat) || 0);
+  const snf = (r: VamaaCollection) => collectionSnf(r);
   const kgFat = (r: VamaaCollection) => kgOfSolid(qty(r), Number(r.fat) || 0, kgPerLitre) ?? 0;
   const kgSnf = (r: VamaaCollection) => kgOfSolid(qty(r), snf(r), kgPerLitre) ?? 0;
 
   const totalQty = rows.reduce((t, r) => t + qty(r), 0);
   const totalKg = litresToKg(totalQty, kgPerLitre);
   const inTanks = rows.filter((r) => inTank[collectionRef(r, date)]).reduce((t, r) => t + qty(r), 0);
+  const price = (r: VamaaCollection) => prices[collectionRef(r, date)];
+  const totalAmount = rows.reduce((t, r) => t + (price(r)?.amount ?? 0), 0);
+  const pricedLitres = rows.filter((r) => price(r)?.rate).reduce((t, r) => t + qty(r), 0);
+  const unpriced = rows.filter((r) => qty(r) > 0 && !price(r)?.rate).length;
+  const fromChart = chartFrom !== null && date >= chartFrom;
 
   return (
     <Section
       title={`Collections on ${date}`}
-      description={`Pick a tank on each row to put that milk into it - its litres, fat, SNF and cost (amount ÷ litres) go into the tank on ${date} and blend in by volume. Change the tank to move it, or pick "—" to take it back out. Everything else is exactly what /api/v1/export_collection returns, except SNF, calculated from CLR and Fat (CLR/4 + 0.20×Fat + 0.70). Kg = litres × ${formatNumber(kgPerLitre, 2)} kg/L; kg fat and kg SNF = kg × the percentage.`}
+      description={
+        `${fromChart
+          ? `Price ₹/L is calculated from the rate chart (fat and CLR); ₹/kg is the same price per kg (₹/L ÷ ${formatNumber(kgPerLitre, 2)} kg/L), and Amount = price × litres.${unpriced ? ` ${unpriced} collection(s) have fat or CLR outside the chart, so no price.` : ""}`
+          : "Price ₹/L and Amount are as the Vamaa app sent them - prices are only calculated from the rate chart from " + (chartFrom ?? "the first chart") + "."} ` +
+        `Pick a tank on each row to put that milk into it - its litres, fat, SNF and price go into the tank on ${date} and blend in by volume. Change the tank to move it, or pick "—" to take it back out. SNF is calculated from CLR and Fat (CLR/4 + 0.20×Fat + 0.70), or taken as sent where no CLR is recorded (tankers). Kg = litres × ${formatNumber(kgPerLitre, 2)} kg/L; kg fat and kg SNF = kg × the percentage.`
+      }
     >
       <div className="overflow-x-auto">
         <table className="w-full whitespace-nowrap text-[12px]">
           <THead>
             <Th align="left">Tank</Th>
-            <Th align="left">Farmer code</Th>
+            <Th align="left">Centre</Th>
+            <Th align="left">Code</Th>
+            <Th align="left">Name</Th>
             <Th align="left">Shift</Th>
             <Th align="left">Type</Th>
             <Th>Qty (L)</Th>
@@ -45,6 +63,9 @@ export function VamaaCollectionsTable({
             <Th>SNF</Th>
             <Th>Kg fat</Th>
             <Th>Kg SNF</Th>
+            <Th>Price ₹ / L</Th>
+            <Th>₹ / kg</Th>
+            <Th>Amount ₹</Th>
             <Th>CLR</Th>
             <Th>Temp</Th>
             <Th>Water</Th>
@@ -80,7 +101,9 @@ export function VamaaCollectionsTable({
                     tanks={tanks}
                   />
                 </td>
-                <td className="px-3 py-1.5 font-semibold text-foreground">{r.farmer_code}</td>
+                <td className="px-3 py-1.5 text-muted-foreground">{centreNames[r.center_code] ?? r.center_code}</td>
+                <td className="num px-3 py-1.5 text-muted-foreground">{r.farmer_code}</td>
+                <td className="px-3 py-1.5 font-semibold text-foreground">{names[`${r.center_code}|${r.farmer_code}`] ?? "—"}</td>
                 <td className="px-3 py-1.5">{r.shift}</td>
                 <td className="px-3 py-1.5">{r.type}</td>
                 <td className="num px-3 py-1.5 text-right font-semibold">{r.quantity}</td>
@@ -91,6 +114,9 @@ export function VamaaCollectionsTable({
                 <td className="num px-3 py-1.5 text-right">{formatNumber(snf(r), 2)}</td>
                 <td className="num px-3 py-1.5 text-right font-semibold">{formatNumber(kgFat(r), 2)}</td>
                 <td className="num px-3 py-1.5 text-right font-semibold">{formatNumber(kgSnf(r), 2)}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold text-foreground">{price(r)?.rate ? formatNumber(price(r)!.rate, 2) : <span className="font-normal text-muted-foreground" title={tankerCentres.includes(r.center_code) ? "Tanker price not set yet" : fromChart ? "Fat or CLR is outside the rate chart" : "The app sent no price"}>—</span>}</td>
+                <td className="num px-3 py-1.5 text-right text-foreground">{price(r)?.rate ? formatNumber(perLitreToPerKg(price(r)!.rate!, kgPerLitre), 2) : "—"}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold text-foreground">{price(r)?.amount ? formatNumber(price(r)!.amount, 2) : "—"}</td>
                 <td className="num px-3 py-1.5 text-right">{r.clr}</td>
                 <td className="num px-3 py-1.5 text-right">{r.temp}</td>
                 <td className="num px-3 py-1.5 text-right">{r.water}</td>
@@ -115,7 +141,7 @@ export function VamaaCollectionsTable({
                 <td className="px-3 py-1.5 text-muted-foreground">{r.updated}</td>
               </tr>
             ))}
-            {rows.length === 0 ? <Empty colSpan={30}>No collections returned for this date.</Empty> : null}
+            {rows.length === 0 ? <Empty colSpan={35}>No collections returned for this date.</Empty> : null}
           </tbody>
           {rows.length > 0 ? (
             <tfoot>
@@ -126,7 +152,7 @@ export function VamaaCollectionsTable({
                     <div className="text-muted-foreground">{formatNumber(totalQty - inTanks, 2)} L not yet</div>
                   ) : null}
                 </td>
-                <td className="px-3 py-2" colSpan={3}>
+                <td className="px-3 py-2" colSpan={5}>
                   {rows.length} record{rows.length === 1 ? "" : "s"}
                 </td>
                 <td className="num px-3 py-2 text-right">{totalQty.toFixed(2)}</td>
@@ -139,6 +165,9 @@ export function VamaaCollectionsTable({
                 </td>
                 <td className="num px-3 py-2 text-right">{formatNumber(rows.reduce((t, r) => t + kgFat(r), 0), 2)}</td>
                 <td className="num px-3 py-2 text-right">{formatNumber(rows.reduce((t, r) => t + kgSnf(r), 0), 2)}</td>
+                <td className="num px-3 py-2 text-right text-[11px] text-muted-foreground">{pricedLitres ? `${formatNumber(totalAmount / pricedLitres, 2)} avg` : ""}</td>
+                <td className="num px-3 py-2 text-right text-[11px] text-muted-foreground">{pricedLitres ? `${formatNumber(perLitreToPerKg(totalAmount / pricedLitres, kgPerLitre), 2)} avg` : ""}</td>
+                <td className="num px-3 py-2 text-right">{formatNumber(totalAmount, 2)}</td>
                 <td colSpan={20} />
               </tr>
             </tfoot>
