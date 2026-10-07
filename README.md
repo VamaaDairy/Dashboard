@@ -200,10 +200,13 @@ the shrikhand making charge) are carried as notes on the rows they belong to rat
 
 ## Deploying to Vercel
 
-`vercel.json` builds with `npm run db:setup && npm run build`, so every deploy first applies any new
-migrations (only the ones the database hasn't had) and then builds. Functions run in Cleveland (`cle1`),
-next to the Neon database in AWS us-east-2 - pages make many small queries, so the server sits by the
-database - with up to 60 s per request. If the database moves region, move `regions` with it.
+`vercel.json` runs a plain `npm run build` - no database scripts run during a deploy, and the `db/`
+folder is left out of the deployment (`.vercelignore`) and out of the build's type check (`tsconfig.json`).
+The build needs no database at all; pages read it when they are requested. Functions run in Cleveland
+(`cle1`), next to the Neon database in AWS us-east-2, with up to 60 s per request.
+
+When a new `db/NNN_*.sql` migration is added, apply it to the hosted database by hand from this PC:
+`DATABASE_URL="<neon url>" npm run db:setup` (it only applies what that database hasn't had yet).
 
 1. **A hosted Postgres.** The local database on this PC can't be reached from Vercel. Create one on
    Neon, Supabase or Vercel Postgres and copy its connection string (use the pooled one, with

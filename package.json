@@ -7,6 +7,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "db:setup": "tsx db/setup.ts",
+    "db:reset": "tsx db/setup.ts --reset",
+    "db:apply": "tsx db/apply.ts",
+    "db:seed": "tsx db/seed.ts",
+    "db:seed:sweet-products": "tsx db/seed-sweet-products.ts",
+    "db:seed:batch-costing": "tsx db/seed-batch-costing.ts",
+    "db:seed:overhead-heads": "tsx db/seed-overhead-heads.ts",
+    "db:seed:rate-chart": "tsx db/seed-rate-chart.ts",
+    "db:verify": "tsx db/verify.ts",
+    "db:seed:demo": "tsx --conditions=react-server db/seed-demo.ts",
+    "db:seed:sku-packing": "tsx --conditions=react-server db/seed-sku-packing.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
