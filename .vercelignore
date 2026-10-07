@@ -1,0 +1,3 @@
+# Local database scripts (setup, migrations, seeds) - run by hand against a database,
+# never part of a Vercel deployment.
+db/
