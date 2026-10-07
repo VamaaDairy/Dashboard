@@ -81,7 +81,7 @@ export function FarmerList({
   return (
     <Section
       title="Farmers"
-      description={`${farmers.length} registered · ${supplying} supplied milk in the last 30 days (${shortDate(from)} – ${shortDate(to)})${unassigned ? ` · ${unassigned} of them have no transporter yet` : ""}. Pick each farmer's transporter to share its fuel cost by litres. Click a farmer for their profile.`}
+      description={`${farmers.length} registered · ${supplying} supplied milk in the last 30 days (${shortDate(from)} – ${shortDate(to)})${unassigned ? ` · ${unassigned} of them have no transporter yet` : ""}. Pick each farmer's transporter - its daily cost is split equally among the farmers it carries that day. Click a farmer for their profile.`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {centers.length > 1 ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   CalendarHeatmap, ColumnChart, DivergingColumns, GAIA, MatrixHeatmap, SplitBar, StackedColumns, TrendChart, shortDate,
@@ -7,7 +8,7 @@ import {
 import { Panel, PeriodBar, Tiles, dayList } from "@/components/dash/Dash";
 import { THead, Th } from "@/components/tanks/ui";
 import { formatNumber } from "@/lib/format";
-import type { MilkInDay, MilkQuality, PlantFuelUse, TankFlowDay, TankLevel, TransportDay } from "@/lib/dash/data";
+import type { FarmerTransportDay, MilkInDay, MilkQuality, PlantFuelUse, TankFlowDay, TankLevel, TransportDay } from "@/lib/dash/data";
 import { COST } from "@/lib/costing/colors";
 
 const rs = (v: number, d = 0) => `₹${formatNumber(v, d)}`;
@@ -402,5 +403,171 @@ export function MilkInDashboard({ from, to, today, rows, quality }: {
         </Panel>
       ) : null}
     </div>
+  );
+}
+
+// ================================================================ milk to plant transport, shared equally per farmer
+
+/**
+ * Milk-to-plant transport for the period: each transporter's day cost is split
+ * equally among the farmers it carried that day (5 farmers -> cost / 5 each).
+ * Shows the rule for one day, each transporter, the cost per litre over time,
+ * and every farmer's share next to what their milk cost.
+ */
+export function MilkTransport({ from, to, rows, runs }: {
+  from: string; to: string; rows: FarmerTransportDay[]; runs: TransportDay[];
+}) {
+  const dates = dayList(from, to);
+  const mtp = runs.filter((r) => r.section === "milk_to_plant");
+  const total = sum(mtp, (r) => r.cost);
+  const shared = sum(rows, (r) => Number(r.cost ?? 0));
+  const litres = sum(rows, (r) => Number(r.litres));
+  const farmerDays = rows.length;
+  const days = [...new Set(rows.map((r) => r.day))].sort();
+  const [day, setDay] = useState(days[days.length - 1] ?? "");
+
+  // per transporter
+  type T = { name: string; cost: number; runDays: number; shared: number; litres: number; farmerDays: number; days: Set<string> };
+  const blank = (name: string): T => ({ name, cost: 0, runDays: 0, shared: 0, litres: 0, farmerDays: 0, days: new Set<string>() });
+  const byT = new Map<string, T>();
+  for (const r of mtp) {
+    const t = byT.get(r.transporter) ?? blank(r.transporter);
+    t.cost += r.cost; t.runDays += 1;
+    byT.set(r.transporter, t);
+  }
+  for (const r of rows) {
+    const t = byT.get(r.transporter) ?? blank(r.transporter);
+    t.shared += Number(r.cost ?? 0); t.litres += Number(r.litres); t.farmerDays += 1; t.days.add(r.day);
+    byT.set(r.transporter, t);
+  }
+
+  // per farmer
+  const byF = new Map<string, { code: string; center: string; name: string; transporter: string; days: number; litres: number; cost: number; milk: number }>();
+  for (const r of rows) {
+    const k = `${r.center}|${r.code}`;
+    const f = byF.get(k) ?? { code: r.code, center: r.center, name: r.name ?? "", transporter: r.transporter, days: 0, litres: 0, cost: 0, milk: 0 };
+    f.days += 1; f.litres += Number(r.litres); f.cost += Number(r.cost ?? 0); f.milk += Number(r.milk_amount ?? 0);
+    byF.set(k, f);
+  }
+  const farmers = [...byF.entries()].sort((a, b) => (b[1].cost / Math.max(1, b[1].litres)) - (a[1].cost / Math.max(1, a[1].litres)));
+
+  // per day: shared cost / litres of the farmers carried
+  const perDay = new Map<string, { cost: number; litres: number }>();
+  for (const r of rows) {
+    const d = perDay.get(r.day) ?? { cost: 0, litres: 0 };
+    d.cost += Number(r.cost ?? 0); d.litres += Number(r.litres);
+    perDay.set(r.day, d);
+  }
+
+  // the rule, for the day picked
+  const routes = new Map<string, { transporter: string; cost: number; farmers: FarmerTransportDay[] }>();
+  for (const r of rows.filter((x) => x.day === day)) {
+    const g = routes.get(r.transporter_id) ?? { transporter: r.transporter, cost: 0, farmers: [] };
+    g.farmers.push(r);
+    g.cost = Number(r.cost ?? 0) * r.farmers;
+    routes.set(r.transporter_id, g);
+  }
+  const color = COST.fuel_procurement.color;
+
+  return (
+    <section className="space-y-5">
+      <h2 className="pt-2 text-[15px] font-semibold text-foreground">Milk to plant transport - shared equally per farmer</h2>
+
+      <Tiles items={[
+        { label: "Transport cost", value: rs(total), note: `${mtp.length} runs, milk to plant` },
+        { label: "Shared among farmers", value: rs(shared), note: `${farmerDays} farmer-days` },
+        { label: "Not shared", value: rs(Math.max(0, total - shared)), note: "runs with no assigned farmer's milk that day (e.g. tankers)" },
+        { label: "Per litre of farmers' milk", value: litres ? rs(shared / litres, 2) : "—", note: `${formatNumber(litres, 0)} L carried` },
+        { label: "Per farmer per day", value: farmerDays ? rs(shared / farmerDays, 0) : "—", note: "average share" },
+      ]} />
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className="min-w-0 rounded-lg border-2 border-foreground/15 bg-card p-4 shadow-xs">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">How a day is split</h3>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">Each transporter&apos;s cost that day ÷ the farmers whose milk it brought - the same share for each, whatever their litres.</p>
+            </div>
+            <select value={day} onChange={(e) => setDay(e.target.value)} className="h-8 rounded-lg border border-border bg-white px-2 text-[13px] font-semibold" aria-label="Day">
+              {[...days].reverse().map((d) => <option key={d} value={d}>{shortDate(d)}</option>)}
+            </select>
+          </div>
+          <div className="mt-3 space-y-3">
+            {[...routes.values()].map((g) => (
+              <div key={g.transporter} className="rounded-lg bg-muted/60 p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 text-[13px]">
+                  <span className="font-semibold text-foreground">{g.transporter}</span>
+                  <span className="num text-muted-foreground">
+                    {rs(g.cost)} ÷ {g.farmers.length} farmer{g.farmers.length > 1 ? "s" : ""} = <span className="font-bold" style={{ color }}>{rs(g.cost / g.farmers.length, 2)} each</span>
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
+                  {g.farmers.map((f) => (
+                    <span key={`${f.center}|${f.code}`} className="num rounded-full bg-white px-2 py-0.5 text-muted-foreground">
+                      {f.code}{f.name ? ` · ${f.name}` : ""} · {formatNumber(Number(f.litres), 0)} L · {Number(f.litres) ? rs(Number(f.cost ?? 0) / Number(f.litres), 2) : "—"}/L
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {routes.size === 0 ? <p className="text-[12px] text-muted-foreground">No assigned farmer supplied milk this day.</p> : null}
+          </div>
+        </section>
+
+        <Panel title="Transport per litre of farmers' milk" description="Shared cost ÷ litres of the farmers carried, day by day.">
+          <TrendChart color={color} unit="₹ / L" decimals={2} emptyLabel="no runs" zeroBased={false}
+            points={dates.map((d) => { const x = perDay.get(d); return { day: d, value: x && x.litres ? x.cost / x.litres : null }; })}
+            extraTip={(d) => [{ label: "shared ₹", value: formatNumber(perDay.get(d)?.cost ?? 0, 0) }, { label: "L", value: formatNumber(perDay.get(d)?.litres ?? 0, 0) }]} />
+        </Panel>
+      </div>
+
+      <Panel title="Each transporter" description="Its cost, how much of it was shared among farmers, and what a farmer carried on average.">
+        <div className="overflow-x-auto">
+          <table className="w-full whitespace-nowrap text-[13px]">
+            <THead><Th align="left">Transporter</Th><Th>Days run</Th><Th>Cost ₹</Th><Th>Shared ₹</Th><Th>Farmers a day</Th><Th>₹ / farmer / day</Th><Th>Litres</Th><Th>₹ / L</Th></THead>
+            <tbody>
+              {[...byT.values()].sort((a, b) => b.cost - a.cost).map((t) => (
+                <tr key={t.name} className="border-b border-border/70 hover:bg-muted/60">
+                  <td className="px-3 py-1.5 font-semibold text-foreground"><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />{t.name}</td>
+                  <td className={td}>{t.runDays}</td>
+                  <td className={td}>{formatNumber(t.cost, 0)}</td>
+                  <td className={td}>{formatNumber(t.shared, 0)}</td>
+                  <td className={td}>{t.days.size ? formatNumber(t.farmerDays / t.days.size, 1) : "—"}</td>
+                  <td className={`${td} font-semibold text-foreground`}>{t.farmerDays ? formatNumber(t.shared / t.farmerDays, 0) : "—"}</td>
+                  <td className={td}>{formatNumber(t.litres, 0)}</td>
+                  <td className={`${td} font-semibold text-foreground`}>{t.litres ? formatNumber(t.shared / t.litres, 2) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel title="Each farmer's transport" description="Their equal share of their transporter's cost over the period, next to what their milk cost - highest transport per litre first. Small suppliers carry more per litre, since every farmer on a route pays the same.">
+        <div className="overflow-x-auto">
+          <table className="w-full whitespace-nowrap text-[13px]">
+            <THead><Th align="left">Code</Th><Th align="left">Farmer</Th><Th align="left">Transporter</Th><Th>Days</Th><Th>Litres</Th><Th>Milk ₹ / L</Th><Th>Transport ₹</Th><Th>Transport ₹ / L</Th><Th>Landed ₹ / L</Th></THead>
+            <tbody>
+              {farmers.map(([k, f]) => (
+                <tr key={k} className="border-b border-border/70 hover:bg-muted/60">
+                  <td className="num px-3 py-1.5 text-[12px]">{f.center} · {f.code}</td>
+                  <td className="max-w-56 truncate px-3 py-1.5 font-semibold text-foreground">
+                    <Link href={`/farmers/${f.code}?center=${f.center}`} className="hover:underline">{f.name || "—"}</Link>
+                  </td>
+                  <td className="px-3 py-1.5 text-[12px] text-muted-foreground">{f.transporter}</td>
+                  <td className={td}>{f.days}</td>
+                  <td className={td}>{formatNumber(f.litres, 0)}</td>
+                  <td className={td}>{f.litres && f.milk ? formatNumber(f.milk / f.litres, 2) : "—"}</td>
+                  <td className={td}>{formatNumber(f.cost, 0)}</td>
+                  <td className={`${td} font-semibold`} style={{ color }}>{f.litres ? formatNumber(f.cost / f.litres, 2) : "—"}</td>
+                  <td className={`${td} font-bold text-foreground`}>{f.litres && f.milk ? formatNumber((f.milk + f.cost) / f.litres, 2) : "—"}</td>
+                </tr>
+              ))}
+              {farmers.length === 0 ? <tr><td colSpan={9} className="px-3 py-6 text-center text-[12px] text-muted-foreground">No farmer has a transporter assigned yet - set one on each farmer&apos;s page.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </section>
   );
 }

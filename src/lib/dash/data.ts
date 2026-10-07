@@ -200,3 +200,33 @@ export async function getTankInTotal(from: string, to: string): Promise<number> 
     [await activeScenarioId(), from, to]);
   return Number(r[0]?.q ?? 0);
 }
+
+/** One farmer's milk-to-plant transport share on one day: their transporter's day cost ÷ the farmers it carried. */
+export interface FarmerTransportDay {
+  day: string;
+  center: string;
+  code: string;
+  name: string | null;
+  transporter_id: string;
+  transporter: string;
+  litres: number;
+  cost: number | null;          // this farmer's share
+  farmers: number;              // farmers the day's cost was split over
+  milk_amount: number | null;   // what this farmer's milk cost that day (rate chart / app price)
+}
+
+/** Every farmer's equal share of their transporter's cost, day by day. */
+export async function getFarmerTransport(from: string, to: string): Promise<FarmerTransportDay[]> {
+  return query<FarmerTransportDay>(
+    `select to_char(v.day, 'YYYY-MM-DD') as day, v.center, v.farmer_code as code, f.name,
+            v.transporter_id, t.name as transporter, v.litres, v.cost, v.transporter_farmers as farmers,
+            (select sum(c.qty_litre * coalesce(milk_price($1::uuid, c.day, c.fat_pct, c.clr, c.rate), 0))
+               from vamaa_collection c where c.center = v.center and c.farmer_code = v.farmer_code and c.day = v.day) as milk_amount
+       from v_farmer_transport_day v
+       join transporter t on t.id = v.transporter_id
+       left join vamaa_farmer f on f.center = v.center and f.code = v.farmer_code
+      where v.scenario_id = $1 and v.day between $2 and $3
+      order by v.day, t.name, v.farmer_code`,
+    [await activeScenarioId(), from, to],
+  );
+}

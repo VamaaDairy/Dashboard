@@ -6,7 +6,7 @@ import { setFarmerTransporter } from "@/app/farmers/actions";
 
 /**
  * Which milk-to-plant transporter brings this farmer's milk in. Picking one
- * shares that transporter's daily fuel cost with the farmer by litres.
+ * gives the farmer an equal share of that transporter's daily cost with the other farmers it carried that day.
  */
 export function TransporterPicker({
   center, code, current, transporters, className = "",
