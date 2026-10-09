@@ -1,0 +1,53 @@
+{
+  "_note": "Products to publish to the WhatsApp (Meta) catalog. id = SKU code. Fill in price (rupees). Images live in public/products/<id>.jpg. After publishing, the catalog is the source of truth - the bot reads it back from Meta. PRICES ARE TEST VALUES - replace with real ones.",
+  "products": [
+    {
+      "id": "999",
+      "title": "Gaia Cow Milk 500 ml",
+      "description": "Pasteurised cow milk, 500 ml pouch. 3.1% protein, 4% fat. Fortified with Vitamin A & D. Antibiotic free, untouched by hand.",
+      "price": 34,
+      "image": "999.jpg",
+      "availability": "in stock"
+    },
+    {
+      "id": "1019",
+      "title": "Gaia Kadhi Dahi 1 kg",
+      "description": "Kadhi dahi made from pasteurised toned milk, 1 kg pouch. 42 g protein per pack, zero added sugar. Antibiotic free, untouched by hand.",
+      "price": 90,
+      "image": "1019.jpg",
+      "availability": "in stock"
+    },
+    {
+      "id": "1014",
+      "title": "Gaia Thick & Creamy Dahi 1 kg",
+      "description": "Thick & creamy dahi made from pasteurised toned milk, 1 kg pouch. 33 g protein per pack, zero added sugar. Antibiotic free, untouched by hand.",
+      "price": 95,
+      "image": "1014.jpg",
+      "availability": "in stock"
+    },
+    {
+      "id": "1011",
+      "title": "Gaia Thick & Creamy Dahi Cup 200 g",
+      "description": "Thick and creamy dahi in a 200 g cup.",
+      "price": 30,
+      "image": "1011.jpg",
+      "availability": "in stock"
+    },
+    {
+      "id": "1034",
+      "title": "Gaia Doodh Peda 200 g",
+      "description": "Creamy & delicious doodh peda, 200 g box.",
+      "price": 120,
+      "image": "1034.jpg",
+      "availability": "in stock"
+    },
+    {
+      "id": "1032",
+      "title": "Gaia Premium Desi Ghee 5 L",
+      "description": "Gaia Premium Desi Ghee, 5 litre jar.",
+      "price": 3200,
+      "image": "1032.jpg",
+      "availability": "in stock"
+    }
+  ]
+}

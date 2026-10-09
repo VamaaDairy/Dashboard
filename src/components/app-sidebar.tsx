@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, Boxes, CalendarDays, ChevronRight, Contact, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
-  Package, RefreshCw, Settings2, SlidersHorizontal, Truck, Users, Zap,
+  MessageCircle, Package, RefreshCw, Settings2, SlidersHorizontal, Truck, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -68,6 +68,15 @@ const DAILY = [
     children: [
       { href: "/transport/milk-to-plant", label: "Milk to plant" },
       { href: "/transport/delivery", label: "Delivery outside plant" },
+    ],
+  },
+  {
+    href: "/whatsapp", label: "WhatsApp shop", icon: MessageCircle,
+    children: [
+      { href: "/whatsapp/chats", label: "Chats" },
+      { href: "/whatsapp/orders", label: "Orders" },
+      { href: "/whatsapp/products", label: "Catalog & setup" },
+      { href: "/whatsapp/reviews", label: "Reviews" },
     ],
   },
   { href: "/labour", label: "Labour", icon: Users },
