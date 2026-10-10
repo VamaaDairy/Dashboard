@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_NOT_CONFIGURED, createSession } from "@/lib/auth";
 import { getUserByEmail, verifyPassword } from "@/lib/users";
+import { loadAccessUser } from "@/lib/access-server";
 
 export async function POST(req: NextRequest) {
   const { email, password } = await req.json();
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
   }
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return NextResponse.json({ success: false, error: "Invalid credentials" }, { status: 401 });
+  }
+
+  const access = await loadAccessUser(user.id);
+  if (access && !access.isActive) {
+    return NextResponse.json({ success: false, error: "This account has been deactivated." }, { status: 403 });
   }
 
   let token: string;
