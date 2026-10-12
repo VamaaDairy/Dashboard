@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, Boxes, CalendarDays, ChevronRight, Contact, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
-  MessageCircle, Package, RefreshCw, Settings2, SlidersHorizontal, Truck, Users, Zap,
+  MessageCircle, Package, ReceiptText, RefreshCw, Settings2, SlidersHorizontal, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -81,12 +81,20 @@ const DAILY = [
   },
   { href: "/labour", label: "Labour", icon: Users },
   { href: "/electricity", label: "Electricity", icon: Zap },
+  {
+    href: "/credit-note", label: "Credit notes", icon: ReceiptText,
+    children: [
+      { href: "/credit-note", label: "All credit notes", exact: true },
+      { href: "/credit-note/dashboard", label: "Dashboard" },
+    ],
+  },
 ];
 
 /** Opened when the model itself changes - rarely, and never during a normal day. */
 const SETUP = [
   { href: "/schema", label: "Columns & classes", icon: Settings2 },
   { href: "/audit", label: "Change log", icon: FileClock },
+  { href: "/users", label: "Users", icon: UserPlus, ownerOnly: true },
 ];
 
 export interface SidebarClass {
@@ -265,7 +273,7 @@ export function AppSidebar({
 
               {setupOpen ? (
                 <>
-                  {SETUP.map((item) => (
+                  {SETUP.filter((item) => !("ownerOnly" in item) || user?.role === "owner").map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
                         isActive={pathname.startsWith(item.href)}

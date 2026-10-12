@@ -12,7 +12,7 @@ export interface TankFlowDay {
   in_other: number;       // tankers and anything entered by hand
   in_transfer: number;    // moved in from another tank
   out_transfer: number;   // moved on to another tank
-  out_production: number; // drawn for bulk batches
+  out_production: number; // drawn for bulk batches, less milk returned to tanks
   out_other: number;
   close: number | null;   // litres at the end of the day
   in_fat_kg: number;
@@ -29,12 +29,13 @@ export async function getTankFlows(from: string, to: string): Promise<TankFlowDa
               sum(m.qty_litre) filter (where m.direction = 'in' and m.source is null) as in_other,
               sum(m.qty_litre) filter (where m.direction = 'in' and m.source = 'transfer') as in_transfer,
               sum(m.qty_litre) filter (where m.direction = 'out' and m.source = 'transfer') as out_transfer,
-              sum(m.qty_litre) filter (where m.direction = 'out' and m.source = 'production') as out_production,
+              coalesce(sum(m.qty_litre) filter (where m.direction = 'out' and m.source = 'production'), 0)
+                - coalesce(sum(m.qty_litre) filter (where m.direction = 'in' and m.source = 'production_return'), 0) as out_production,
               sum(m.qty_litre) filter (where m.direction = 'out' and m.source is null) as out_other,
               -- the blend and cost of milk coming into the plant, not milk moving between tanks
-              sum(m.qty_litre * 1.03 * coalesce(m.fat_pct, 0) / 100) filter (where m.direction = 'in' and m.source is distinct from 'transfer') as in_fat_kg,
-              sum(m.qty_litre * 1.03 * coalesce(m.snf_pct, 0) / 100) filter (where m.direction = 'in' and m.source is distinct from 'transfer') as in_snf_kg,
-              sum(m.qty_litre * coalesce(m.cost_per_litre, 0)) filter (where m.direction = 'in' and m.source is distinct from 'transfer') as in_cost
+              sum(m.qty_litre * 1.03 * coalesce(m.fat_pct, 0) / 100) filter (where m.direction = 'in' and m.source is distinct from 'transfer' and m.source is distinct from 'production_return') as in_fat_kg,
+              sum(m.qty_litre * 1.03 * coalesce(m.snf_pct, 0) / 100) filter (where m.direction = 'in' and m.source is distinct from 'transfer' and m.source is distinct from 'production_return') as in_snf_kg,
+              sum(m.qty_litre * coalesce(m.cost_per_litre, 0)) filter (where m.direction = 'in' and m.source is distinct from 'transfer' and m.source is distinct from 'production_return') as in_cost
          from tank_movement m
         where m.scenario_id = $1 and m.movement_date between $2 and $3
         group by m.tank_id, m.movement_date
@@ -196,7 +197,7 @@ export async function getMilkQuality(from: string, to: string): Promise<MilkQual
 /** Litres put into the tanks over the period (all sources). */
 export async function getTankInTotal(from: string, to: string): Promise<number> {
   const r = await query<{ q: number | null }>(
-    `select sum(qty_litre) as q from tank_movement where scenario_id = $1 and direction = 'in' and source is distinct from 'transfer' and movement_date between $2 and $3`,
+    `select sum(qty_litre) as q from tank_movement where scenario_id = $1 and direction = 'in' and source is distinct from 'transfer' and source is distinct from 'production_return' and movement_date between $2 and $3`,
     [await activeScenarioId(), from, to]);
   return Number(r[0]?.q ?? 0);
 }

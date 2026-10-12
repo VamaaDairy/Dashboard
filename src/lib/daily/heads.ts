@@ -1,6 +1,8 @@
 import "server-only";
 import { one, query } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
+import type { LabourRateRow, LabourShifts } from "@/lib/daily/labour";
+import type { MeterReading } from "@/lib/daily/meter";
 
 /** Electricity's first price is dated this, meaning "from the start". */
 export const FROM_START = "2000-01-01";
@@ -45,11 +47,45 @@ export async function getHeadDay(code: "electricity" | "labour", date: string): 
   );
 }
 
+/** The day / night / contract split of each labour day that has one, keyed by date. */
+export async function getLabourShifts(): Promise<Record<string, LabourShifts>> {
+  const rows = await query<{ day: string; day_regular: number; day_special: number; night: number; contract: number }>(
+    `select to_char(d.day, 'YYYY-MM-DD') as day, l.day_regular, l.day_special, l.night, l.contract
+       from labour_day l join production_day d on d.id = l.day_id where d.scenario_id = $1`,
+    [await activeScenarioId()],
+  );
+  return Object.fromEntries(rows.map((r) => [r.day, {
+    dayRegular: r.day_regular, daySpecial: r.day_special, night: r.night, contract: r.contract,
+  }]));
+}
+
+/** Every set of labour rates, newest first. */
+export async function getLabourRates(): Promise<LabourRateRow[]> {
+  const rows = await query<{ id: string; effective_from: string; day_regular: string; day_special: string; night: string; contract: string }>(
+    `select id, to_char(effective_from, 'YYYY-MM-DD') as effective_from, day_regular, day_special, night, contract
+       from labour_rate where scenario_id = $1 order by effective_from desc`,
+    [await activeScenarioId()],
+  );
+  return rows.map((r) => ({
+    id: r.id, effective_from: r.effective_from,
+    dayRegular: Number(r.day_regular), daySpecial: Number(r.day_special), night: Number(r.night), contract: Number(r.contract),
+  }));
+}
+
 /** Every electricity price, newest first. */
 export async function getElectricityRates(): Promise<ElectricityRate[]> {
   return query<ElectricityRate>(
     `select id, to_char(effective_from, 'YYYY-MM-DD') as effective_from, rate
        from electricity_rate where scenario_id = $1 order by effective_from desc`,
     [await activeScenarioId()],
+  );
+}
+
+/** The most recent meter readings, newest first. */
+export async function getMeterReadings(limit = 60): Promise<MeterReading[]> {
+  return query<MeterReading>(
+    `select to_char(day, 'YYYY-MM-DD') as day, kwh, kvarh, kva, kvah, pf
+       from electricity_reading where scenario_id = $1 order by day desc limit $2`,
+    [await activeScenarioId(), limit],
   );
 }
