@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, Package, Plus, Search, Settings2, Trash2 } from "lucide-react";
 import { saveSku, saveSkuDay, saveSkuPacking, type MaterialLine } from "@/app/daily/sku-actions";
-import { standardMaterial } from "@/lib/production/packing";
+import { rateMaterial, standardMaterial } from "@/lib/production/packing";
 import { Empty, Section, THead, Th } from "@/components/tanks/ui";
 import { DateBar } from "@/components/tanks/TankDayBoard";
 import {
@@ -64,8 +64,11 @@ export function SkuPackingDay({
   };
 
   const pcsOf = (s: SkuDayRow) => val(entries[s.sku_id].cases) * s.pcs_per_case + val(entries[s.sku_id].loose_pcs);
+  // a SKU with a packing rate per piece costs pieces x rate; otherwise its standing packing list
   const stdLines = (s: SkuDayRow): MLine[] =>
-    standardMaterial(packingLists[s.sku_id] ?? [], pcsOf(s), val(entries[s.sku_id].cases))
+    (s.pack_rate_per_pc !== null
+      ? rateMaterial(Number(s.pack_rate_per_pc), pcsOf(s))
+      : standardMaterial(packingLists[s.sku_id] ?? [], pcsOf(s), val(entries[s.sku_id].cases)))
       .map((m) => ({ packaging_id: m.packaging_id, name: m.name, qty: String(m.qty), unit: m.unit, price: String(m.price) }));
   // what the day's material will be: what was entered, else the standing list (Save day fills it in the same way)
   const effective = (s: SkuDayRow) => (mats[s.sku_id].length ? mats[s.sku_id] : pcsOf(s) > 0 ? stdLines(s) : []);
@@ -414,6 +417,7 @@ function SkuSetup({
   const [pcs, setPcs] = useState(String(sku.pcs_per_case));
   const [bulk, setBulk] = useState(sku.bulk_product_id ?? "");
   const [perPc, setPerPc] = useState(sku.bulk_qty_per_pc === null ? "" : String(Number(sku.bulk_qty_per_pc)));
+  const [packRate, setPackRate] = useState(sku.pack_rate_per_pc === null ? "" : String(Number(sku.pack_rate_per_pc)));
   const [active, setActive] = useState(sku.is_active);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -424,7 +428,7 @@ function SkuSetup({
     <form onSubmit={(e) => {
       e.preventDefault();
       start(async () => {
-        const res = await saveSku(sku.sku_id, { pcs_per_case: pcs, bulk_product_id: bulk, bulk_qty_per_pc: perPc, is_active: active });
+        const res = await saveSku(sku.sku_id, { pcs_per_case: pcs, bulk_product_id: bulk, bulk_qty_per_pc: perPc, pack_rate_per_pc: packRate, is_active: active });
         if (!res.ok) { setError(res.error); return; }
         const res2 = await saveSkuPacking(sku.sku_id, packList);
         if (!res2.ok) { setError(res2.error); return; }
@@ -454,7 +458,14 @@ function SkuSetup({
             How much of the bulk product goes into one piece - 0.5 for a 500 ml pouch of milk, 0.2 for a 200 g cup.
           </span>
         </label>
-        <div className="rounded-lg border border-border p-3 sm:col-span-2">
+        <label className="sm:col-span-2">
+          <span className={label}>Packing cost per piece (₹)</span>
+          <Input inputMode="decimal" value={packRate} onChange={(e) => setPackRate(e.target.value)} placeholder="blank = use the packing list" className="h-9 sm:w-56" />
+          <span className="mt-1 block text-[11px] text-muted-foreground">
+            The plant&apos;s costed rate for one piece. When set, each day&apos;s packing cost is pieces packed × this rate and the list below is not used.
+          </span>
+        </label>
+        <div className={`rounded-lg border border-border p-3 sm:col-span-2 ${packRate.trim() ? "opacity-60" : ""}`}>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[12px] font-semibold text-foreground">Packing material for one {sku.pcs_per_case > 1 ? "piece / case" : "piece"}</span>
             <span className="num text-[12px] text-muted-foreground">≈ ₹{formatNumber(perPiece, 2)} per piece at current rates</span>
