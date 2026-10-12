@@ -308,7 +308,7 @@ export function MovementTable<M extends MovementRow>({
                     onDelete={() => deleteMovement(m.id, tankIdOf(m))}
                     confirmLabel={`the move of ${formatNumber(m.qty_litre, 0)} L on ${m.movement_date} (both tanks)`}
                   />
-                ) : m.source === "production" ? (
+                ) : m.source === "production" || m.source === "production_return" ? (
                   <Link href={`/daily?date=${m.movement_date}`} className="text-[10px] text-tertiary-foreground hover:underline" title="Change it on the Production page">Production</Link>
                 ) : m.source ? (
                   <span className="text-[10px] text-tertiary-foreground" title="Change its tank on the Milk in page">Milk in</span>

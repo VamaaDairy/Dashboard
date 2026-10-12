@@ -132,13 +132,46 @@ export async function recomputeTank(client: PoolClient, tankId: string, seen: Se
   // a backdated change shifts the blend later draws left at, so batches fed from this tank follow
   const fed = await client.query<{ id: string }>(
     `select distinct bulk_batch_id as id from tank_movement where tank_id = $1 and bulk_batch_id is not null`, [tankId]);
-  await syncBatchMilk(client, fed.rows.map((r) => r.id));
+  const batchIds = fed.rows.map((r) => r.id);
+  await syncBatchReturns(client, batchIds, seen);
+  await syncBatchMilk(client, batchIds);
+}
+
+/**
+ * Milk a batch gave back to a tank goes back at the blend it was drawn at:
+ * the weighted fat, SNF and ₹/L of the batch's draws. Updates each return
+ * 'in' to that and replays the tank it went to (a tank already being
+ * replayed is replayed again, once - the second pass finds nothing to change).
+ */
+async function syncBatchReturns(client: PoolClient, batchIds: string[], seen: Set<string>): Promise<void> {
+  if (!batchIds.length) return;
+  const changed = await client.query<{ tank_id: string }>(
+    `update tank_movement i
+        set fat_pct = x.fat, snf_pct = x.snf, cost_per_litre = x.cost
+       from (select o.bulk_batch_id as id,
+                    sum(o.qty_litre * o.fat_pct) / nullif(sum(o.qty_litre), 0) as fat,
+                    sum(o.qty_litre * o.snf_pct) / nullif(sum(o.qty_litre), 0) as snf,
+                    sum(o.qty_litre * o.cost_per_litre) / nullif(sum(o.qty_litre), 0) as cost
+               from tank_movement o
+              where o.bulk_batch_id = any($1) and o.direction = 'out'
+              group by o.bulk_batch_id) x
+      where i.bulk_batch_id = x.id and i.direction = 'in' and i.source = 'production_return'
+        and (abs(coalesce(i.fat_pct, -1) - coalesce(x.fat, 0)) > 0.0001
+             or abs(coalesce(i.snf_pct, -1) - coalesce(x.snf, 0)) > 0.0001
+             or abs(coalesce(i.cost_per_litre, -1) - coalesce(x.cost, 0)) > 0.0001)
+      returning i.tank_id`,
+    [batchIds],
+  );
+  for (const t of new Set(changed.rows.map((r) => r.tank_id))) {
+    await recomputeTank(client, t, seen.has(t) ? new Set() : seen);
+  }
 }
 
 /**
  * Copies onto each batch the milk it drew from the tanks: total litres, the
- * weighted-average fat and SNF, and what it cost. A batch with no draws is
- * left with none.
+ * weighted-average fat and SNF, and what it cost - net of any milk it gave
+ * back to a tank (returned at the draws' own blend, so fat and SNF hold).
+ * A batch with no draws is left with none.
  */
 export async function syncBatchMilk(client: PoolClient, batchIds: string[]): Promise<void> {
   if (!batchIds.length) return;
@@ -147,10 +180,12 @@ export async function syncBatchMilk(client: PoolClient, batchIds: string[]): Pro
         set milk_litre = x.litres,
             milk_fat_pct = x.fat, milk_snf_pct = x.snf, milk_cost = x.cost
        from (select b2.id,
-                    sum(m.qty_litre) as litres,
-                    sum(m.qty_litre * m.fat_pct) / nullif(sum(m.qty_litre), 0) as fat,
-                    sum(m.qty_litre * m.snf_pct) / nullif(sum(m.qty_litre), 0) as snf,
-                    round(sum(m.qty_litre * m.cost_per_litre), 2) as cost
+                    sum(case when m.direction = 'out' then m.qty_litre else -m.qty_litre end) as litres,
+                    sum(case when m.direction = 'out' then m.qty_litre * m.fat_pct else -m.qty_litre * m.fat_pct end)
+                      / nullif(sum(case when m.direction = 'out' then m.qty_litre else -m.qty_litre end), 0) as fat,
+                    sum(case when m.direction = 'out' then m.qty_litre * m.snf_pct else -m.qty_litre * m.snf_pct end)
+                      / nullif(sum(case when m.direction = 'out' then m.qty_litre else -m.qty_litre end), 0) as snf,
+                    round(sum(case when m.direction = 'out' then m.qty_litre * m.cost_per_litre else -m.qty_litre * m.cost_per_litre end), 2) as cost
                from bulk_batch b2
                left join tank_movement m on m.bulk_batch_id = b2.id
               where b2.id = any($1)

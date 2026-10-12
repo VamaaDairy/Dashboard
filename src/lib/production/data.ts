@@ -38,6 +38,14 @@ export interface BatchMilk {
   cost_per_litre: number | null;
 }
 
+/** Milk one batch gave back to one tank. */
+export interface BatchReturn {
+  id: string;
+  tank_id: string;
+  tank_name: string;
+  litres: number;
+}
+
 export interface Batch {
   id: string;
   batch_date: string;
@@ -56,6 +64,8 @@ export interface Batch {
   notes: string | null;
   ingredients: BatchIngredient[];
   milk: BatchMilk[];
+  /** milk put back into a tank, at the blend it was drawn at */
+  returns: BatchReturn[];
 }
 
 export interface ProductionDaySummary {
@@ -101,7 +111,7 @@ export async function getIngredientOptions(): Promise<IngredientOption[]> {
 /** Every batch on one date, in the order entered, with its ingredients. */
 export async function getBatches(date: string): Promise<Batch[]> {
   const scenario = await activeScenarioId();
-  const batches = await query<Omit<Batch, "ingredients" | "milk">>(
+  const batches = await query<Omit<Batch, "ingredients" | "milk" | "returns">>(
     `select b.id, to_char(b.batch_date, 'YYYY-MM-DD') as batch_date, b.bulk_product_id,
             p.name as product_name, p.unit as product_unit, b.batch_no, b.output_qty,
             b.milk_litre, b.milk_fat_pct, b.milk_snf_pct,
@@ -121,13 +131,20 @@ export async function getBatches(date: string): Promise<Batch[]> {
     `select m.id, m.bulk_batch_id as batch_id, m.tank_id, t.name as tank_name, m.qty_litre as litres,
             m.fat_pct, m.snf_pct, m.cost_per_litre
        from tank_movement m join tank t on t.id = m.tank_id
-      where m.bulk_batch_id = any($1) order by t.sort_order, m.created_at, m.id`,
+      where m.bulk_batch_id = any($1) and m.direction = 'out' order by t.sort_order, m.created_at, m.id`,
+    [batches.map((b) => b.id)],
+  );
+  const returns = await query<BatchReturn & { batch_id: string }>(
+    `select m.id, m.bulk_batch_id as batch_id, m.tank_id, t.name as tank_name, m.qty_litre as litres
+       from tank_movement m join tank t on t.id = m.tank_id
+      where m.bulk_batch_id = any($1) and m.direction = 'in' order by t.sort_order, m.created_at, m.id`,
     [batches.map((b) => b.id)],
   );
   return batches.map((b) => ({
     ...b,
     ingredients: lines.filter((l) => l.batch_id === b.id),
     milk: milk.filter((m) => m.batch_id === b.id),
+    returns: returns.filter((m) => m.batch_id === b.id),
   }));
 }
 
