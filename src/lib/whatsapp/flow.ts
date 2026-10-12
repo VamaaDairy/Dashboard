@@ -144,6 +144,37 @@ export async function sendCatalog(waId: string, sender: "agent" | "bot" = "agent
 const shortName = (name: string) => name.replace(/^Gaia\s+/i, "").replace(/Thick & Creamy /i, "");
 const firstClause = (text: string) => text.split(/[.,]/)[0].trim();
 
+// ---------------------------------------------------------------- the approved opener
+
+/**
+ * The gaia_order_now template - the one message allowed to a customer who
+ * hasn't written in 24 hours. Its Order Now button comes back as a reply that
+ * sends the full catalogue.
+ */
+export async function sendOrderTemplate(waId: string, name: string | null, sender: "agent" | "system" = "agent") {
+  const hero = (await listProducts()).find((p) => p.image_url)?.image_url;
+  if (!hero) throw new Error("No product photo to use as the template header");
+  const first = (name ?? "").replace(/[^\p{L}\s]/gu, "").trim().split(/\s+/)[0] || "there";
+  return send(
+    waId,
+    {
+      type: "template",
+      template: {
+        name: "gaia_order_now",
+        language: { code: "en" },
+        components: [
+          { type: "header", parameters: [{ type: "image", image: { link: hero } }] },
+          { type: "body", parameters: [{ type: "text", text: first }] },
+        ],
+      },
+    },
+    {
+      sender,
+      body: `Namaste ${first}! Fresh from Gaia Dairy: pasteurised cow milk, thick & creamy dahi, kadhi dahi, desi ghee and doodh peda - delivered to your doorstep. Tap Order Now to see today's range. [Order Now]`,
+    },
+  );
+}
+
 // ---------------------------------------------------------------- status changes from the dashboard
 
 const STATUS_TEXT: Record<OrderStatus, (o: Order) => string> = {

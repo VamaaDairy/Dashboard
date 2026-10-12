@@ -216,7 +216,9 @@ export async function send(
         ? (payload.image.caption ?? "")
         : payload.type === "document"
           ? (payload.document.caption ?? payload.document.filename ?? "")
-          : interactiveText(payload.interactive));
+          : payload.type === "template"
+            ? `[template ${payload.template.name}]`
+            : interactiveText(payload.interactive));
   const row = await one<{ id: number }>(
     `insert into wa_message (wa_id, direction, sender, type, body, media_id, payload, status, order_id)
      values ($1, 'out', $2, $3, $4, $5, $6, 'sending', $7) returning id`,

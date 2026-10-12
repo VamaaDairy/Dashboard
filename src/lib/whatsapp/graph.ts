@@ -34,7 +34,8 @@ export type OutPayload =
   | { type: "text"; text: { body: string; preview_url?: boolean } }
   | { type: "image"; image: { link?: string; id?: string; caption?: string } }
   | { type: "document"; document: { link?: string; id?: string; caption?: string; filename?: string } }
-  | { type: "interactive"; interactive: Record<string, unknown> };
+  | { type: "interactive"; interactive: Record<string, unknown> }
+  | { type: "template"; template: { name: string; language: { code: string }; components?: Record<string, unknown>[] } };
 
 export async function sendMessage(to: string, payload: OutPayload): Promise<string> {
   if (!wa.phoneNumberId) throw new GraphError("WA_PHONE_NUMBER_ID is not set");

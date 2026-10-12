@@ -1,6 +1,6 @@
 import "server-only";
 import { enqueueAgent } from "./agent";
-import { handleRatingReply } from "./flow";
+import { handleRatingReply, sendCatalog } from "./flow";
 import { downloadMedia, markReadAndTyping } from "./graph";
 import {
   applyStatus, getProducts, latestOpenOrder, money, recordInbound, saveMedia, updateContact, updateOrder, upsertContact,
@@ -164,6 +164,13 @@ async function handleMessage(m: WaMessage, profileName: string | null) {
   if (m.type === "reaction") return;
 
   if (!contact.bot_enabled) return; // a person has this chat
+
+  // "Order Now" on the gaia_order_now template: straight to the catalogue and the order list.
+  if (m.type === "button" && /order now/i.test(m.button?.text ?? "")) {
+    void markReadAndTyping(m.id);
+    await sendCatalog(waId, "bot");
+    return;
+  }
   void markReadAndTyping(m.id);
   await enqueueAgent(waId);
 }
