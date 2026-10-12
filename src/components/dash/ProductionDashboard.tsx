@@ -68,7 +68,7 @@ export function ProductionDashboard({ from, to, today, costing, tankIn }: {
     ...heads.map((h) => ({ key: h.code, label: short(h), amount: headAmount[h.code] ?? 0, color: headColor(h.code), how: "litres of milk in each batch" })),
   ];
   const onSku = [
-    { key: "pack", label: "Packing material", amount: material, color: COST.packing.color, how: "each SKU's own packing list" },
+    { key: "pack", label: "Packing material", amount: material, color: COST.packing.color, how: "each SKU's packing rate per piece, else its packing list" },
     { key: "del", label: "Delivery fuel", amount: delivery, color: COST.fuel_delivery.color, how: "kg / L in each SKU" },
   ];
   const share = (v: number) => (productionCost ? (v / productionCost) * 100 : 0);
