@@ -41,10 +41,14 @@ export const RESOURCES: Resource[] = [
   { key: "electricity", label: "Electricity", group: "Everyday", path: "/electricity" },
   { key: "creditnote", label: "Credit notes", group: "Credit notes", path: "/credit-note" },
   { key: "creditnote.dashboard", label: "Dashboard", group: "Credit notes", path: "/credit-note/dashboard" },
+  { key: "cn", label: "Complaints & CN", group: "CN Management", path: "/cn" },
+  { key: "cn.approve", label: "Approvals (needs Complaints & CN too)", group: "CN Management", path: "/cn/approvals" },
+  { key: "cn.finance", label: "Finance posting (needs Complaints & CN too)", group: "CN Management", path: "/cn/finance" },
+  { key: "cn.dashboard", label: "Dashboard", group: "CN Management", path: "/cn/dashboard" },
+  { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
+  { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
   { key: "masters", label: "Ingredients, packaging & other masters", group: "Rates & masters", path: "/c" },
-  { key: "parameters", label: "Parameters", group: "Rates & masters", path: "/parameters" },
   { key: "reports", label: "Reports", group: "Setup", path: "/reports" },
-  { key: "schema", label: "Columns & classes", group: "Setup", path: "/schema" },
   { key: "audit", label: "Change log", group: "Setup", path: "/audit" },
 ];
 

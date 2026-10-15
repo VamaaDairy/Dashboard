@@ -22,6 +22,11 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-brand: var(--border-brand);
+  --color-border-info: var(--border-info);
+  --color-border-warning: var(--border-warning);
+  --color-border-destructive: var(--border-destructive);
+  --color-border-control-hover: var(--border-control-hover);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
