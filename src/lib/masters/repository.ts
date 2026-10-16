@@ -1,11 +1,12 @@
 import "server-only";
 import { query } from "@/lib/db";
-import { EXPORT_LIMIT, FILTER_OPTION_LIMIT, PAGE_SIZE } from "./constants";
+import { DISPLAY_TZ, EXPORT_LIMIT, FILTER_OPTION_LIMIT, PAGE_SIZE } from "./constants";
 import type { ListRequest, Listing, MasterDef } from "./types";
 
 function where(def: MasterDef, req: ListRequest): { sql: string; args: unknown[] } {
   const conds: string[] = [];
   const args: unknown[] = [];
+  if (def.baseWhere) conds.push(`(${def.baseWhere})`);
   if (req.q) {
     args.push(`%${req.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
     conds.push(`(${def.search.map((e) => `${e}::text ilike $${args.length}`).join(" or ")})`);
@@ -15,6 +16,10 @@ function where(def: MasterDef, req: ListRequest): { sql: string; args: unknown[]
     if (v === undefined) continue;
     args.push(v);
     conds.push(`${f.expr}::text = $${args.length}`);
+  }
+  if (def.dateRange && req.from && req.to) {
+    args.push(req.from, req.to);
+    conds.push(`(${def.dateRange.expr} at time zone '${DISPLAY_TZ}')::date between $${args.length - 1}::date and $${args.length}::date`);
   }
   return { sql: conds.length ? `where ${conds.join(" and ")}` : "", args };
 }
@@ -45,13 +50,16 @@ export async function listMaster(def: MasterDef, req: ListRequest): Promise<List
   );
   const statsP = def.stats?.length
     ? query<Record<string, number>>(
-        `select ${def.stats.map((s, i) => `(count(*) filter (where ${s.where}))::int as s${i}`).join(", ")} from ${def.from}`,
+        `select ${def.stats.map((s, i) => `(count(*) filter (where ${s.where}))::int as s${i}`).join(", ")} from ${def.from}${def.baseWhere ? ` where ${def.baseWhere}` : ""}`,
       )
     : Promise.resolve([] as Array<Record<string, number>>);
+  // dropdowns list what exists in the chosen period, not in all of history
+  const period = where(def, { q: "", page: 1, filters: {}, from: req.from, to: req.to });
   const optionsP = Promise.all(
     (def.filters ?? []).map(async (f) => {
       const rows = await query<{ v: string }>(
-        `select distinct ${f.expr}::text as v from ${def.from} where ${f.expr} is not null order by 1 limit ${FILTER_OPTION_LIMIT}`,
+        `select distinct ${f.expr}::text as v from ${def.from} ${period.sql ? `${period.sql} and` : "where"} ${f.expr} is not null order by 1 limit ${FILTER_OPTION_LIMIT}`,
+        period.args,
       );
       return [f.key, rows.map((r) => r.v)] as const;
     }),

@@ -50,6 +50,8 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
     const sp = new URLSearchParams();
     if (req.q) sp.set("q", req.q);
     for (const [k, v] of Object.entries(req.filters)) sp.set(`f_${k}`, v);
+    if (req.from) sp.set("from", req.from);
+    if (req.to) sp.set("to", req.to);
     for (const [k, v] of Object.entries(over)) {
       if (v === undefined || v === "") sp.delete(k);
       else sp.set(k, String(v));
@@ -57,6 +59,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
     const s = sp.toString();
     return s ? `?${s}` : "";
   };
+  // a report's own date window is not a filter the user "clears"
   const filtered = !!req.q || Object.keys(req.filters).length > 0;
   const from = data.total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(page * PAGE_SIZE, data.total);
@@ -100,6 +103,16 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
         ) : null}
 
         <form method="get" className="flex flex-wrap items-center gap-2">
+          {def.dateRange ? (
+            <>
+              <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                From <input type="date" name="from" defaultValue={req.from} required className={field} />
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                To <input type="date" name="to" defaultValue={req.to} required className={field} />
+              </label>
+            </>
+          ) : null}
           <input name="q" defaultValue={req.q} placeholder="Search…" className={`${field} w-56`} autoComplete="off" />
           {(def.filters ?? []).map((f) => (
             <select key={f.key} name={`f_${f.key}`} defaultValue={req.filters[f.key] ?? ""} className={`${field} max-w-[11rem]`} aria-label={f.label}>
@@ -165,7 +178,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
               {data.rows.length === 0 ? (
                 <tr>
                   <td colSpan={def.cols.length + (canEdit ? 1 : 0)} className="px-3 py-10 text-center text-muted-foreground">
-                    {filtered ? "Nothing matches these filters." : "No data yet - load the exports with npm run db:import:masters."}
+                    {filtered ? "Nothing matches these filters." : def.emptyNote ?? "No data yet - load the exports with npm run db:import:masters."}
                   </td>
                 </tr>
               ) : null}

@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
-export type Kind = "text" | "num" | "money" | "date" | "status" | "mono";
+export type Kind = "text" | "num" | "money" | "date" | "datetime" | "status" | "mono";
 
 export interface Col {
   key: string;
@@ -96,6 +96,12 @@ export interface MasterDef {
   /** Counts shown above the table, over the whole list (not the search) */
   stats?: Stat[];
   order: string;
+  /** Reports: From / To dates applied to this timestamp expression; `days` is the default window ending today. */
+  dateRange?: { expr: string; days: number };
+  /** always applied, before any search or filter (e.g. primary vs secondary sales) */
+  baseWhere?: string;
+  /** shown instead of the generic message when the list is empty */
+  emptyNote?: string;
   entity?: EntityDef;
 }
 
@@ -106,6 +112,9 @@ export interface ListRequest {
   q: string;
   page: number;
   filters: Record<string, string>;
+  /** YYYY-MM-DD, only for screens with a dateRange */
+  from?: string;
+  to?: string;
 }
 
 export interface Listing {
