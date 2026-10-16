@@ -78,7 +78,8 @@ for (const e of tables) {
     } else if (/Uid$/.test(f.name) && !isList) {
       type = "uuid";
       line += "uuid";
-      if (f.required) line += " not null";
+      // a row cannot point at itself before it exists, so self-references stay nullable
+      if (f.required && f.name !== `${e.name}Uid`) line += " not null";
     } else if (f.name === "createdAt" || f.name === "updatedAt") {
       line += "timestamptz not null default now()";
     } else {
@@ -88,6 +89,9 @@ for (const e of tables) {
     lines.push(line);
     cols.push({ field: f.name, col, sql: type, required: f.required });
   }
+
+  const self = cols.find((c) => c.field === `${e.name}Uid`);
+  if (self) self.required = false;
 
   // foreign keys: explicit relation first, else <entity>Uid naming
   for (const c of cols) {

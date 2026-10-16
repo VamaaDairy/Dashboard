@@ -4897,7 +4897,7 @@
     "field": "deliveryUid",
     "col": "delivery_uid",
     "sql": "uuid",
-    "required": true,
+    "required": false,
     "fk": "delivery"
    },
    {

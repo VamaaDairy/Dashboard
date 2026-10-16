@@ -48,6 +48,11 @@ const pick = <T,>(a: T[], i: number) => a[((i % a.length) + a.length) % a.length
 async function main() {
   await db.connect();
   try {
+    if (process.argv.includes("--reset")) {
+      const names = Object.values(MODEL).map((t) => `"${t.table}"`).join(", ");
+      await db.query(`truncate ${names} restart identity cascade`);
+      console.log("cleared all fp tables");
+    }
     if ((await db.query(`select 1 from fp_fp_company limit 1`)).rowCount) { console.log("fp tables already have data - nothing seeded"); return; }
     await db.query("begin");
 
@@ -163,9 +168,33 @@ async function main() {
     }
     void actDisplay;
 
-    // ---- secondary orders -> invoices -> bills -> payments
-    let ordNo = 0;
-    const mkOrder = async (kind: "primary" | "secondary", from: string, to: string, by: string | null, back: number, status: string) => {
+    // ---- orders -> invoices -> bills -> payments (a booking order is placed BY the buyer (from) TO the seller (to);
+    //      the invoice runs the other way: from seller to buyer)
+    const modes: string[] = [];
+    for (const m of ["Cash", "UPI", "Cheque", "NEFT"]) modes.push(await ins("paymentMode", { mode: m, photo: 0 } as never));
+    await ins("bank", { name: "State Bank of India" } as never);
+
+    const stock = new Map<string, number>();
+    const bump = (firm: string, prod: number, d: number) => { const k = `${firm}|${prod}`; stock.set(k, (stock.get(k) ?? 0) + d); };
+    for (const p of products.keys()) bump(hq, p, 40000);
+
+    let ordNo = 0, invNo = 0;
+    const mkInvoice = async (type: number, voucher: 1 | 2 | 3 | 4 | 6, from: string, to: string | null, by: string | null, back: number, lines: Array<{ pi: number; mrp: number; dp: number; qty: number; cost: number }>, bo: string | null, status = "Accepted") => {
+      invNo++;
+      const total = Math.round(lines.reduce((s, l) => s + l.cost, 0) * 100) / 100;
+      const qtySum = lines.reduce((s, l) => s + l.qty, 0);
+      const prefix = voucher === 1 ? "INV" : voucher === 2 ? "PUR" : voucher === 3 ? "SRT" : voucher === 4 ? "PRT" : "CSH";
+      const txn = await ins("transaction", {
+        voucherTime: day(back, 14).toISOString(), totalItems: lines.length, totalQuantity: qtySum, acceptedQty: status === "Accepted" ? qtySum : 0, totalCost: total, netPrice: total, status,
+        voucherNumber: `${prefix}-${String(invNo).padStart(6, "0")}`, reference: bo ? `BO-${ordNo}` : null, voucherType: voucher, transactionType: type, fromFirmUid: from, toFirmUid: to, bookingOrderUid: bo,
+        userUid: by ?? staff[1], transactionTime: day(back, 14), inputMode: "Portal", returnType: voucher === 3 || voucher === 4 ? "Damaged" : null, returnReason: voucher === 3 || voucher === 4 ? "Leaked packs" : null,
+      } as never);
+      for (const l of lines)
+        await ins("transactionItem", { transactionUid: txn, productUid: products[l.pi], mrp: l.mrp, sellingPrice: l.dp, dp: l.dp, channelPrice: l.dp, schemePrice: l.dp, quantity: l.qty, acceptedQty: l.qty, totalCost: l.cost, unit: "pc" } as never);
+      return { txn, total, qtySum };
+    };
+
+    const mkOrder = async (kind: "primary" | "secondary", buyer: string, seller: string, by: string | null, back: number, status: string) => {
       ordNo++;
       const n = 2 + (ordNo % 3);
       const lines = Array.from({ length: n }, (_, k) => {
@@ -176,37 +205,61 @@ async function main() {
       });
       const total = Math.round(lines.reduce((s, l) => s + l.cost, 0) * 100) / 100;
       const qtySum = lines.reduce((s, l) => s + l.qty, 0);
+      const done = status === "Accepted" || status === "Delivered";
       const bo = await ins("bookingOrder", {
         orderUid: randomUUID(), orderId: ordNo, orderType: kind === "primary" ? "PRIMARY" : "SECONDARY", bookingTime: day(back, 11), bookingDate: day(back, 0),
-        totalItem: n, weekOfMonth: Math.ceil((day(back).getDate()) / 7), totalQuantity: qtySum, totalCost: total, dealerCost: total, status, currentStatus: status,
-        fromFirmUid: from, toFirmUid: to, staffUid: by, retail: kind === "secondary" ? 1 : 0, acceptedQuantity: status === "Pending" ? 0 : qtySum, invoiceQuantity: status === "Delivered" ? qtySum : 0,
+        totalItem: n, weekOfMonth: Math.ceil(day(back).getDate() / 7), totalQuantity: qtySum, totalCost: total, dealerCost: total, status, currentStatus: status,
+        fromFirmUid: buyer, toFirmUid: seller, staffUid: by, retail: kind === "secondary" ? 1 : 0, acceptedQuantity: done ? qtySum : 0, invoiceQuantity: done ? qtySum : 0,
+        cancelledQuantity: status === "Cancelled" || status === "Rejected" ? qtySum : 0, rejectionReason: status === "Rejected" ? "Out of stock" : null,
       } as never);
       for (const l of lines)
-        await ins("bookingOrderItem", { bookingOrderUid: bo, productUid: products[l.pi], mrp: l.mrp, sellingPrice: l.dp, dp: l.dp, quantity: l.qty, stock: 100, totalCost: l.cost, acceptedQuantity: status === "Pending" ? 0 : l.qty, unit: "pc" } as never);
-      if (status === "Pending" || status === "Cancelled") return;
-      const txn = await ins("transaction", {
-        voucherTime: day(back, 14).toISOString(), totalItems: n, totalQuantity: qtySum, totalCost: total, status: status === "Delivered" ? "Accepted" : "Invoiced", voucherNumber: `INV-${String(ordNo).padStart(6, "0")}`,
-        voucherType: 1, transactionType: kind === "primary" ? 1 : 2, fromFirmUid: from, toFirmUid: to, bookingOrderUid: bo, userUid: by ?? staff[1], transactionTime: day(back, 14),
-      } as never);
-      for (const l of lines)
-        await ins("transactionItem", { transactionUid: txn, productUid: products[l.pi], mrp: l.mrp, sellingPrice: l.dp, dp: l.dp, channelPrice: l.dp, schemePrice: l.dp, quantity: l.qty, totalCost: l.cost, unit: "pc" } as never);
+        await ins("bookingOrderItem", { bookingOrderUid: bo, productUid: products[l.pi], mrp: l.mrp, sellingPrice: l.dp, dp: l.dp, quantity: l.qty, stock: 100, totalCost: l.cost, acceptedQuantity: done ? l.qty : 0, invoiceQuantity: done ? l.qty : 0, unit: "pc" } as never);
+      if (!done) return;
+
+      const t = kind === "primary" ? 1 : 2;
+      const inv = await mkInvoice(t, 1, seller, buyer, by, back, lines, bo);
+      for (const l of lines) { bump(seller, l.pi, -l.qty); bump(buyer, l.pi, l.qty); }
       const bill = await ins("bill", {
-        invoiceDate: day(back, 14), invoiceNumber: `INV-${String(ordNo).padStart(6, "0")}`, invoiceCost: total, currentDue: total, openingDue: 0, totalAmountPaid: 0, transactionUid: txn, bookingOrderUid: bo,
-        fromFirmUid: from, toFirmUid: to, status: 1, deliveryStatus: status === "Delivered" ? 1 : 0, billType: kind === "primary" ? "PRIMARY" : "SECONDARY", deliveryStaffUid: staff[5],
+        invoiceDate: day(back, 14), invoiceNumber: `INV-${String(invNo).padStart(6, "0")}`, invoiceCost: inv.total, currentDue: inv.total, openingDue: 0, totalAmountPaid: 0, transactionUid: inv.txn, bookingOrderUid: bo,
+        fromFirmUid: seller, toFirmUid: buyer, status: 1, deliveryStatus: status === "Delivered" ? 1 : 0, deliveryDate: status === "Delivered" ? day(back - 1, 12) : null, billType: kind === "primary" ? "PRIMARY" : "SECONDARY", deliveryStaffUid: staff[5],
       } as never);
+      if (status === "Delivered") {
+        await ins("delivery", { deliveryType: "DELIVERY", deliveryTime: day(back - 1, 12), totalItem: n, totalQuantity: qtySum, totalCost: inv.total, dealerCost: inv.total, status: "Delivered", invoiceNumber: `INV-${String(invNo).padStart(6, "0")}`, transactionUid: inv.txn, fromFirmUid: seller, toFirmUid: buyer, staffUid: staff[5] } as never);
+      }
+      if (kind === "primary") await mkInvoice(1, 2, seller, buyer, by, back, lines, bo); // the buyer's purchase entry
       if (back > 6 && ordNo % 3 !== 0) {
-        const paid = ordNo % 2 ? total : Math.round(total * 0.5);
-        await ins("payment", { transactionUid: txn, billUid: bill, paymentDate: day(back - 3, 12), amountPaid: paid, status: 1, collectedStaffUid: by ?? staff[5] } as never);
-        await db.query(`update fp_bill set total_amount_paid = $1, current_due = $2 where uid = $3`, [paid, total - paid, bill]);
+        const paid = ordNo % 2 ? inv.total : Math.round(inv.total * 0.5);
+        await ins("payment", { transactionUid: inv.txn, billUid: bill, paymentDate: day(back - 3, 12), amountPaid: paid, status: 1, collectedStaffUid: by ?? staff[5], paymentModeUid: pick(modes, ordNo), verified: 1, verificationStatus: "Verified" } as never);
+        await db.query(`update fp_bill set total_amount_paid = $1, current_due = $2, last_payment_date = $4 where uid = $3`, [paid, inv.total - paid, bill, day(back - 3, 12)]);
       }
     };
     for (let back = 28; back >= 0; back--) {
       for (let k = 0; k < 2; k++) {
         const ri = (back * 2 + k) % retailers.length;
-        const status = back > 3 ? "Delivered" : pick(["Pending", "Accepted", "Invoiced", "Delivered"], back + k);
-        await mkOrder("secondary", dists[ri % 3], retailers[ri], sos[ri % 3], back, status);
+        const status = back > 3 ? pick(["Delivered", "Delivered", "Delivered", "Cancelled"], back + k) : pick(["Pending", "Accepted", "Delivered", "Rejected"], back + k);
+        await mkOrder("secondary", retailers[ri], dists[ri % 3], sos[ri % 3], back, status);
       }
-      if (back % 6 === 0) for (const d of dists) await mkOrder("primary", hq, d, null, back, back > 3 ? "Delivered" : "Pending");
+      if (back % 6 === 0) for (const d of dists) await mkOrder("primary", d, hq, null, back, back > 3 ? "Delivered" : "Pending");
+    }
+    // returns, counter sales, a stock transfer to the delivery van
+    for (let i = 0; i < 4; i++) {
+      const pi = i % products.length; const [, , , mrp, dp] = prodDefs[pi]; const qty = 4 + i;
+      const ln = [{ pi, mrp, dp, qty, cost: qty * dp }];
+      await mkInvoice(2, 3, retailers[i], dists[i % 3], sos[i % 3], 10 - i, ln, null);
+      bump(retailers[i], pi, -qty); bump(dists[i % 3], pi, qty);
+      await mkInvoice(1, 4, dists[i % 3], hq, null, 8 - i, ln, null);
+      bump(dists[i % 3], pi, -qty); bump(hq, pi, qty);
+      const cs = await mkInvoice(2, 6, dists[i % 3], null, sos[i % 3], 5 - i, [{ pi, mrp, dp: mrp, qty: 2, cost: 2 * mrp }], null);
+      void cs; bump(dists[i % 3], pi, -2);
+    }
+    const stTotal = products.slice(0, 3).reduce((s, _p, i) => s + 30 * prodDefs[i][4], 0);
+    const st = await ins("stockTransfer", { voucherTime: day(2, 9).toISOString(), totalItems: 3, totalQuantity: 90, totalBilledQuantity: 60, totalCancelledQuantity: 0, totalCost: stTotal, status: "Accepted", voucherNumber: "ST-000001", fromFirmUid: dists[0], toStaffUid: staff[5], userUid: staff[1] } as never);
+    for (const [i, p] of products.slice(0, 3).entries())
+      await ins("stockTransferItem", { stockTransferUid: st, productUid: p, mrp: prodDefs[i][3], sellingPrice: prodDefs[i][4], dp: prodDefs[i][4], channelPrice: prodDefs[i][4], schemePrice: prodDefs[i][4], quantity: 30, billedQuantity: 20, totalCost: 30 * prodDefs[i][4], unit: "pc" } as never);
+
+    for (const [k, qty] of stock) {
+      const [firm, p] = k.split("|");
+      await ins("product_inventory", { firmUid: firm, productUid: products[Number(p)], stock: Math.max(0, qty), intransitStock: 0, totalStock: Math.max(0, qty), unit: "pc", batchNumber: `B${Number(p) + 1}`, batchDate: day(20), expireDate: day(-40) } as never);
     }
 
     // ---- expenses, leave, tasks, tickets, targets, configuration

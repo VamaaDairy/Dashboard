@@ -21,16 +21,17 @@ function joinsSql(joins: Join[]): string {
 }
 
 function whereOf(s: Screen, p: GridParams, params: unknown[]): string {
-  const w: string[] = [];
+  const w: string[] = s.where ? [`(${s.where})`] : [];
   const v = p.values ?? {};
   for (const f of s.filters) {
     const val = (v[f.key] ?? "").trim();
     if (!val) continue;
     if (f.kind === "from" || f.kind === "to" || f.kind === "day") {
-      if (!s.dateCol || !/^\d{4}-\d{2}-\d{2}$/.test(val)) continue;
+      const de = s.dateExpr ?? (s.dateCol ? `t.${q(s.dateCol)}` : null);
+      if (!de || !/^\d{4}-\d{2}-\d{2}$/.test(val)) continue;
       params.push(val);
       const n = params.length;
-      w.push(f.kind === "from" ? `t.${q(s.dateCol)} >= $${n}::date` : f.kind === "to" ? `t.${q(s.dateCol)} < $${n}::date + 1` : `t.${q(s.dateCol)}::date = $${n}::date`);
+      w.push(f.kind === "from" ? `${de} >= $${n}::date` : f.kind === "to" ? `${de} < $${n}::date + 1` : `${de}::date = $${n}::date`);
     } else if (f.colKey) {
       const c = s.cols.find((x) => x.key === f.colKey);
       if (!c) continue;
@@ -62,9 +63,11 @@ export async function runGrid(s: Screen, p: GridParams = {}): Promise<GridResult
   const sortCol = s.cols.find((c) => c.key === p.sort);
   const order = sortCol
     ? `${sortCol.expr} ${p.dir === "desc" ? "desc" : "asc"} nulls last`
+    : s.order ? s.order
+    : s.dateExpr ? `${s.dateExpr} desc nulls last`
     : s.dateCol ? `t.${q(s.dateCol)} desc nulls last`
     : s.table.columns.some((c) => c.col === "created_at") ? `t."created_at" desc` : `t.${q(s.table.pk)}`;
-  const select = [`t.${q(s.table.pk)}::text as _id`, ...s.cols.map((c) => `${c.expr} as ${c.key}`)].join(", ");
+  const select = [`t.${q(s.table.pk)}::text as _id`, ...(s.statusExpr ? [`(${s.statusExpr})::text as _status`] : []), ...s.cols.map((c) => `${c.expr} as ${c.key}`)].join(", ");
   const rows = await query<GridRow>(
     `select ${select} ${from} ${where} order by ${order}, t.${q(s.table.pk)} limit ${pageSize} offset ${(page - 1) * pageSize}`, params);
   return { rows: rows.map(normalise), total, page, pageSize };

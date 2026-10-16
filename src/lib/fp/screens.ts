@@ -1,4 +1,5 @@
 import { MODEL, ROUTES, tableFor, type ModelTable, type SpecComp, type SpecRoute } from "./model";
+import { OVERRIDES } from "./overrides";
 
 /**
  * A route's list screen worked out from the spec: which table its grid reads,
@@ -16,6 +17,24 @@ export interface ScreenCol {
 }
 export type FilterKind = "from" | "to" | "day" | "status" | "text";
 export interface ScreenFilter { key: string; label: string; kind: FilterKind; colKey?: string }
+/** Hand-written adjustments to what the spec parser worked out for a route. */
+export interface ColDef { label: string; path?: string; sql?: string; type?: string }
+export interface Override {
+  entity?: string;
+  /** SQL condition on alias t that every row of this screen satisfies (e.g. only primary sales) */
+  where?: string;
+  /** SQL expression the From / To / Date filters apply to, when the date is not a plain timestamp column */
+  dateExpr?: string;
+  cols?: ColDef[];
+  /** spec labels to drop from the automatic column list */
+  hide?: string[];
+  editable?: boolean;
+  title?: string;
+  order?: string;
+  /** SQL giving each row's status, which decides which row buttons show (see rowActions.ts) */
+  statusExpr?: string;
+}
+
 export interface Screen {
   route: SpecRoute;
   comp: SpecComp | null;
@@ -28,6 +47,10 @@ export interface Screen {
   tabs: string[];
   /** the spec shows add / update controls, so rows of this table can be created and edited here */
   editable: boolean;
+  where: string | null;
+  dateExpr: string | null;
+  order: string | null;
+  statusExpr: string | null;
 }
 
 const NOISE = /^(no|sr\.? ?no\.?|s\.?no\.?|#|sl\.? ?no\.?|\s*)$/i;
@@ -109,13 +132,21 @@ export function screenFor(routeKey: string): Screen | null {
   const route = ROUTES.find((x) => x.key === routeKey);
   if (!route) return null;
   const comp = primary(route);
-  const table = pickEntity(comp, route);
+  const ov = OVERRIDES[routeKey];
+  const table = ov?.entity ? tableFor(ov.entity) ?? null : pickEntity(comp, route);
   const cols: ScreenCol[] = [];
   let skipped = 0;
   const seen = new Set<string>();
-  if (table && comp) {
+  if (table && ov?.cols) {
+    for (const d of ov.cols) {
+      if (d.sql) { cols.push({ key: `c${cols.length}`, label: d.label, path: d.label, expr: `(${d.sql})`, sql: d.type ?? "text", joins: [] }); continue; }
+      const res = d.path ? resolvePath(table, d.path) : null;
+      if (!res) { skipped++; continue; }
+      cols.push({ key: `c${cols.length}`, label: d.label, path: d.path!, expr: res.expr, sql: d.type ?? res.sql, joins: res.joins });
+    }
+  } else if (table && comp) {
     for (const c of comp.gridColumns) {
-      if (!c.field || NOISE.test(c.label) || ACTION_LABELS.test(c.label)) continue;
+      if (!c.field || NOISE.test(c.label) || ACTION_LABELS.test(c.label) || ov?.hide?.includes(c.label)) continue;
       if (seen.has(c.field)) continue;
       const res = resolvePath(table, c.field);
       if (!res) { skipped++; continue; }
@@ -123,7 +154,7 @@ export function screenFor(routeKey: string): Screen | null {
       cols.push({ key: `c${cols.length}`, label: c.label || c.field, path: c.field, expr: res.expr, sql: res.sql, joins: res.joins });
     }
   }
-  const dateField = table ? DATE_PREF.map((f) => look(table, f)).find(Boolean) : undefined;
+  const dateField = ov?.dateExpr ? undefined : table ? DATE_PREF.map((f) => look(table, f)).find(Boolean) : undefined;
   const filters: ScreenFilter[] = [];
   for (const [i, label] of (comp?.formFields ?? []).entries()) {
     const l = label.toLowerCase().trim();
@@ -140,7 +171,8 @@ export function screenFor(routeKey: string): Screen | null {
   const s: Screen = {
     route, comp, table, cols, skipped, filters, dateCol: dateField?.col ?? null,
     buttons: comp?.buttons ?? [], tabs: comp?.tabs ?? [],
-    editable: !!table && (((comp?.buttons ?? []).some((b) => /(add|create|new|save|update|edit)/i.test(b))) || (comp?.gridColumns ?? []).some((c) => /^(update|edit|delete)$/i.test(c.label))),
+    where: ov?.where ?? null, dateExpr: ov?.dateExpr ?? null, order: ov?.order ?? null, statusExpr: ov?.statusExpr ?? null,
+    editable: ov?.editable ?? (!!table && (((comp?.buttons ?? []).some((b) => /(add|create|new|save|update|edit)/i.test(b))) || (comp?.gridColumns ?? []).some((c) => /^(update|edit|delete)$/i.test(c.label)))),
   };
   cache.set(routeKey, s);
   return s;

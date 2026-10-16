@@ -845,7 +845,7 @@ create table "fp_customer_unmap_request" (
 
 create table "fp_delivery" (
   "uid" uuid primary key default gen_random_uuid(),
-  "delivery_uid" uuid not null,
+  "delivery_uid" uuid,
   "delivery_type" text not null,
   "delivery_time" timestamptz not null,
   "total_item" integer not null,
@@ -3820,7 +3820,7 @@ alter table "fp_customer_target" add constraint "fp_customer_target_firm_uid_fk"
 alter table "fp_customer_unmap_request" add constraint "fp_customer_unmap_request_approver_uid_fk" foreign key ("approver_uid") references "fp_staff" ("uid") on delete set null;
 alter table "fp_customer_unmap_request" add constraint "fp_customer_unmap_request_staff_uid_fk" foreign key ("staff_uid") references "fp_staff" ("uid") on delete restrict;
 alter table "fp_customer_unmap_request" add constraint "fp_customer_unmap_request_firm_uid_fk" foreign key ("firm_uid") references "fp_firm" ("uid") on delete restrict;
-alter table "fp_delivery" add constraint "fp_delivery_delivery_uid_fk" foreign key ("delivery_uid") references "fp_delivery" ("uid") on delete restrict;
+alter table "fp_delivery" add constraint "fp_delivery_delivery_uid_fk" foreign key ("delivery_uid") references "fp_delivery" ("uid") on delete set null;
 alter table "fp_delivery" add constraint "fp_delivery_transaction_uid_fk" foreign key ("transaction_uid") references "fp_transaction" ("uid") on delete set null;
 alter table "fp_delivery" add constraint "fp_delivery_from_firm_uid_fk" foreign key ("from_firm_uid") references "fp_firm" ("uid") on delete set null;
 alter table "fp_delivery" add constraint "fp_delivery_to_firm_uid_fk" foreign key ("to_firm_uid") references "fp_firm" ("uid") on delete set null;

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { FpScreen } from "@/components/fp/FpScreen";
 import { routeBySlug } from "@/lib/fp/model";
 import { screenFor } from "@/lib/fp/screens";
+import { customScreen } from "@/lib/fp/custom";
 import { params, type SP } from "@/lib/orders/session";
 
 export const dynamic = "force-dynamic";
@@ -12,5 +13,6 @@ export default async function Page({ params: p, searchParams }: { params: Promis
   if (!route) notFound();
   const screen = screenFor(route.key);
   if (!screen) notFound();
-  return <FpScreen screen={screen} sp={await params(searchParams)} />;
+  const sp = await params(searchParams);
+  return (await customScreen(route.key, sp)) ?? <FpScreen screen={screen} sp={sp} />;
 }
