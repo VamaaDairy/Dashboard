@@ -196,6 +196,16 @@ export const OVERRIDES: Record<string, Override> = {
     ],
   },
 
+  // ---- approval workflows ----------------------------------------------------------
+  leave: { entity: "staffLeave", statusExpr: "t.status", editable: true },
+  expenses: { entity: "expense", statusExpr: "t.status", editable: true },
+  customerUnmapApproval: { entity: "customerUnmapRequest", statusExpr: "t.status" },
+  customerApproval: { entity: "firm", where: "t.new_customer = 1 or (t.active = 0 and t.remark is not null)", statusExpr: "case when t.new_customer = 1 then 'pending' else 'rejected' end", editable: false },
+  employeefaceregistration: { entity: "staffFace", statusExpr: "case when t.re_reg_requested then 'Pending' when t.re_reg_approved then 'Approved' else 'Done' end" },
+  displayAudit: { entity: "displayAudit", statusExpr: "t.status", editable: true },
+  serviceManagementView: { entity: "ticket", statusExpr: "t.status", editable: true },
+  attendance: { entity: "staffAttendance", statusExpr: "case when t.re_login_approval = 0 and t.re_login_time is not null then 'pending-relogin' else 'ok' end", editable: true },
+
   // ---- employees / customers -------------------------------------------------------
   staffs: {
     entity: "staff",

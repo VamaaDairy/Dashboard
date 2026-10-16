@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { WORKFLOW_ACTIONS } from "./workflows";
 import {
   acceptOrder, cancelOrder, cancelStockTransfer, cancelTransaction, markDelivered, recordPayment, rejectOrder, verifyPayment,
 } from "./dms";
@@ -35,7 +36,7 @@ const INVOICE_ACTIONS: RowAction[] = [
   { id: "cancel", label: "Cancel", ask: "reason", tone: "danger", whenStatus: ["Accepted", "Pending"], run: (id, i) => cancelTransaction(id, i.reason ?? "") },
 ];
 
-export const ROW_ACTIONS: Record<string, RowAction[]> = {
+const BASE_ACTIONS: Record<string, RowAction[]> = {
   fpcustbookingorders: ORDER_ACTIONS,
   portalOrder: ORDER_ACTIONS,
   fpmybookingorders: ORDER_ACTIONS.filter((a) => a.id === "cancel"),
@@ -59,6 +60,8 @@ export const ROW_ACTIONS: Record<string, RowAction[]> = {
     { id: "reject", label: "Reject", ask: "none", tone: "danger", whenStatus: ["Pending"], run: (id) => verifyPayment(id, false) },
   ],
 };
+
+export const ROW_ACTIONS: Record<string, RowAction[]> = { ...BASE_ACTIONS, ...WORKFLOW_ACTIONS };
 
 // ------------------------------------------------------------------ detail popups
 export interface Detail {

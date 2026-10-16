@@ -262,6 +262,12 @@ async function main() {
       await ins("product_inventory", { firmUid: firm, productUid: products[Number(p)], stock: Math.max(0, qty), intransitStock: 0, totalStock: Math.max(0, qty), unit: "pc", batchNumber: `B${Number(p) + 1}`, batchDate: day(20), expireDate: day(-40) } as never);
     }
 
+    // approval queues: unmap request, face re-registration, display audits, staff-firm mapping
+    for (const [i, r] of retailers.slice(0, 6).entries()) await ins("staffFirmReporting", { staffUid: sos[i % 3], firmUid: r, startDate: day(100), active: 1 } as never);
+    await ins("customerUnmapRequest", { status: "Pending", customerUnmapReason: "Outlet closed permanently", requestDate: day(1), staffUid: sos[0], firmUid: retailers[0] } as never);
+    for (const s of sos.slice(0, 2)) await ins("staffFace", { staffUid: s, reRegRequested: true, reRegApproved: false, faceIds: [] } as never);
+    await ins("displayAudit", { firmUid: retailers[1], startDate: day(3), endDate: day(-27), enrollDate: day(3), status: "Pending", amount: 1500 } as never);
+    await ins("displayAudit", { firmUid: retailers[2], startDate: day(10), endDate: day(-20), enrollDate: day(10), status: "Approved", amount: 2000 } as never);
     // ---- expenses, leave, tasks, tickets, targets, configuration
     const expTypes: string[] = [];
     for (const t of ["Fuel", "Food", "Travel"]) expTypes.push(await ins("expenseType", { type: t, active: 1, photo: 0 } as never));
