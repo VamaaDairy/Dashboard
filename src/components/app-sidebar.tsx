@@ -91,6 +91,7 @@ const DAILY: NavItem[] = [
       { href: "/orders/field-force", key: "orders.fieldforce", label: "Field Force Management" },
       { href: "/orders/kpi-target", key: "orders.kpi", label: "KPI Target" },
       { href: "/orders/admin", key: "orders.admin", label: "Uploads & settings" },
+      { href: "/orders/ai", key: "orders.ai", label: "Smart tools" },
       { href: "/orders/reports", key: "orders.reports", label: "Download Reports" },
       { href: "/orders/master-config", key: "orders.config", label: "Master Configuration" },
       { href: "/orders/support", key: "orders.support", label: "Support Dashboard" },

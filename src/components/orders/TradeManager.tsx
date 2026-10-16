@@ -71,7 +71,7 @@ export function TradeManager({ kind, rows, lineMap, parties, staff, products, ca
     }));
     start(async () => {
       const res = isPo
-        ? await savePurchaseAction({ id, supplier: f.supplier, po_date: f.date, notes: f.notes || null, items: items.map(({ discount_pct: _d, ...x }) => x) })
+        ? await savePurchaseAction({ id, supplier: f.supplier, po_date: f.date, notes: f.notes || null, items: items.map((l) => ({ product_id: l.product_id, qty: l.qty, rate: l.rate })) })
         : await saveOrderAction({
             id, kind, customer_id: f.party || null, customer_name: f.name || null, staff_id: f.staff || null,
             order_date: f.date, notes: f.notes || null, items,

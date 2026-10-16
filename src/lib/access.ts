@@ -60,6 +60,7 @@ export const RESOURCES: Resource[] = [
   { key: "orders.fieldforce", label: "Field Force Management", group: "Orders", path: "/orders/field-force" },
   { key: "orders.kpi", label: "KPI Target", group: "Orders", path: "/orders/kpi-target" },
   { key: "orders.admin", label: "Uploads, settings & integration", group: "Orders", path: "/orders/admin" },
+  { key: "orders.ai", label: "Smart tools", group: "Orders", path: "/orders/ai" },
   { key: "orders.reports", label: "Download Reports", group: "Orders", path: "/orders/reports" },
   { key: "orders.config", label: "Master Configuration", group: "Orders", path: "/orders/master-config" },
   { key: "orders.support", label: "Support Dashboard", group: "Orders", path: "/orders/support" },
