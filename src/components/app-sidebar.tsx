@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Beaker, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
+  Beaker, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
   MessageCircle, Package, ReceiptText, RefreshCw, Scale, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
@@ -72,6 +72,18 @@ const DAILY: NavItem[] = [
     children: [
       { href: "/transport/milk-to-plant", key: "transport.milk", label: "Milk to plant" },
       { href: "/transport/delivery", key: "transport.delivery", label: "Delivery outside plant" },
+    ],
+  },
+  {
+    href: "/orders", key: "orders", label: "Orders", icon: ShoppingBag,
+    children: [
+      { href: "/orders/primary", key: "orders.primary", label: "Primary" },
+      { href: "/orders/secondary", key: "orders.secondary", label: "Secondary" },
+      { href: "/orders/counter-sales", key: "orders.counter", label: "Counter sales" },
+      { href: "/orders/products", key: "orders.products", label: "Products" },
+      { href: "/orders/customers", key: "orders.customers", label: "Customers" },
+      { href: "/orders/inventory", key: "orders.inventory", label: "Inventory" },
+      { href: "/orders/purchase", key: "orders.purchase", label: "Purchase" },
     ],
   },
   {
