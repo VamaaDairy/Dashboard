@@ -1,0 +1,734 @@
+{
+ "groups": [
+  {
+   "group": "(top)",
+   "items": [
+    {
+     "label": "Dashboard",
+     "route": "homeDashboard",
+     "url": "/homeDashboard",
+     "visible": "`this.user.companyUser?this.hasPermission(\"companyDashboard\"):this.hasPermission(\"dashboard\")"
+    }
+   ]
+  },
+  {
+   "group": "Insights",
+   "items": [
+    {
+     "label": "Overall Summary Dashboard",
+     "route": "overall-summary-dashboard",
+     "url": "/overall-summary-dashboard",
+     "visible": "`this.hasDesignationPermission(\"overallSummaryDashboard\")"
+    },
+    {
+     "label": "Secondary Order",
+     "route": "orderBookingReport",
+     "url": "/orderBookingReport",
+     "visible": "`this.hasPermission(\"secondaryOrderBookingReport\")"
+    },
+    {
+     "label": "Day-wise Visit Dashboard",
+     "route": "frontlineEmployee",
+     "url": "/frontlineEmployee",
+     "visible": "`this.hasPermission(\"daywiseVisitDashboard\")"
+    },
+    {
+     "label": "Secondary Sales",
+     "route": "secondarySalesReport",
+     "url": "/secondarySalesReport",
+     "visible": "`this.hasPermission(\"secondarySalesReport\")"
+    },
+    {
+     "label": "Market Visits",
+     "route": "activity",
+     "url": "/activity",
+     "visible": "`this.hasPermission(\"activity\")"
+    },
+    {
+     "label": "Customer Activity",
+     "route": "customerActivity",
+     "url": "/customerActivity",
+     "visible": "`this.hasPermission(\"activity\")"
+    },
+    {
+     "label": "Employee Map View",
+     "route": "location",
+     "url": "/location",
+     "visible": "`\"OPEN_STREET\"===this.empMapView&&this.hasPermission(\"location\")"
+    },
+    {
+     "label": "Employee Map View",
+     "route": "empmapview",
+     "url": "/empmapview",
+     "visible": "`\"GOOGLE\"===this.empMapView&&this.hasPermission(\"location\")"
+    },
+    {
+     "label": "Customer Map View",
+     "route": "customerLocation",
+     "url": "/customerLocation",
+     "visible": "`this.hasPermission(\"customerMap\")"
+    },
+    {
+     "label": "Sales Rep Productivity",
+     "route": "productivity",
+     "url": "/productivity",
+     "visible": "`this.hasPermission(\"productivity\")"
+    },
+    {
+     "label": "Category Insights",
+     "route": "categoryInsights",
+     "url": "/categoryInsights",
+     "visible": "`this.hasPermission(\"categoryInsight\")"
+    },
+    {
+     "label": "Sales Invoices",
+     "route": "fpsecondarysalesview",
+     "url": "/fpsecondarysalesview",
+     "visible": "`this.hasPermission(\"fpSecondarySales\")"
+    },
+    {
+     "label": "Primary Sales Invoices",
+     "route": "fpsalesview",
+     "url": "/fpsalesview",
+     "visible": "`this.hasPermission(\"fpPrimarySales\")"
+    },
+    {
+     "label": "Sales Insights",
+     "route": "dashboard",
+     "url": "/dashboard",
+     "visible": "`this.user.companyUser&&this.hasPermission(\"companyDashboard\")&&this.hasPermission(\"dashboard\")"
+    },
+    {
+     "label": "BI Dashboard",
+     "route": "bidashboard",
+     "url": "/bidashboard",
+     "visible": "`this.bienable&&this.bienable2"
+    }
+   ]
+  },
+  {
+   "group": "AI Order Suggestion",
+   "items": [
+    {
+     "label": "AI Based Order Suggestion New Retailer",
+     "route": "ordersuggestionNew",
+     "url": "/ordersuggestionNew",
+     "visible": "`this.aibasedOrderSuggestionEnabled"
+    },
+    {
+     "label": "AI Based Order Suggestion Existing Retailer",
+     "route": "ordersuggestionExisting",
+     "url": "/ordersuggestionExisting",
+     "visible": "`this.aibasedOrderSuggestionEnabled"
+    }
+   ]
+  },
+  {
+   "group": "Employees",
+   "items": [
+    {
+     "label": "Employee Profile",
+     "route": "staffs",
+     "url": "/staffs",
+     "visible": "`this.hasPermission(\"staffs\")"
+    },
+    {
+     "label": "Employee Face Registration",
+     "route": "employeefaceregistration",
+     "url": "/employeefaceregistration",
+     "visible": "`this.hasPermission(\"employeefaceregistration\")"
+    },
+    {
+     "label": "Attendance",
+     "route": "attendance",
+     "url": "/attendance",
+     "visible": "`this.hasPermission(\"attendance\")"
+    },
+    {
+     "label": "Leave Management",
+     "route": "leave",
+     "url": "/leave",
+     "visible": "`this.hasPermission(\"leave\")"
+    },
+    {
+     "label": "Employee Target",
+     "route": "employeeTarget",
+     "url": "/employeeTarget",
+     "visible": "`this.hasPermission(\"employeeTarget\")"
+    },
+    {
+     "label": "Employee Master",
+     "route": "employeecustomermaster",
+     "url": "/employeecustomermaster",
+     "visible": "`this.hasPermission(\"employeecustomermaster\")"
+    },
+    {
+     "label": "Calendar",
+     "route": "calendar",
+     "url": "/calendar",
+     "visible": "`this.hasPermission(\"calendar\")"
+    },
+    {
+     "label": "Broadcast Notification",
+     "route": "notification",
+     "url": "/notification",
+     "visible": "`this.hasPermission(\"notification\")"
+    },
+    {
+     "label": "Digital Catalogue",
+     "route": "catalogue",
+     "url": "/catalogue",
+     "visible": "`this.hasPermission(\"catalogue\")"
+    },
+    {
+     "label": "Quiz Module",
+     "route": "lms",
+     "url": "/lms",
+     "visible": "`this.hasPermission(\"lms\")"
+    },
+    {
+     "label": "Hiring & Deployment",
+     "route": "hiringDeployment",
+     "url": "/hiringDeployment",
+     "visible": "`this._hiringModule"
+    }
+   ]
+  },
+  {
+   "group": "Customers",
+   "items": [
+    {
+     "label": "Customers",
+     "route": "distribution",
+     "url": "/distribution",
+     "visible": "`this.hasPermission(\"distribution\")"
+    },
+    {
+     "label": "Customer Target",
+     "route": "customerTarget",
+     "url": "/customerTarget",
+     "visible": "`this.hasPermission(\"customerTarget\")"
+    }
+   ]
+  },
+  {
+   "group": "AI Intelligence",
+   "items": [
+    {
+     "label": "AI Dealer Deduplication",
+     "route": "aiDealerDedup",
+     "url": "/aiDealerDedup",
+     "visible": "`this.aiDealerDuplicationEnabled"
+    },
+    {
+     "label": "Planogram AI",
+     "route": "planogramAi",
+     "url": "/planogramAi",
+     "visible": "`this.planogramAiEnabled"
+    },
+    {
+     "label": "AI Planogram",
+     "route": "shelfWatch",
+     "url": "/shelfWatch",
+     "visible": "`this.planogramAiEnabled"
+    }
+   ]
+  },
+  {
+   "group": "Product Management",
+   "items": [
+    {
+     "label": "Product Master",
+     "route": "fpproducts",
+     "url": "/fpproducts",
+     "visible": "`this.hasPermission(\"fpproducts\")"
+    },
+    {
+     "label": "Channel Margins",
+     "route": "fpchannelrates",
+     "url": "/fpchannelrates",
+     "visible": "`this.user.companyUid===this.user.firmUid&&this.hasPermission(\"fpchannelrates\")"
+    },
+    {
+     "label": "Focus Product",
+     "route": "fpfocusproduct",
+     "url": "/fpfocusproduct",
+     "visible": "`this.focusProductEnabled&&this.hasPermission(\"fpproducts\")"
+    },
+    {
+     "label": "Slab Pricing",
+     "route": "priceSlabs",
+     "url": "/priceSlabs",
+     "visible": "`this.user.companyUid===this.user.firmUid&&this.hasPermission(\"slab\")"
+    },
+    {
+     "label": "Display Planogram",
+     "route": "displayPlanogram",
+     "url": "/displayPlanogram",
+     "visible": "`this.user.companyUid===this.user.firmUid&&this.hasPermission(\"displayPlanogram\")"
+    },
+    {
+     "label": "Green Call Target",
+     "route": "greenCallTargets",
+     "url": "/greenCallTargets",
+     "visible": "`this.user.companyUid===this.user.firmUid&&this.hasPermission(\"greenCall\")"
+    },
+    {
+     "label": "Green Call Summary",
+     "route": "greenCallSummary",
+     "url": "/greenCallSummary",
+     "visible": "`this.user.companyUid===this.user.firmUid&&this.hasPermission(\"greenCall\")"
+    },
+    {
+     "label": "QPS Schemes",
+     "route": "schemesQPS",
+     "url": "/schemesQPS",
+     "visible": "`// because its within a harness"
+    },
+    {
+     "label": "Product Schemes",
+     "route": "schemes",
+     "url": "/schemes",
+     "visible": "`this.hasPermission(\"scheme\")"
+    },
+    {
+     "label": "Inventory",
+     "route": "fpproductinventory",
+     "url": "/fpproductinventory",
+     "visible": "`\"FPDMS\"===this.user.configs.footprintsType&&this.hasPermission(\"fpinventory\")"
+    }
+   ]
+  },
+  {
+   "group": "Purchase",
+   "items": [
+    {
+     "label": "Purchase Orders",
+     "route": "primaryOrder",
+     "url": "/primaryOrder",
+     "visible": "`this.hasPermission(\"primaryOrder\")"
+    },
+    {
+     "label": "Purchase Entry",
+     "route": "fppurchaseview",
+     "url": "/fppurchaseview",
+     "visible": "`this.hasPermission(\"fppurchase\")"
+    },
+    {
+     "label": "View Purchase Orders",
+     "route": "fpmybookingorders",
+     "url": "/fpmybookingorders",
+     "visible": "`this.hasPermission(\"fpmybookingorders\")"
+    },
+    {
+     "label": "Purchase Return",
+     "route": "fppurchasereturnview",
+     "url": "/fppurchasereturnview",
+     "visible": "`this.hasPermission(\"fppurchasereturn\")"
+    }
+   ]
+  },
+  {
+   "group": "Primary",
+   "items": [
+    {
+     "label": "Primary Order Processing",
+     "route": "portalOrder",
+     "url": "/portalOrder",
+     "visible": "`this.hasPermission(\"primaryOrderProcessing\")"
+    },
+    {
+     "label": "Sales Invoices",
+     "route": "fpsalesview",
+     "url": "/fpsalesview",
+     "visible": "`this.hasPermission(\"fpPrimarySales\")"
+    },
+    {
+     "label": "Primary Sales Report",
+     "route": "primarySalesReport",
+     "url": "/primarySalesReport",
+     "visible": "`this.hasPermission(\"primarySalesReport\")"
+    },
+    {
+     "label": "Stock Request",
+     "route": "stockRequest",
+     "url": "/stockRequest",
+     "visible": "`this.hasChannelPermission(\"preSaleStockRequest\")"
+    },
+    {
+     "label": "Stock View",
+     "route": "stockView",
+     "url": "/stockView",
+     "visible": "`this.hasChannelPermission(\"stockView\")"
+    }
+   ]
+  },
+  {
+   "group": "Secondary",
+   "items": [
+    {
+     "label": "Order Processing",
+     "route": "fpcustbookingorders",
+     "url": "/fpcustbookingorders",
+     "visible": "`this.hasPermission(\"fpcustbookingorders\")"
+    },
+    {
+     "label": "Sales Invoices",
+     "route": "fpsecondarysalesview",
+     "url": "/fpsecondarysalesview",
+     "visible": "`this.hasPermission(\"fpSecondarySales\")"
+    },
+    {
+     "label": "Delivery",
+     "route": "delivery",
+     "url": "/delivery",
+     "visible": "`this.hasPermission(\"delivery\")"
+    },
+    {
+     "label": "Sales Return",
+     "route": "fpsalesreturnview",
+     "url": "/fpsalesreturnview",
+     "visible": "`this.hasPermission(\"fpsalesreturn\")"
+    },
+    {
+     "label": "Secondary Sales Report",
+     "route": "secondarySalesReport",
+     "url": "/secondarySalesReport",
+     "visible": "`this.hasPermission(\"secondarySalesReport\")"
+    },
+    {
+     "label": "Secondary Order Booking Report",
+     "route": "orderBookingReport",
+     "url": "/orderBookingReport",
+     "visible": "`this.hasPermission(\"secondaryOrderBookingReport\")"
+    },
+    {
+     "label": "Load Sheet",
+     "route": "loadSheet",
+     "url": "/loadSheet",
+     "visible": "`this.hasPermission(\"loadSheet\")"
+    },
+    {
+     "label": "Counter Sales",
+     "route": "counterSale",
+     "url": "/counterSale",
+     "visible": "`this.hasPermission(\"counterSales\")"
+    },
+    {
+     "label": "Task Management",
+     "route": "task",
+     "url": "/task",
+     "visible": "`this.hasPermission(\"task\")"
+    },
+    {
+     "label": "Payment Management",
+     "route": "collections",
+     "url": "/collections",
+     "visible": "`\"FPDMS\"===this.user.configs.footprintsType&&this.hasPermission(\"collections\")"
+    }
+   ]
+  },
+  {
+   "group": "Field Force Management",
+   "items": [
+    {
+     "label": "Location Tracking",
+     "route": "location",
+     "url": "/location",
+     "visible": "`\"OPEN_STREET\"===this.empMapView&&this.hasPermission(\"location\")"
+    },
+    {
+     "label": "Location Tracking",
+     "route": "empmapview",
+     "url": "/empmapview",
+     "visible": "`\"GOOGLE\"===this.empMapView&&this.hasPermission(\"location\")"
+    },
+    {
+     "label": "Route Management",
+     "route": "beat",
+     "url": "/beat",
+     "visible": "`this.hasPermission(\"routeManagement\")"
+    },
+    {
+     "label": "Target PJP",
+     "route": "cityCategory",
+     "url": "/cityCategory",
+     "visible": "`this._targetPJP"
+    },
+    {
+     "label": "Expense Management",
+     "route": "expenseSummary",
+     "url": "/expenseSummary",
+     "visible": "`this.hasPermission(\"expenseManagement\")"
+    },
+    {
+     "label": "Display Audit",
+     "route": "displayAudit",
+     "url": "/displayAudit",
+     "visible": "`this.hasPermission(\"displayAudit\")"
+    }
+   ]
+  },
+  {
+   "group": "Promoters",
+   "items": [
+    {
+     "label": "Promoter Management",
+     "route": "firmPromoter",
+     "url": "/firmPromoter",
+     "visible": "`this.hasPermission(\"promoter\")"
+    },
+    {
+     "label": "Sales Summary",
+     "route": "firmPromoterReport",
+     "url": "/firmPromoterReport",
+     "visible": "`this.hasPermission(\"promoter\")"
+    },
+    {
+     "label": "Promoter Dashboard",
+     "route": "promoterDashboard",
+     "url": "/promoterDashboard",
+     "visible": "`this.hasPermission(\"promoterDashboard\")"
+    },
+    {
+     "label": "Service Management",
+     "route": "serviceManagementView",
+     "url": "/serviceManagementView",
+     "visible": "`this.hasPermission(\"ticket\")"
+    }
+   ]
+  },
+  {
+   "group": "KPI TARGET",
+   "items": [
+    {
+     "label": "KPI TARGET",
+     "route": "kpiTargets",
+     "url": "/kpiTargets",
+     "visible": "`this.hasPermission(\"kpiTarget\")"
+    },
+    {
+     "label": "KPI Dashboard",
+     "route": "kpi-dashboard",
+     "url": "/kpi-dashboard",
+     "visible": "`this.hasPermission(\"kpiTarget\")"
+    }
+   ]
+  },
+  {
+   "group": "Van Sales Management",
+   "items": [
+    {
+     "label": "Stock Transfer",
+     "route": "stockTransferView",
+     "url": "/stockTransferView",
+     "visible": "`this.hasPermission(\"readyStock\")"
+    },
+    {
+     "label": "Van Master",
+     "route": "vanMaster",
+     "url": "/vanMaster",
+     "visible": "`this.hasDesignationPermission(\"vanMaster\")"
+    },
+    {
+     "label": "Download Reports",
+     "route": "reports",
+     "url": "/reports",
+     "visible": "`this.hasPermission(\"reports\")"
+    }
+   ]
+  },
+  {
+   "group": "Master Configuration",
+   "items": [
+    {
+     "label": "Organization Settings",
+     "route": "masters",
+     "url": "/masters",
+     "visible": "`this.hasPermission(\"masters\")"
+    },
+    {
+     "label": "Data Uploads",
+     "route": "upload",
+     "url": "/upload",
+     "visible": "`this.hasPermission(\"upload\")"
+    },
+    {
+     "label": "Usage Module Designations",
+     "route": "configDesignations",
+     "url": "/configDesignations",
+     "visible": "`this.user.misAdmin"
+    },
+    {
+     "label": "Usage Module Channels",
+     "route": "configChannel",
+     "url": "/configChannel",
+     "visible": "`this.user.misAdmin"
+    },
+    {
+     "label": "AI Configurations",
+     "route": "aiConfigs",
+     "url": "/aiConfigs",
+     "visible": "`this.hasPermission(\"masters\")"
+    },
+    {
+     "label": "CRM",
+     "route": "communicationCredit",
+     "url": "/communicationCredit",
+     "visible": "`this.user.misAdmin"
+    }
+   ]
+  },
+  {
+   "group": "Integration Dashboard",
+   "items": [
+    {
+     "label": "Customers Status",
+     "route": "firmsStatus",
+     "url": "/firmsStatus",
+     "visible": "`this.hasDesignationPermission(\"customersStatus\")"
+    },
+    {
+     "label": "Products Status",
+     "route": "productsStatus",
+     "url": "/productsStatus",
+     "visible": "`this.hasDesignationPermission(\"productsStatus\")"
+    },
+    {
+     "label": "Product Inventory Status",
+     "route": "productInventoryStatus",
+     "url": "/productInventoryStatus",
+     "visible": "`this.hasDesignationPermission(\"productInventoryStatus\")"
+    },
+    {
+     "label": "Stock Transfer Status",
+     "route": "stockTransferStatus",
+     "url": "/stockTransferStatus",
+     "visible": "`this.hasDesignationPermission(\"stockTransferStatus\")"
+    },
+    {
+     "label": "Bills Status",
+     "route": "billsStatus",
+     "url": "/billsStatus",
+     "visible": "`this.hasDesignationPermission(\"billsStatus\")"
+    },
+    {
+     "label": "Transaction Status",
+     "route": "transactionStatus",
+     "url": "/transactionStatus",
+     "visible": "`this.hasDesignationPermission(\"transactionStatus\")"
+    },
+    {
+     "label": "Pre Sale Stock Request Status",
+     "route": "preSaleSRSync",
+     "url": "/preSaleSRSync",
+     "visible": "`this.hasDesignationPermission(\"preSaleSRSync\")"
+    },
+    {
+     "label": "Van Sales Stock Request Status",
+     "route": "vansalestockreq",
+     "url": "/vansalestockreq",
+     "visible": "`this.hasDesignationPermission(\"vanSaleStockRequestStatus\")"
+    },
+    {
+     "label": "Booking Order Status",
+     "route": "bookorderstatus",
+     "url": "/bookorderstatus",
+     "visible": "`this.hasDesignationPermission(\"bookingOrderStatus\")"
+    },
+    {
+     "label": "Integration Booking Order Status",
+     "route": "intgBookingOrderStatus",
+     "url": "/intgBookingOrderStatus",
+     "visible": "`this.hasDesignationPermission(\"intgBookingOrderStatus\")"
+    },
+    {
+     "label": "Support Dashboard",
+     "route": "supportDashboard",
+     "url": "/supportDashboard",
+     "visible": "`(this.user.misAdmin||this._visibleSupportDashboard)&&(this.hasDesignationPermission(\"supportDashboard\")||this.user.misAdmin)"
+    },
+    {
+     "label": "Subscription",
+     "route": "subscription",
+     "url": "/subscription",
+     "visible": "`this.user.subscription&&this.user.misAdmin,// Handling the custom href for subscription which includes companyUid"
+    }
+   ]
+  }
+ ],
+ "admin": [
+  {
+   "label": "accounts",
+   "route": "accounts",
+   "url": "/accounts",
+   "visible": ""
+  },
+  {
+   "label": "adminDashboard",
+   "route": "adminDashboard",
+   "url": "/adminDashboard",
+   "visible": ""
+  },
+  {
+   "label": "leads",
+   "route": "leads",
+   "url": "/leads",
+   "visible": ""
+  },
+  {
+   "label": "vernacularLanguages",
+   "route": "vernacularLanguages",
+   "url": "/vernacularLanguages",
+   "visible": ""
+  },
+  {
+   "label": "recibotConfiguration",
+   "route": "recibotConfiguration",
+   "url": "/recibotConfiguration",
+   "visible": ""
+  },
+  {
+   "label": "tipsAutomation",
+   "route": "tipsAutomation",
+   "url": "/tipsAutomation",
+   "visible": ""
+  },
+  {
+   "label": "subscriptions",
+   "route": "subscriptions",
+   "url": "/subscriptions",
+   "visible": ""
+  },
+  {
+   "label": "announcement",
+   "route": "announcement",
+   "url": "/announcement",
+   "visible": ""
+  },
+  {
+   "label": "reports",
+   "route": "reports",
+   "url": "/reports",
+   "visible": ""
+  },
+  {
+   "label": "upload",
+   "route": "upload",
+   "url": "/upload",
+   "visible": ""
+  },
+  {
+   "label": "reportStatus",
+   "route": "reportStatus",
+   "url": "/reportStatus",
+   "visible": ""
+  },
+  {
+   "label": "supportDashboard",
+   "route": "supportDashboard",
+   "url": "/supportDashboard",
+   "visible": ""
+  }
+ ]
+}
