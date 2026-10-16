@@ -22,6 +22,8 @@ export interface Col {
   initial?: string;
   /** Colour the value as a status chip. */
   chip?: boolean;
+  /** Read-only column computed in SQL (alias t is the row); never saved. */
+  sql?: string;
 }
 
 export interface Entity {
@@ -199,6 +201,94 @@ export const ENTITIES: Record<string, Entity> = {
       { key: "metric", label: "Metric", type: "select", options: ["sales", "orders", "visits", "new_outlets"], initial: "sales" },
       { key: "target", label: "Target", type: "number", required: true },
     ],
+  },
+
+  // ---- collections ---------------------------------------------------
+  invoice: {
+    key: "invoice", title: "Invoices", singular: "invoice", table: "ord_invoice", editable: false,
+    search: ["invoice_no"], order: "t.invoice_date desc, t.invoice_no desc", label: "r.invoice_no",
+    cols: [
+      { key: "invoice_no", label: "Invoice", type: "text" },
+      { key: "customer_id", label: "Customer", type: "ref", ref: "customer" },
+      { key: "invoice_date", label: "Date", type: "date" },
+      { key: "due_date", label: "Due", type: "date" },
+      { key: "amount", label: "Amount", type: "money" },
+      { key: "paid", label: "Paid", type: "money", sql: "coalesce((select sum(p.amount) from ord_payment p where p.invoice_id = t.id and p.status = 'cleared'),0) + coalesce((select sum(n.amount) from ord_credit_note n where n.invoice_id = t.id and n.status = 'approved'),0)" },
+      { key: "outstanding", label: "Outstanding", type: "money", sql: "t.amount - coalesce((select sum(p.amount) from ord_payment p where p.invoice_id = t.id and p.status = 'cleared'),0) - coalesce((select sum(n.amount) from ord_credit_note n where n.invoice_id = t.id and n.status = 'approved'),0)" },
+      { key: "overdue_days", label: "Overdue days", type: "number", sql: "greatest(0, current_date - t.due_date)" },
+    ],
+  },
+  payment: {
+    key: "payment", title: "Payments", singular: "payment", table: "ord_payment",
+    search: ["reference"], order: "t.pay_date desc, t.created_at desc", label: "r.reference",
+    cols: [
+      { key: "pay_date", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "customer_id", label: "Customer", type: "ref", ref: "customer", required: true },
+      { key: "invoice_id", label: "Against invoice", type: "ref", ref: "invoice" },
+      { key: "amount", label: "Amount", type: "money", required: true },
+      { key: "mode", label: "Mode", type: "select", options: ["cash", "upi", "cheque", "neft"], initial: "cash" },
+      { key: "reference", label: "Reference", type: "text" },
+      { key: "collected_by", label: "Collected by", type: "ref", ref: "staff" },
+      { key: "status", label: "Status", type: "select", options: ["pending", "cleared", "bounced"], initial: "pending", ...STAT },
+    ],
+  },
+  credit_note: {
+    key: "credit_note", title: "Credit notes", singular: "credit note", table: "ord_credit_note",
+    search: ["cn_no", "reason"], order: "t.cn_date desc", label: "r.cn_no",
+    cols: [
+      { key: "cn_no", label: "CN no", type: "text", hideInForm: true },
+      { key: "cn_date", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "customer_id", label: "Customer", type: "ref", ref: "customer", required: true },
+      { key: "invoice_id", label: "Against invoice", type: "ref", ref: "invoice" },
+      { key: "amount", label: "Amount", type: "money", required: true },
+      { key: "reason", label: "Reason", type: "text" },
+      { key: "status", label: "Status", type: "select", options: ["pending", "approved", "rejected"], initial: "pending", ...STAT },
+    ],
+  },
+
+  // ---- logistics -----------------------------------------------------
+  delivery: {
+    key: "delivery", title: "Deliveries", singular: "delivery", table: "ord_delivery",
+    search: ["vehicle", "driver"], order: "t.delivery_date desc", label: "r.vehicle",
+    cols: [
+      { key: "delivery_date", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "order_id", label: "Order", type: "ref", ref: "order", required: true },
+      { key: "vehicle", label: "Vehicle", type: "text" },
+      { key: "driver", label: "Driver", type: "text" },
+      { key: "status", label: "Status", type: "select", options: ["planned", "out_for_delivery", "delivered", "failed"], initial: "planned", ...STAT },
+      { key: "note", label: "Note", type: "text" },
+    ],
+  },
+  return: {
+    key: "return", title: "Sales returns", singular: "return", table: "ord_return",
+    search: ["return_no"], order: "t.return_date desc", label: "r.return_no",
+    cols: [
+      { key: "return_no", label: "Return", type: "text", hideInForm: true },
+      { key: "return_date", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "customer_id", label: "Customer", type: "ref", ref: "customer", required: true },
+      { key: "product_id", label: "Product", type: "ref", ref: "product", required: true },
+      { key: "qty", label: "Qty", type: "number", required: true },
+      { key: "rate", label: "Rate", type: "money" },
+      { key: "reason", label: "Reason", type: "select", options: ["damaged", "expired", "wrong_item", "excess", "other"], initial: "damaged" },
+      { key: "status", label: "Status", type: "select", options: ["pending", "approved", "rejected"], initial: "pending", ...STAT },
+    ],
+  },
+  van_transfer: {
+    key: "van_transfer", title: "Van stock transfers", singular: "transfer", table: "ord_van_transfer",
+    search: ["note"], order: "t.transfer_date desc", label: "r.note",
+    cols: [
+      { key: "transfer_date", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "staff_id", label: "Salesman", type: "ref", ref: "staff", required: true },
+      { key: "product_id", label: "Product", type: "ref", ref: "product", required: true },
+      { key: "qty", label: "Qty", type: "number", required: true },
+      { key: "direction", label: "Direction", type: "select", options: ["issue", "return"], initial: "issue" },
+      { key: "note", label: "Note", type: "text" },
+    ],
+  },
+  // orders as a pick-list only
+  order: {
+    key: "order", title: "Orders", singular: "order", table: "ord_order", editable: false,
+    search: ["order_no"], order: "t.order_date desc", label: "r.order_no", cols: [],
   },
 
   // ---- support -------------------------------------------------------

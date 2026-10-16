@@ -19,6 +19,8 @@ const ENTITY_ACCESS: Record<string, string> = {
   customer: "orders.customers",
   staff: "orders.fieldforce", beat: "orders.fieldforce", visit: "orders.fieldforce", attendance: "orders.fieldforce",
   expense: "orders.fieldforce", task: "orders.fieldforce",
+  payment: "orders.collections", credit_note: "orders.collections",
+  delivery: "orders.logistics", return: "orders.logistics", van_transfer: "orders.logistics",
   kpi_target: "orders.kpi", ticket: "orders.support",
 };
 

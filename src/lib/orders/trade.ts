@@ -160,6 +160,16 @@ export async function setOrderStatus(id: string, status: string): Promise<void> 
     if (!NEXT[cur.status]?.includes(status)) throw new Error(`An order that is ${cur.status} cannot become ${status}`);
     await db.query(`update ord_order set status = $2 where id = $1`, [id, status]);
     await syncSaleStock(db, id, status === "delivered");
+    // the bill is raised when the order is invoiced and withdrawn if it goes back or is cancelled
+    if (status === "invoiced" || status === "delivered") {
+      await db.query(
+        `insert into ord_invoice (order_id, customer_id, invoice_date, due_date, amount)
+         select o.id, o.customer_id, current_date, current_date + c.credit_days, o.total
+           from ord_order o join ord_customer c on c.id = o.customer_id where o.id = $1
+         on conflict (order_id) do nothing`, [id]);
+    } else {
+      await db.query(`delete from ord_invoice where order_id = $1`, [id]);
+    }
   });
 }
 

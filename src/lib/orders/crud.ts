@@ -13,7 +13,8 @@ export interface ListResult {
 export interface Option { id: string; label: string }
 
 const colSql = (c: Col) =>
-  c.type === "date" ? `to_char(t.${c.key}, 'YYYY-MM-DD') as ${c.key}`
+  c.sql ? `(${c.sql}) as ${c.key}`
+  : c.type === "date" ? `to_char(t.${c.key}, 'YYYY-MM-DD') as ${c.key}`
   : c.type === "time" ? `to_char(t.${c.key}, 'HH24:MI') as ${c.key}`
   : `t.${c.key}`;
 
@@ -108,10 +109,20 @@ function clean(c: Col, raw: unknown): string | number | boolean | null {
   return s;
 }
 
+/** Side effects after a row is saved: a return that is approved puts its stock back. */
+const AFTER_SAVE: Record<string, (id: string) => Promise<void>> = {
+  return: async (id) => {
+    await query(`delete from ord_stock_move where ref_type = 'return' and ref_id = $1`, [id]);
+    await query(
+      `insert into ord_stock_move (product_id, qty, reason, ref_type, ref_id, moved_on, note)
+       select product_id, qty, 'return', 'return', id, return_date, return_no from ord_return where id = $1 and status = 'approved'`, [id]);
+  },
+};
+
 export async function saveRow(entityKey: string, id: string | null, values: Record<string, unknown>): Promise<void> {
   const e = entityOf(entityKey);
   if (e.editable === false) throw new Error(`${e.title} cannot be edited here`);
-  const cols = e.cols.filter((c) => !c.hideInForm);
+  const cols = e.cols.filter((c) => !c.hideInForm && !c.sql);
   const data: Record<string, unknown> = {};
   for (const c of cols) data[c.key] = clean(c, values[c.key]);
   for (const [k, v] of Object.entries(e.fixed ?? {})) data[k] = v;
@@ -121,8 +132,10 @@ export async function saveRow(entityKey: string, id: string | null, values: Reco
     if (id) {
       await query(`update ${e.table} set ${keys.map((k, i) => `${k} = $${i + 1}`).join(", ")} where id = $${keys.length + 1}`, [...vals, id]);
     } else {
-      await query(`insert into ${e.table} (${keys.join(", ")}) values (${keys.map((_, i) => `$${i + 1}`).join(", ")})`, vals);
+      const ins = await query<{ id: string }>(`insert into ${e.table} (${keys.join(", ")}) values (${keys.map((_, i) => `$${i + 1}`).join(", ")}) returning id`, vals);
+      id = ins[0].id;
     }
+    await AFTER_SAVE[e.key]?.(id!);
   } catch (err) {
     throw friendly(err, e);
   }
@@ -133,6 +146,7 @@ export async function deleteRow(entityKey: string, id: string): Promise<void> {
   if (e.editable === false) throw new Error(`${e.title} cannot be edited here`);
   try {
     await query(`delete from ${e.table} where id = $1`, [id]);
+    if (e.key === "return") await query(`delete from ord_stock_move where ref_type = 'return' and ref_id = $1`, [id]);
   } catch (err) {
     throw friendly(err, e);
   }

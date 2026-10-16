@@ -84,6 +84,13 @@ const DAILY: NavItem[] = [
       { href: "/orders/customers", key: "orders.customers", label: "Customers" },
       { href: "/orders/inventory", key: "orders.inventory", label: "Inventory" },
       { href: "/orders/purchase", key: "orders.purchase", label: "Purchase" },
+      { href: "/orders/collections", key: "orders.collections", label: "Collections" },
+      { href: "/orders/logistics", key: "orders.logistics", label: "Delivery & returns" },
+      { href: "/orders/field-force", key: "orders.fieldforce", label: "Field Force Management" },
+      { href: "/orders/kpi-target", key: "orders.kpi", label: "KPI Target" },
+      { href: "/orders/reports", key: "orders.reports", label: "Download Reports" },
+      { href: "/orders/master-config", key: "orders.config", label: "Master Configuration" },
+      { href: "/orders/support", key: "orders.support", label: "Support Dashboard" },
     ],
   },
   {

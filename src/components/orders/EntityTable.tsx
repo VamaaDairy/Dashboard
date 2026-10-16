@@ -39,6 +39,7 @@ export function EntityTable({ entity, rows, refs, canEdit }: {
   const def = ENTITIES[entity];
   const listCols = def.cols.filter((c) => !c.hideInList);
   const formCols = def.cols.filter((c) => !c.hideInForm);
+  const rowEdit = canEdit && def.editable !== false;
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export function EntityTable({ entity, rows, refs, canEdit }: {
           <thead className="border-b border-border bg-muted/40">
             <tr>
               {listCols.map((c) => <th key={c.key} className={`${TH} ${c.type === "money" || c.type === "number" ? "text-right" : ""}`}>{c.label}</th>)}
-              {canEdit && <th className={TH} />}
+              {rowEdit && <th className={TH} />}
             </tr>
           </thead>
           <tbody>
@@ -94,7 +95,7 @@ export function EntityTable({ entity, rows, refs, canEdit }: {
                     {show(c, r)}
                   </td>
                 ))}
-                {canEdit && (
+                {rowEdit && (
                   <td className={`${TD} whitespace-nowrap text-right`}>
                     <button onClick={() => open(r)} className="mr-2 text-muted-foreground hover:text-foreground" aria-label="Edit"><Pencil className="inline h-3.5 w-3.5" /></button>
                     <button onClick={() => remove(r)} className="text-muted-foreground hover:text-destructive" aria-label="Delete"><Trash2 className="inline h-3.5 w-3.5" /></button>

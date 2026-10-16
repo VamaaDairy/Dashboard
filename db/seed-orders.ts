@@ -137,6 +137,21 @@ async function main() {
       ('Credit note pending', $2, $3, 'medium', 'in_progress', 'Leaked packs returned last week.'),
       ('Invoice copy needed', $2, $3, 'low', 'resolved', 'Sent by WhatsApp.')`, [retailers[0], retailers[3], asm]);
 
+    // bills for invoiced / delivered orders, with part-payments on older ones
+    await db.query(`insert into ord_invoice (order_id, customer_id, invoice_date, due_date, amount)
+      select o.id, o.customer_id, o.order_date, o.order_date + c.credit_days, o.total
+        from ord_order o join ord_customer c on c.id = o.customer_id where o.status in ('invoiced','delivered') on conflict (order_id) do nothing`);
+    await db.query(`insert into ord_payment (customer_id, invoice_id, pay_date, amount, mode, status, collected_by)
+      select i.customer_id, i.id, i.invoice_date + 5, round(i.amount * 0.6, 2), (array['cash','upi','neft'])[1 + (row_number() over ())::int % 3], 'cleared', (select id from ord_staff order by code offset 1 limit 1)
+        from ord_invoice i where i.invoice_date < current_date - 7 and (hashtext(i.id::text) % 3) <> 0`);
+    await db.query(`insert into ord_credit_note (customer_id, invoice_id, amount, reason, status)
+      select customer_id, id, 120, 'Leaked packs', 'approved' from ord_invoice order by invoice_date limit 2`);
+    await db.query(`insert into ord_delivery (order_id, delivery_date, vehicle, driver, status)
+      select id, order_date, 'MH12 AB 1234', 'Raju', 'delivered' from ord_order where status = 'delivered' order by order_date desc limit 5`);
+    await db.query(`insert into ord_return (customer_id, product_id, qty, rate, reason, status)
+      values ($1,$2,6,34,'damaged','pending')`, [retailers[0], pid[2]]);
+    await db.query(`insert into ord_van_transfer (staff_id, product_id, qty, direction, note) values ($1,$2,50,'issue','Morning load')`, [staff[1], pid[0]]);
+
     await db.query("commit");
     console.log(`Seeded Orders demo data: ${products.length} products, ${retailers.length + dists.length} customers, ${staff.length} staff, ${o} orders`);
   } catch (e) {
