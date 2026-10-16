@@ -21,6 +21,11 @@ const ENTITY_ACCESS: Record<string, string> = {
   expense: "orders.fieldforce", task: "orders.fieldforce",
   payment: "orders.collections", credit_note: "orders.collections",
   delivery: "orders.logistics", return: "orders.logistics", van_transfer: "orders.logistics",
+  channel_rate: "orders.products", slab: "orders.products", planogram: "orders.products", green_target: "orders.products",
+  unmap_request: "orders.customers", customer_target: "orders.customers",
+  leave: "orders.fieldforce", holiday: "orders.fieldforce", hiring: "orders.fieldforce", promoter: "orders.fieldforce",
+  display_audit: "orders.fieldforce", location_log: "orders.fieldforce",
+  broadcast: "orders.engage", catalogue: "orders.engage", quiz: "orders.engage", quiz_question: "orders.engage", quiz_result: "orders.engage",
   kpi_target: "orders.kpi", ticket: "orders.support",
 };
 

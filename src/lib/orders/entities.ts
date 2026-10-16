@@ -291,6 +291,200 @@ export const ENTITIES: Record<string, Entity> = {
     search: ["order_no"], order: "t.order_date desc", label: "r.order_no", cols: [],
   },
 
+  // ---- pricing -------------------------------------------------------
+  channel_rate: {
+    key: "channel_rate", title: "Channel margins & rates", singular: "channel rate", table: "ord_channel_rate",
+    search: [], order: "t.channel_id, t.product_id", label: "r.rate::text",
+    cols: [
+      { key: "channel_id", label: "Channel", type: "ref", ref: "channel", required: true },
+      { key: "product_id", label: "Product", type: "ref", ref: "product", required: true },
+      { key: "margin_pct", label: "Margin %", type: "number" },
+      { key: "rate", label: "Rate", type: "money", required: true },
+    ],
+  },
+  slab: {
+    key: "slab", title: "Slab pricing", singular: "slab", table: "ord_slab",
+    search: [], order: "t.product_id, t.min_qty", label: "r.min_qty::text",
+    cols: [
+      { key: "product_id", label: "Product", type: "ref", ref: "product", required: true },
+      { key: "min_qty", label: "From qty", type: "number", required: true },
+      { key: "max_qty", label: "To qty", type: "number" },
+      { key: "rate", label: "Rate", type: "money", required: true },
+    ],
+  },
+  planogram: {
+    key: "planogram", title: "Display planogram", singular: "planogram line", table: "ord_planogram",
+    search: ["name", "shelf"], order: "t.name, t.shelf", label: "r.name",
+    cols: [
+      { key: "name", label: "Planogram", type: "text", required: true },
+      { key: "channel_id", label: "Channel", type: "ref", ref: "channel" },
+      { key: "product_id", label: "Product", type: "ref", ref: "product", required: true },
+      { key: "shelf", label: "Shelf", type: "text" },
+      { key: "facings", label: "Facings", type: "number", initial: "1" },
+    ],
+  },
+  green_target: {
+    key: "green_target", title: "Green-call targets", singular: "green-call target", table: "ord_green_target",
+    search: ["period"], order: "t.period desc", label: "r.period",
+    cols: [
+      { key: "staff_id", label: "Employee", type: "ref", ref: "staff", required: true },
+      { key: "product_id", label: "Focus product", type: "ref", ref: "product", required: true },
+      { key: "period", label: "Month (YYYY-MM)", type: "text", required: true, initial: "thismonth" },
+      { key: "target", label: "Target calls", type: "number", required: true },
+    ],
+  },
+
+  // ---- customers -----------------------------------------------------
+  unmap_request: {
+    key: "unmap_request", title: "Unmap requests", singular: "unmap request", table: "ord_unmap_request",
+    search: ["reason"], order: "t.requested_on desc", label: "r.reason",
+    cols: [
+      { key: "requested_on", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "customer_id", label: "Customer", type: "ref", ref: "customer", required: true },
+      { key: "staff_id", label: "Requested by", type: "ref", ref: "staff" },
+      { key: "reason", label: "Reason", type: "text" },
+      { key: "status", label: "Status", type: "select", options: ["pending", "approved", "rejected"], initial: "pending", ...STAT },
+    ],
+  },
+  customer_target: {
+    key: "customer_target", title: "Customer targets", singular: "customer target", table: "ord_customer_target",
+    search: ["period"], order: "t.period desc", label: "r.period",
+    cols: [
+      { key: "customer_id", label: "Customer", type: "ref", ref: "customer", required: true },
+      { key: "period", label: "Month (YYYY-MM)", type: "text", required: true, initial: "thismonth" },
+      { key: "target", label: "Target (sales)", type: "money", required: true },
+      { key: "achieved", label: "Achieved", type: "money", sql: "coalesce((select sum(o.total) from ord_order o where o.customer_id = t.customer_id and o.status <> 'cancelled' and to_char(o.order_date,'YYYY-MM') = t.period),0)" },
+    ],
+  },
+
+  // ---- employees -----------------------------------------------------
+  leave: {
+    key: "leave", title: "Leave", singular: "leave request", table: "ord_leave",
+    search: ["reason"], order: "t.from_date desc", label: "r.reason",
+    cols: [
+      { key: "staff_id", label: "Employee", type: "ref", ref: "staff", required: true },
+      { key: "from_date", label: "From", type: "date", required: true, initial: "today" },
+      { key: "to_date", label: "To", type: "date", required: true, initial: "today" },
+      { key: "type", label: "Type", type: "select", options: ["casual", "sick", "earned", "unpaid"], initial: "casual" },
+      { key: "reason", label: "Reason", type: "text" },
+      { key: "status", label: "Status", type: "select", options: ["pending", "approved", "rejected"], initial: "pending", ...STAT },
+    ],
+  },
+  holiday: {
+    key: "holiday", title: "Calendar - holidays", singular: "holiday", table: "ord_holiday",
+    search: ["name"], order: "t.day", label: "r.name",
+    cols: [
+      { key: "day", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "name", label: "Holiday", type: "text", required: true },
+    ],
+  },
+  hiring: {
+    key: "hiring", title: "Hiring & deployment", singular: "candidate", table: "ord_hiring",
+    search: ["candidate", "region", "phone"], order: "t.expected_join nulls last, t.candidate", label: "r.candidate",
+    cols: [
+      { key: "candidate", label: "Candidate", type: "text", required: true },
+      { key: "designation_id", label: "Position", type: "ref", ref: "designation" },
+      { key: "region", label: "Region to deploy", type: "text" },
+      { key: "phone", label: "Phone", type: "text" },
+      { key: "stage", label: "Stage", type: "select", options: ["applied", "interview", "offered", "joined", "rejected"], initial: "applied", ...STAT },
+      { key: "expected_join", label: "Joining", type: "date" },
+    ],
+  },
+  promoter: {
+    key: "promoter", title: "Promoters", singular: "promoter", table: "ord_promoter",
+    search: ["name", "phone"], order: "t.name", label: "r.name",
+    cols: [
+      { key: "name", label: "Name", type: "text", required: true },
+      { key: "phone", label: "Phone", type: "text" },
+      { key: "customer_id", label: "Outlet", type: "ref", ref: "customer" },
+      { key: "staff_id", label: "Supervisor", type: "ref", ref: "staff" },
+      { key: "joined_on", label: "Joined", type: "date" },
+      { key: "is_active", label: "Active", type: "bool", initial: "true" },
+    ],
+  },
+  display_audit: {
+    key: "display_audit", title: "Display audit", singular: "audit", table: "ord_display_audit",
+    search: ["notes"], order: "t.audit_date desc", label: "r.audit_date::text",
+    cols: [
+      { key: "audit_date", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "customer_id", label: "Outlet", type: "ref", ref: "customer", required: true },
+      { key: "staff_id", label: "Audited by", type: "ref", ref: "staff" },
+      { key: "score", label: "Score (0-100)", type: "number", required: true },
+      { key: "compliant", label: "Compliant", type: "bool" },
+      { key: "notes", label: "Notes", type: "text" },
+    ],
+  },
+  location_log: {
+    key: "location_log", title: "Location log", singular: "location entry", table: "ord_location_log",
+    search: ["note"], order: "t.logged_on desc, t.logged_at desc", label: "r.note",
+    cols: [
+      { key: "logged_on", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "logged_at", label: "Time", type: "time", required: true },
+      { key: "staff_id", label: "Employee", type: "ref", ref: "staff", required: true },
+      { key: "lat", label: "Latitude", type: "number", required: true },
+      { key: "lng", label: "Longitude", type: "number", required: true },
+      { key: "note", label: "Note", type: "text" },
+    ],
+  },
+
+  // ---- engagement ----------------------------------------------------
+  broadcast: {
+    key: "broadcast", title: "Broadcast notifications", singular: "broadcast", table: "ord_broadcast",
+    search: ["title", "body"], order: "t.sent_on desc", label: "r.title",
+    cols: [
+      { key: "title", label: "Title", type: "text", required: true },
+      { key: "body", label: "Message", type: "textarea" },
+      { key: "audience_id", label: "To (designation)", type: "ref", ref: "designation" },
+      { key: "sent_on", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "status", label: "Status", type: "select", options: ["draft", "sent"], initial: "draft", ...STAT },
+    ],
+  },
+  catalogue: {
+    key: "catalogue", title: "Digital catalogue", singular: "catalogue item", table: "ord_catalogue",
+    search: ["title"], order: "t.title", label: "r.title",
+    cols: [
+      { key: "title", label: "Title", type: "text", required: true },
+      { key: "product_id", label: "Product", type: "ref", ref: "product" },
+      { key: "url", label: "Link", type: "text" },
+      { key: "is_active", label: "Active", type: "bool", initial: "true" },
+    ],
+  },
+  quiz: {
+    key: "quiz", title: "Quizzes", singular: "quiz", table: "ord_quiz",
+    search: ["title", "topic"], order: "t.title", label: "r.title",
+    cols: [
+      { key: "title", label: "Quiz", type: "text", required: true },
+      { key: "topic", label: "Topic", type: "text" },
+      { key: "pass_pct", label: "Pass mark %", type: "number", initial: "60" },
+      { key: "questions", label: "Questions", type: "number", sql: "(select count(*) from ord_quiz_question q where q.quiz_id = t.id)" },
+      { key: "is_active", label: "Active", type: "bool", initial: "true" },
+    ],
+  },
+  quiz_question: {
+    key: "quiz_question", title: "Quiz questions", singular: "question", table: "ord_quiz_question",
+    search: ["question"], order: "t.quiz_id, t.question", label: "r.question",
+    cols: [
+      { key: "quiz_id", label: "Quiz", type: "ref", ref: "quiz", required: true },
+      { key: "question", label: "Question", type: "textarea", required: true },
+      { key: "option_a", label: "Option A", type: "text", required: true },
+      { key: "option_b", label: "Option B", type: "text", required: true },
+      { key: "option_c", label: "Option C", type: "text", hideInList: true },
+      { key: "option_d", label: "Option D", type: "text", hideInList: true },
+      { key: "answer", label: "Right answer", type: "select", options: ["a", "b", "c", "d"], initial: "a" },
+    ],
+  },
+  quiz_result: {
+    key: "quiz_result", title: "Quiz results", singular: "result", table: "ord_quiz_result",
+    search: [], order: "t.taken_on desc", label: "r.score_pct::text",
+    cols: [
+      { key: "taken_on", label: "Date", type: "date", required: true, initial: "today" },
+      { key: "quiz_id", label: "Quiz", type: "ref", ref: "quiz", required: true },
+      { key: "staff_id", label: "Employee", type: "ref", ref: "staff", required: true },
+      { key: "score_pct", label: "Score %", type: "number", required: true },
+      { key: "passed", label: "Result", type: "text", chip: true, sql: "case when t.score_pct >= (select pass_pct from ord_quiz z where z.id = t.quiz_id) then 'approved' else 'rejected' end" },
+    ],
+  },
+
   // ---- support -------------------------------------------------------
   ticket: {
     key: "ticket", title: "Tickets", singular: "ticket", table: "ord_ticket",

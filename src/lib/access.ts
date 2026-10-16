@@ -55,6 +55,7 @@ export const RESOURCES: Resource[] = [
   { key: "orders.purchase", label: "Purchase", group: "Orders", path: "/orders/purchase" },
   { key: "orders.collections", label: "Collections", group: "Orders", path: "/orders/collections" },
   { key: "orders.logistics", label: "Delivery & returns", group: "Orders", path: "/orders/logistics" },
+  { key: "orders.engage", label: "Engage & training", group: "Orders", path: "/orders/engage" },
   { key: "orders.fieldforce", label: "Field Force Management", group: "Orders", path: "/orders/field-force" },
   { key: "orders.kpi", label: "KPI Target", group: "Orders", path: "/orders/kpi-target" },
   { key: "orders.reports", label: "Download Reports", group: "Orders", path: "/orders/reports" },

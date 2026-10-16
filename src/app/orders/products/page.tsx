@@ -6,7 +6,10 @@ import { params, type SP } from "@/lib/orders/session";
 
 export const dynamic = "force-dynamic";
 
-const TABS: TabDef[] = [{ key: "product", label: "Products" }, { key: "scheme", label: "Schemes" }];
+const TABS: TabDef[] = [{ key: "product", label: "Products" }, { key: "scheme", label: "Schemes" },
+  { key: "channel_rate", label: "Channel rates" }, { key: "slab", label: "Slab pricing" },
+  { key: "planogram", label: "Planogram" }, { key: "green_target", label: "Green-call targets" },
+];
 
 export default async function Page({ searchParams }: { searchParams: SP }) {
   const sp = await params(searchParams);

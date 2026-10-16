@@ -13,9 +13,15 @@ const TABS: TabDef[] = [
   { key: "attendance", label: "Attendance" },
   { key: "expense", label: "Expenses" },
   { key: "task", label: "Tasks" },
+  { key: "leave", label: "Leave" },
+  { key: "holiday", label: "Calendar" },
+  { key: "hiring", label: "Hiring" },
+  { key: "promoter", label: "Promoters" },
+  { key: "display_audit", label: "Display audit" },
+  { key: "location_log", label: "Location log" },
 ];
 const FILTERS: Record<string, string[]> = {
-  visit: ["outcome"], attendance: ["status"], expense: ["status"], task: ["status", "priority"], beat: ["weekday"],
+  visit: ["outcome"], attendance: ["status"], expense: ["status"], task: ["status", "priority"], leave: ["status", "type"], hiring: ["stage"], beat: ["weekday"],
 };
 
 export default async function Page({ searchParams }: { searchParams: SP }) {

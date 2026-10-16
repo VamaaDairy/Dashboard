@@ -86,6 +86,7 @@ const DAILY: NavItem[] = [
       { href: "/orders/purchase", key: "orders.purchase", label: "Purchase" },
       { href: "/orders/collections", key: "orders.collections", label: "Collections" },
       { href: "/orders/logistics", key: "orders.logistics", label: "Delivery & returns" },
+      { href: "/orders/engage", key: "orders.engage", label: "Engage & training" },
       { href: "/orders/field-force", key: "orders.fieldforce", label: "Field Force Management" },
       { href: "/orders/kpi-target", key: "orders.kpi", label: "KPI Target" },
       { href: "/orders/reports", key: "orders.reports", label: "Download Reports" },
