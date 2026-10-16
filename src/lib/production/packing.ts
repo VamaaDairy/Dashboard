@@ -15,3 +15,21 @@ export function standardMaterial(
     }))
     .filter((l) => l.qty > 0);
 }
+
+/** How a packing line's quantity is worked out; see db/035_packing_factors.sql. */
+export type Basis = "qty" | "grams" | "per_kg" | "share";
+
+export const BASIS_LABEL: Record<Basis, string> = {
+  qty: "quantity",
+  grams: "g per piece",
+  per_kg: "pieces per kg",
+  share: "pieces per item",
+};
+
+/** The quantity (kg or pieces, per piece or per case) a basis and its value come to. */
+export function qtyFromBasis(basis: Basis, value: number): number {
+  if (!(value > 0)) return 0;
+  if (basis === "grams") return Math.round(value * 1000) / 1e6;       // g -> kg, to 6 places
+  if (basis === "per_kg" || basis === "share") return Math.round(1e6 / value) / 1e6;
+  return value;
+}

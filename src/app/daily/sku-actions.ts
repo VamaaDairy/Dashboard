@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query, tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import type { Result } from "@/app/tanks/actions";
-import { standardMaterial } from "@/lib/production/packing";
+import { BASIS_LABEL, qtyFromBasis, standardMaterial, type Basis } from "@/lib/production/packing";
 
 function amount(raw: string | number | null | undefined, label: string): number {
   const t = String(raw ?? "").replace(/,/g, "").trim();
@@ -128,7 +128,7 @@ export async function saveSku(
  * much of each, per piece or per case. Days already saved keep their material.
  */
 export async function saveSkuPacking(
-  skuId: string, lines: { packaging_id: string; qty: string; per: string }[],
+  skuId: string, lines: { packaging_id: string; qty: string; per: string; basis?: string; factor?: string }[],
 ): Promise<Result> {
   try {
     const scenario = await activeScenarioId();
@@ -143,12 +143,15 @@ export async function saveSkuPacking(
         const key = `${l.packaging_id}|${per}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const qty = amount(l.qty, "Quantity");
+        const basis: Basis = l.basis === "grams" || l.basis === "per_kg" || l.basis === "share" ? l.basis : "qty";
+        // a worked-out line keeps its factor and the quantity follows from it
+        const factor = basis === "qty" ? null : amount(l.factor ?? "", BASIS_LABEL[basis]);
+        const qty = basis === "qty" ? amount(l.qty, "Quantity") : qtyFromBasis(basis, factor!);
         if (qty <= 0) continue;
         await client.query(
-          `insert into sku_packing_item (sku_id, packaging_id, qty, per, sort_order)
-           select $1, o.id, $3, $4, $5 from cost_object o where o.id = $2 and o.scenario_id = $6`,
-          [skuId, l.packaging_id, qty, per, i, scenario]);
+          `insert into sku_packing_item (sku_id, packaging_id, qty, per, basis, factor, sort_order)
+           select $1, o.id, $3, $4, $5, $6, $7 from cost_object o where o.id = $2 and o.scenario_id = $8`,
+          [skuId, l.packaging_id, qty, per, basis, factor, i, scenario]);
       }
     });
     revalidatePath("/daily", "layout");

@@ -8,25 +8,26 @@ import { batchComplete } from "@/lib/production/complete";
  *
  *   batch  = milk drawn from the tanks (at the tanks' blended ₹/L)
  *          + ingredients (quantity x the ingredient master rate)
- *          + its share of the day's shared costs, head by head: each overhead
- *            head except delivery fuel (electricity, labour, coal, milk
- *            transport...) divided by the litres of milk that went into bulk
- *            batches that day, times this batch's litres
  *          + any labour entered on the batch itself
+ *          (no shared costs - those are all charged on the packaged SKUs)
  *   unit   = batch / yield
  *   SKU    = bulk product in the pieces (at that product's unit cost that day,
- *            else its latest batch before) + packing material + a share of the
- *            day's delivery fuel by the quantity packed
+ *            else its latest batch before)
+ *          + its share of ALL the day's shared costs (electricity, labour, coal,
+ *            milk transport, delivery fuel...) by the kg / L packed that day
+ *          + its own packing material, priced once, from its own packing list
  */
 
 export interface CostDay {
   day: string;
   milk_litre: number;                                     // milk that went into bulk batches
   heads: { code: string; label: string; amount: number }[];
-  shared: number;                                         // overheads spread over the milk (all but delivery)
-  delivery: number;                                       // delivery fuel, spread over SKUs packed
-  rate_per_litre: number | null;                          // shared / milk
-  rates: Record<string, number>;                          // per head (code): ₹ per litre of milk
+  shared: number;                                         // overheads (all but delivery), charged on the SKUs packed
+  delivery: number;                                       // delivery fuel, charged on the SKUs packed
+  packed_qty: number;                                     // kg / L of product packed into SKUs that day
+  unallocated: number;                                    // shared + delivery of a day with nothing packed
+  rate_per_litre: number | null;                          // shared / milk (for reference)
+  rates: Record<string, number>;                          // per head (code): ₹ per litre of milk (for reference)
 }
 
 /** A shared-cost head that showed up in the period (everything but delivery fuel). */
@@ -66,8 +67,8 @@ export interface SkuCost {
   bulk_qty: number;           // kg / L of bulk product in the pieces
   bulk_unit: string | null;
   bulk_cost: number;
-  shared_cost: number;        // the part of bulk_cost that is the day's shared costs
-  shared_by_head: Record<string, number>;
+  shared_cost: number;        // the day's shared costs charged on this SKU (all heads but delivery fuel)
+  shared_by_head: Record<string, number>;   // every head incl. delivery fuel
   milk_cost: number;          // the part of bulk_cost that is milk
   ingredient_by_item: Record<string, number>;   // the ingredients in the pieces, by name
   material_cost: number;
@@ -142,7 +143,7 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
   const dayMap = new Map<string, CostDay>();
   const dayOf = (d: string) => {
     let x = dayMap.get(d);
-    if (!x) { x = { day: d, milk_litre: 0, heads: [], shared: 0, delivery: 0, rate_per_litre: null, rates: {} }; dayMap.set(d, x); }
+    if (!x) { x = { day: d, milk_litre: 0, heads: [], shared: 0, delivery: 0, packed_qty: 0, unallocated: 0, rate_per_litre: null, rates: {} }; dayMap.set(d, x); }
     return x;
   };
   for (const h of heads) {
@@ -178,10 +179,9 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
       byItem[l.name] = (byItem[l.name] ?? 0) + v;
     }
     const milk = n(b.milk_litre);
-    const day = dayMap.get(b.day);
+    // shared costs are not put on bulk batches - they go on the packaged SKUs
     const byHead: Record<string, number> = {};
-    for (const [code, r] of Object.entries(day?.rates ?? {})) byHead[code] = milk * r;
-    const overhead = Object.values(byHead).reduce((t, v) => t + v, 0);
+    const overhead = 0;
     const labour = n(b.labour);
     const total = n(b.milk_cost) + ingredient + overhead + labour;
     const output = b.output === null ? null : n(b.output);
@@ -221,18 +221,26 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
     const bulkQty = pcs * n(s.per_pc);
     const b = s.bulk_product_id ? batchFor(s.bulk_product_id, s.day) : null;
     const bulk = b?.unit_cost ? bulkQty * b.unit_cost : 0;
-    const sharedPart = b && b.output ? bulkQty * (b.overhead_cost / b.output) : 0;
+    const day = dayMap.get(s.day);
+    const dayPacked = packedQty.get(s.day) ?? 0;
+    // every shared cost of the day (all heads, delivery fuel included) is shared out over the kg / L packed
     const sharedByHead: Record<string, number> = {};
+    let sharedPart = 0;
+    if (day && dayPacked > 0) {
+      for (const h of day.heads) {
+        const v = (h.amount * bulkQty) / dayPacked;
+        sharedByHead[h.code] = (sharedByHead[h.code] ?? 0) + v;
+        if (h.code !== "fuel_delivery") sharedPart += v;
+      }
+    }
     const ingByItem: Record<string, number> = {};
     if (b && b.output) {
-      for (const [code, v] of Object.entries(b.shared_by_head)) sharedByHead[code] = bulkQty * (v / b.output);
       for (const [name, v] of Object.entries(b.ingredient_by_item)) ingByItem[name] = bulkQty * (v / b.output);
     }
     const milkPart = b && b.output ? bulkQty * (b.milk_cost / b.output) : 0;
     const mat = matBy.get(`${s.day}|${s.sku_id}`) ?? 0;
-    const dayPacked = packedQty.get(s.day) ?? 0;
-    const delivery = dayPacked > 0 ? ((dayMap.get(s.day)?.delivery ?? 0) * bulkQty) / dayPacked : 0;
-    const total = bulk + mat + delivery;
+    const delivery = sharedByHead["fuel_delivery"] ?? 0;
+    const total = bulk + sharedPart + mat + delivery;
     return {
       day: s.day, sku_id: s.sku_id, code: s.code, name: s.name, category: s.category, pcs,
       case_unit: s.case_unit, pcs_per_case: n(s.pcs_per_case), cases: n(s.cases), loose_pcs: n(s.loose_pcs), bulk_qty: bulkQty,
@@ -242,6 +250,11 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
       per_unit: bulkQty > 0 ? total / bulkQty : null,
     };
   });
+
+  for (const d of dayMap.values()) {
+    d.packed_qty = packedQty.get(d.day) ?? 0;
+    if (d.packed_qty <= 0) d.unallocated = d.shared + d.delivery;
+  }
 
   return {
     heads: [...sharedHeads.entries()].map(([code, label]) => ({ code, label })),

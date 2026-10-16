@@ -77,12 +77,6 @@ export function DataGrid({
         >
           + Row
         </button>
-        <Link
-          href={`/schema#${classCode}`}
-          className="rounded-lg border border-border px-3 py-1.5 font-medium hover:border-primary hover:text-foreground"
-        >
-          + Column
-        </Link>
       </div>
 
       {adding ? (

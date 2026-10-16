@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
 import { kgOfSolid } from "@/lib/units";
 import { batchComplete } from "@/lib/production/complete";
-import { headColor, tint } from "@/lib/costing/colors";
 import type { Batch, BatchMilk, BulkProduct, IngredientOption, ProductionDaySummary } from "@/lib/production/data";
 import type { TankDay } from "@/lib/tanks/data";
 
@@ -87,10 +86,8 @@ function milkOf(draws: Draw[], returns: Draw[], tanks: TankDay[], saved: BatchMi
 }
 
 export function BulkProductionDay({
-  date, today, products, batches, ingredients, kgPerLitre, history, tanks, shared,
+  date, today, products, batches, ingredients, kgPerLitre, history, tanks,
 }: {
-  /** the day's shared costs (all overheads but delivery), head by head, and the litres they are divided over */
-  shared: { amount: number; litres: number; rate: number | null; heads: { code: string; label: string; amount: number; rate: number }[] };
   date: string;
   today: string;
   products: BulkProduct[];
@@ -255,17 +252,6 @@ export function BulkProductionDay({
               <Th>Kg fat</Th>
               <Th>Kg SNF</Th>
               <Th>Milk ₹</Th>
-              {shared.heads.map((h) => (
-                <th key={h.code} className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-tertiary-foreground" style={{ background: tint(headColor(h.code), 0.12), borderTop: `3px solid ${headColor(h.code)}` }} title={`₹${formatNumber(h.rate, 3)} per litre of milk`}>
-                  {h.label} ₹
-                  <div className="num mt-0.5 font-semibold normal-case tracking-normal text-foreground">₹{formatNumber(h.amount, 0)} ÷ {formatNumber(shared.litres, 0)} L</div>
-                  <div className="num font-normal normal-case tracking-normal">= ₹{formatNumber(h.rate, 3)} / L</div>
-                </th>
-              ))}
-              <th className="bg-muted px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-tertiary-foreground">
-                Shared ₹
-                {shared.rate !== null ? <div className="num mt-0.5 font-semibold normal-case tracking-normal text-foreground">= ₹{formatNumber(shared.rate, 2)} / L</div> : null}
-              </th>
               <Th align="left">Ingredients</Th>
               <Th>Yield</Th>
               <Th>Per 100 L milk</Th>
@@ -326,14 +312,6 @@ export function BulkProductionDay({
                     <td className="num px-3 py-1.5 text-right">{formatNumber(m.kgFat, 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{formatNumber(m.kgSnf, 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{m.litres > 0 ? formatNumber(m.cost, 0) : "—"}</td>
-                    {shared.heads.map((h) => (
-                      <td key={h.code} className="num px-3 py-1.5 text-right text-muted-foreground" style={{ background: tint(headColor(h.code), 0.06) }} title={`${formatNumber(m.litres, 0)} L × ₹${formatNumber(h.rate, 3)}`}>
-                        {m.litres > 0 ? formatNumber(m.litres * h.rate, 0) : "—"}
-                      </td>
-                    ))}
-                    <td className="num bg-muted/60 px-3 py-1.5 text-right font-semibold text-foreground" title={shared.rate === null ? "Shared costs appear once the day has electricity, fuel, labour or transport entered" : `${formatNumber(m.litres, 0)} L × ₹${formatNumber(shared.rate, 2)} per litre`}>
-                      {m.litres > 0 && shared.rate !== null ? formatNumber(m.litres * shared.rate, 0) : "—"}
-                    </td>
                     <td className="max-w-56 px-3 py-1.5">
                       <button onClick={() => setEditing(p.id)}
                         className="block max-w-full truncate rounded-md border border-border px-2 py-1 text-left text-[12px] hover:bg-muted"
@@ -364,7 +342,7 @@ export function BulkProductionDay({
                   </tr>
                 );
               })}
-              {active.length === 0 ? <Empty colSpan={15 + shared.heads.length}>No products yet - add them below.</Empty> : null}
+              {active.length === 0 ? <Empty colSpan={14}>No products yet - add them below.</Empty> : null}
             </tbody>
             {active.length ? (
               <tfoot>
@@ -376,8 +354,6 @@ export function BulkProductionDay({
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgFat, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgSnf, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.milkCost, 0)}</td>
-                  {shared.heads.map((h) => <td key={h.code} className="num px-3 py-2 text-right" style={{ background: tint(headColor(h.code), 0.06) }}>{formatNumber(totals.milk * h.rate, 0)}</td>)}
-                  <td className="num bg-muted/60 px-3 py-2 text-right">{shared.rate !== null ? formatNumber(totals.milk * shared.rate, 0) : "—"}</td>
                   <td colSpan={4} />
                   <td className="num px-3 py-2 text-right text-muted-foreground">{formatNumber(totals.workerHours, 1)} h</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.labour, 0)}</td>
@@ -387,14 +363,6 @@ export function BulkProductionDay({
           </table>
         </div>
       </Section>
-
-      <p className="-mt-2 text-[12px] text-muted-foreground">
-        <span className="font-semibold text-foreground">Shared costs</span> (tinted columns) = each batch&apos;s litres × each head&apos;s ₹ per litre
-        {shared.rate !== null
-          ? <> - today {shared.heads.map((h) => `${h.label} ₹${formatNumber(h.amount, 0)}`).join(", ")} ÷ {formatNumber(shared.litres, 0)} L = <span className="num font-semibold text-foreground">₹{formatNumber(shared.rate, 2)} per litre</span> in all.</>
-          : <> - nothing entered for this day yet (Electricity, Labour, Fuel, Transport).</>}{" "}
-        <Link href={`/daily/dashboard?from=${date}&to=${date}`} className="font-semibold text-foreground underline">How it&apos;s worked out →</Link>
-      </p>
 
       <IngredientsDialog
         product={editingProduct}

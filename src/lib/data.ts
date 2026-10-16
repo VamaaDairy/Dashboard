@@ -132,21 +132,6 @@ export async function getGrid(classCode: string) {
   return { klass, fields, rows: [...byObject.values()] };
 }
 
-export async function getParameters() {
-  const id = await activeScenarioId();
-  return query<{
-    id: string; key: string; label: string; group_name: string;
-    value_num: number | null; formula: string | null; computed_num: number | null;
-    error: string | null; suffix: string | null; description: string | null;
-    decimals: number; is_locked: boolean;
-  }>(
-    `select id, key, label, group_name, value_num, formula, computed_num, error,
-            suffix, description, decimals, is_locked
-       from parameter where scenario_id = $1 order by sort_order, key`,
-    [id],
-  );
-}
-
 export async function getObjectDetail(classCode: string, objectCode: string) {
   const id = await activeScenarioId();
   const object = await one<{
@@ -213,33 +198,6 @@ export async function getObjectDetail(classCode: string, objectCode: string) {
   for (const c of cells) cellMap[c.field_key] = c;
 
   return { object, fields, cells: cellMap, lines, components, usedBy: usedBy.map((u) => u.dst_ref) };
-}
-
-export async function getSchema() {
-  const id = await activeScenarioId();
-  const classes = await query<ClassSummary>(
-    `select c.id, c.code, c.name, c.plural_name, c.cost_field, c.sort_order,
-            count(o.id)::int as object_count
-       from object_class c
-       left join cost_object o on o.class_id = c.id
-      where c.scenario_id = $1
-      group by c.id order by c.sort_order`,
-    [id],
-  );
-  const fields = await query<GridField & { class_id: string; is_locked: boolean; usage: number }>(
-    `select f.id, f.class_id, f.key, f.label, f.data_type, g.label as group_label,
-            g.sort_order as group_sort, f.default_formula, f.default_value, f.rollup_group,
-            f.is_total, f.is_locked, f.decimals, f.suffix, f.description, f.sort_order,
-            (select count(*)::int from field_value v
-              where v.field_def_id = f.id and (v.formula is not null or v.value_num is not null
-                                               or v.value_text is not null)) as usage
-       from field_def f
-       left join field_group g on g.id = f.group_id
-      where f.scenario_id = $1 and f.is_active
-      order by f.sort_order`,
-    [id],
-  );
-  return classes.map((c) => ({ ...c, fields: fields.filter((f) => f.class_id === c.id) }));
 }
 
 export async function getImpact(ref: string) {

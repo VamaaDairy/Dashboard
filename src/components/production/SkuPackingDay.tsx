@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, Package, Plus, Search, Settings2, Trash2 } from "lucide-react";
 import { saveSku, saveSkuDay, saveSkuPacking, type MaterialLine } from "@/app/daily/sku-actions";
-import { standardMaterial } from "@/lib/production/packing";
+import { BASIS_LABEL, qtyFromBasis, standardMaterial, type Basis } from "@/lib/production/packing";
 import { Empty, Section, THead, Th } from "@/components/tanks/ui";
 import { DateBar } from "@/components/tanks/TankDayBoard";
 import {
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
 import type { BulkProduct } from "@/lib/production/data";
-import type { BulkYield, PackMaterial, PackagingOption, PackingListLine, SkuDayRow, SkuHistoryDay } from "@/lib/production/sku";
+import type { BulkYield, PackMaterial, PackagingOption, PackingListLine, PackTemplate, SkuDayRow, SkuHistoryDay } from "@/lib/production/sku";
 
 type Entry = { cases: string; loose_pcs: string };
 type MLine = MaterialLine & { custom?: boolean };
@@ -30,8 +30,9 @@ const val = (s: string) => {
 const cell = "w-20 rounded-md border border-border bg-white px-1.5 py-1 text-right text-[13px] focus:border-foreground/40 focus:outline-none disabled:bg-muted/50 disabled:text-tertiary-foreground";
 
 export function SkuPackingDay({
-  date, today, skus, bulkProducts, yields, history, materials, lastMaterials, packaging, packingLists,
+  date, today, skus, bulkProducts, yields, history, materials, lastMaterials, packaging, packingLists, templates,
 }: {
+  templates: PackTemplate[];
   packingLists: Record<string, PackingListLine[]>;
   date: string;
   today: string;
@@ -369,7 +370,7 @@ export function SkuPackingDay({
 
       <Dialog open={setup !== null} onOpenChange={(o) => { if (!o) setSetup(null); }}>
         <DialogContent className="sm:max-w-2xl">
-          {setup ? <SkuSetup key={setup.sku_id} sku={setup} bulkProducts={bulkProducts} packaging={packaging} list={packingLists[setup.sku_id] ?? []} onDone={() => { setSetup(null); router.refresh(); }} onClose={() => setSetup(null)} /> : null}
+          {setup ? <SkuSetup key={setup.sku_id} sku={setup} bulkProducts={bulkProducts} packaging={packaging} list={packingLists[setup.sku_id] ?? []} templates={templates} onDone={() => { setSetup(null); router.refresh(); }} onClose={() => setSetup(null)} /> : null}
         </DialogContent>
       </Dialog>
     </>
@@ -392,8 +393,9 @@ function GroupRows({ category, rows, children }: { category: string; rows: SkuDa
 
 /** One SKU's setup: case size, the bulk product it is filled from, how much one piece holds, and its packing list. */
 function SkuSetup({
-  sku, bulkProducts, packaging, list, onDone, onClose,
+  sku, bulkProducts, packaging, list, templates, onDone, onClose,
 }: {
+  templates: PackTemplate[];
   sku: SkuDayRow;
   bulkProducts: BulkProduct[];
   packaging: PackagingOption[];
@@ -401,14 +403,18 @@ function SkuSetup({
   onDone: () => void;
   onClose: () => void;
 }) {
-  const [packList, setPackList] = useState<{ packaging_id: string; qty: string; per: "pc" | "case" }[]>(() =>
-    list.map((l) => ({ packaging_id: l.packaging_id, qty: String(l.qty), per: l.per })));
-  const setLine = (i: number, patch: Partial<{ packaging_id: string; qty: string; per: "pc" | "case" }>) =>
+  // each line is a quantity, or a factor it is worked out from (g per piece, pieces per kg, pieces per item)
+  type PackLine = { packaging_id: string; qty: string; per: "pc" | "case"; basis: Basis; factor: string };
+  const fromSaved = (l: { packaging_id: string; qty: number; per: "pc" | "case"; basis: Basis; factor: number | null }): PackLine =>
+    ({ packaging_id: l.packaging_id, qty: String(l.qty), per: l.per, basis: l.basis, factor: l.factor === null ? "" : String(l.factor) });
+  const [packList, setPackList] = useState<PackLine[]>(() => list.map(fromSaved));
+  const setLine = (i: number, patch: Partial<PackLine>) =>
     setPackList((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+  const qtyOf = (l: PackLine) => (l.basis === "qty" ? Number(l.qty) || 0 : qtyFromBasis(l.basis, Number(l.factor) || 0));
   const option = (id: string) => packaging.find((o) => o.id === id);
   const perPiece = packList.reduce((t, l) => {
     const o = option(l.packaging_id);
-    const q = Number(l.qty) || 0;
+    const q = qtyOf(l);
     return t + (o?.last_price ?? 0) * (l.per === "case" ? q / Math.max(1, Number(sku.pcs_per_case)) : q);
   }, 0);
   const [pcs, setPcs] = useState(String(sku.pcs_per_case));
@@ -460,34 +466,72 @@ function SkuSetup({
             <span className="num text-[12px] text-muted-foreground">≈ ₹{formatNumber(perPiece, 2)} per piece at current rates</span>
           </div>
           <p className="mt-0.5 text-[11px] text-muted-foreground">Each day&apos;s material is worked out from this list and what was packed. Change it for a single day in the packing material box.</p>
+          {(() => {
+            const offered = templates.filter((t) => !t.bulk_product_id || t.bulk_product_id === bulk);
+            return offered.length ? (
+              <label className="mt-2 flex items-center gap-2 text-[12px] text-muted-foreground">
+                Load a saved pack
+                <select value="" onChange={(e) => {
+                    const t = templates.find((x) => x.id === e.target.value);
+                    if (t) setPackList(t.lines.map(fromSaved));
+                  }}
+                  className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-white px-2 text-[12px] text-foreground">
+                  <option value="">Choose…</option>
+                  {offered.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </label>
+            ) : null;
+          })()}
           <div className="mt-2 space-y-2">
             {packList.map((l, i) => {
               const o = option(l.packaging_id);
+              const itemUnit = o?.unit === "kg" ? "kg" : "pc";
+              const q = qtyOf(l);
+              const perCase = l.per === "case";
+              const cost = (o?.last_price ?? 0) * q / (perCase ? Math.max(1, Number(sku.pcs_per_case)) : 1);
+              // grams / pieces-per-kg only make sense for a weighed item
+              const bases = (Object.keys(BASIS_LABEL) as Basis[]).filter((b) => itemUnit === "kg" ? b !== "share" : b === "qty" || b === "share");
               return (
-                <div key={i} className="grid grid-cols-[minmax(0,1fr)_7rem_8rem_auto] items-center gap-2">
-                  <select value={l.packaging_id} onChange={(e) => setLine(i, { packaging_id: e.target.value })}
-                    className="h-9 rounded-lg border border-border bg-white px-2 text-[13px]" aria-label="Packaging item">
-                    <option value="">Choose item</option>
-                    {packaging.map((p) => <option key={p.id} value={p.id}>{p.name} · ₹{formatNumber(p.last_price ?? 0, 2)}/{p.unit === "kg" ? "kg" : "pc"}</option>)}
-                  </select>
-                  <span className="relative">
-                    <Input inputMode="decimal" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} className="h-9 pr-8 text-right" aria-label="Quantity" />
-                    <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-muted-foreground">{o?.unit === "kg" ? "kg" : "pc"}</span>
-                  </span>
-                  <div className="flex h-9 overflow-hidden rounded-lg border border-border text-[12px] font-semibold">
-                    {(["pc", "case"] as const).map((p) => (
-                      <button key={p} type="button" onClick={() => setLine(i, { per: p })}
-                        className={`flex-1 ${l.per === p ? "bg-foreground text-background" : "bg-white text-muted-foreground"}`}>
-                        per {p === "pc" ? "piece" : sku.case_unit.toLowerCase()}
-                      </button>
-                    ))}
+                <div key={i} className="space-y-1">
+                  <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_7rem_8rem_auto] items-center gap-2">
+                    <select value={l.packaging_id} onChange={(e) => setLine(i, { packaging_id: e.target.value })}
+                      className="h-9 rounded-lg border border-border bg-white px-2 text-[13px]" aria-label="Packaging item">
+                      <option value="">Choose item</option>
+                      {packaging.map((p) => <option key={p.id} value={p.id}>{p.name} · ₹{formatNumber(p.last_price ?? 0, 2)}/{p.unit === "kg" ? "kg" : "pc"}</option>)}
+                    </select>
+                    <select value={l.basis} onChange={(e) => {
+                        const basis = e.target.value as Basis;
+                        // carry the current quantity across so the cost doesn't jump when the basis changes
+                        const cur = qtyOf(l);
+                        const factor = basis === "grams" ? cur * 1000 : basis === "qty" || cur <= 0 ? 0 : 1 / cur;
+                        setLine(i, { basis, qty: String(cur), factor: factor > 0 ? String(Math.round(factor * 1e4) / 1e4) : l.factor });
+                      }}
+                      className="h-9 rounded-lg border border-border bg-white px-2 text-[12px]" aria-label="How the quantity is worked out">
+                      {bases.map((b) => <option key={b} value={b}>{BASIS_LABEL[b]}</option>)}
+                    </select>
+                    <Input inputMode="decimal" value={l.basis === "qty" ? l.qty : l.factor}
+                      onChange={(e) => setLine(i, l.basis === "qty" ? { qty: e.target.value } : { factor: e.target.value })}
+                      className="h-9 text-right" aria-label={BASIS_LABEL[l.basis]} />
+                    <div className="flex h-9 overflow-hidden rounded-lg border border-border text-[12px] font-semibold">
+                      {(["pc", "case"] as const).map((p) => (
+                        <button key={p} type="button" onClick={() => setLine(i, { per: p })}
+                          className={`flex-1 ${l.per === p ? "bg-foreground text-background" : "bg-white text-muted-foreground"}`}>
+                          per {p === "pc" ? "piece" : sku.case_unit.toLowerCase()}
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setPackList((ls) => ls.filter((_, k) => k !== i))}
+                      className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground" title="Remove"><Trash2 className="h-4 w-4" /></button>
                   </div>
-                  <button type="button" onClick={() => setPackList((ls) => ls.filter((_, k) => k !== i))}
-                    className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground" title="Remove"><Trash2 className="h-4 w-4" /></button>
+                  {l.basis !== "qty" || !o ? (
+                    <p className="pl-1 text-[11px] text-muted-foreground">
+                      = {formatNumber(q, 6)} {itemUnit} {perCase ? `per ${sku.case_unit.toLowerCase()}` : "per piece"} · ≈ ₹{formatNumber(cost, 3)} per piece
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
-            <button type="button" onClick={() => setPackList((ls) => [...ls, { packaging_id: "", qty: "1", per: "pc" }])}
+            <button type="button" onClick={() => setPackList((ls) => [...ls, { packaging_id: "", qty: "1", per: "pc", basis: "qty", factor: "" }])}
               className="inline-flex items-center gap-1 text-[12px] font-semibold text-muted-foreground hover:text-foreground">
               <Plus className="h-3.5 w-3.5" /> Add item
             </button>

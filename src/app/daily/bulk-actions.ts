@@ -173,13 +173,23 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
           if (tanks.rowCount !== returns.size) throw new Error(`${name}: a tank picked for the returned milk no longer exists - reload the page`);
         }
 
-        // whatever this product drew before is put back first
-        const before = await client.query<{ tank_id: string }>(
-          `select distinct m.tank_id from tank_movement m join bulk_batch b on b.id = m.bulk_batch_id
-            where b.scenario_id = $1 and b.batch_date = $2 and b.bulk_product_id = $3`,
+        // what this product drew and returned before; if the milk is unchanged
+        // (e.g. only the yield was edited) the tank ledger is left alone, so a
+        // back-dated edit can never fail on tank balances.
+        const before = await client.query<{ tank_id: string; direction: string; litres: string }>(
+          `select m.tank_id, m.direction, sum(m.qty_litre) as litres
+             from tank_movement m join bulk_batch b on b.id = m.bulk_batch_id
+            where b.scenario_id = $1 and b.batch_date = $2 and b.bulk_product_id = $3
+            group by m.tank_id, m.direction`,
           [scenario, date, r.bulk_product_id],
         );
-        before.rows.forEach((t) => touched.add(t.tank_id));
+        const sameMap = (rowsFor: string, want: Map<string, number>) => {
+          const have = before.rows.filter((x) => x.direction === rowsFor);
+          return have.length === want.size
+            && have.every((x) => Math.abs(Number(x.litres) - (want.get(x.tank_id) ?? -1)) < 0.0005);
+        };
+        const milkUnchanged = sameMap("out", draws) && sameMap("in", returns);
+        if (!milkUnchanged) before.rows.forEach((t) => touched.add(t.tank_id));
 
         const empty = [r.output_qty, r.labour_workers, r.labour_hours, r.labour_cost].every((v) => !v)
           && lines.length === 0 && draws.size === 0;
@@ -214,6 +224,8 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
             [batchId, l.ingredient_id || null, l.name, Number(l.qty), l.unit || "kg", i],
           );
         }
+
+        if (milkUnchanged) continue;
 
         await client.query(`delete from tank_movement where bulk_batch_id = $1`, [batchId]);
         for (const [tankId, litres] of draws) {
