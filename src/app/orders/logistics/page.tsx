@@ -18,6 +18,12 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
   const tab = pickTab(TABS, sp.t);
   return (
     <SectionShell icon={Truck} title="Delivery & returns" subtitle="Plan deliveries, take back returns (approved returns restock), and track stock issued to vans.">
+      <form action="/orders/print" target="_blank" className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-[13px]">
+        <span className="font-medium text-foreground">Load sheet</span>
+        <input type="date" name="load" required defaultValue={new Date().toISOString().slice(0, 10)} className="h-8 rounded-lg border border-border bg-background px-2" />
+        <button className="h-8 rounded-lg border border-border bg-white px-3 text-[12px] font-medium hover:bg-muted">Open</button>
+        <span className="text-[12px] text-muted-foreground">Totals of approved and invoiced orders for the day, ready to print.</span>
+      </form>
       <SectionTabs path="/orders/logistics" tabs={TABS} active={tab} />
       <EntityPanel entity={tab} path="/orders/logistics" tab={tab} access="orders.logistics" sp={sp} filterBy={FILTERS[tab]} />
     </SectionShell>

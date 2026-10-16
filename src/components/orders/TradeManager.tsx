@@ -114,6 +114,7 @@ export function TradeManager({ kind, rows, lineMap, parties, staff, products, ca
               <th className={`${TH} text-right`}>Lines</th>
               <th className={`${TH} text-right`}>Total</th>
               <th className={TH}>Status</th>
+              {!isPo && <th className={TH} />}
               {canEdit && <th className={TH} />}
             </tr>
           </thead>
@@ -136,6 +137,7 @@ export function TradeManager({ kind, rows, lineMap, parties, staff, products, ca
                     <td className={`${TD} text-right tabular-nums text-muted-foreground`}>{r.lines}</td>
                     <td className={`${TD} text-right tabular-nums font-medium text-foreground`}>{inr(r.total)}</td>
                     <td className={TD}><StatusChip value={r.status} /></td>
+                    {!isPo && <td className={TD}><a href={`/orders/print?id=${r.id}`} target="_blank" rel="noreferrer" className="text-[12px] font-semibold text-muted-foreground hover:text-foreground">Print</a></td>}
                     {canEdit && (
                       <td className={`${TD} whitespace-nowrap text-right`}>
                         {(flow[r.status] ?? []).map((s) => (
@@ -154,7 +156,7 @@ export function TradeManager({ kind, rows, lineMap, parties, staff, products, ca
                   {expanded && (
                     <tr className="border-b border-border/70 bg-muted/30">
                       <td />
-                      <td colSpan={canEdit ? 8 : 7} className="px-4 py-2">
+                      <td colSpan={canEdit ? 9 : 8} className="px-4 py-2">
                         <table className="w-full max-w-2xl text-[12px]">
                           <tbody>
                             {(lineMap[r.id] ?? []).map((l) => (
@@ -173,7 +175,7 @@ export function TradeManager({ kind, rows, lineMap, parties, staff, products, ca
                 </Fragment>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Nothing here yet.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">Nothing here yet.</td></tr>}
           </tbody>
         </table>
       </div>

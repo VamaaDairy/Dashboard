@@ -314,3 +314,8 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--tertiary-foreground);
 }
+
+/* Printing (invoices, load sheets): drop the app chrome. */
+@media print {
+  [data-slot="sidebar-container"], [data-slot="sidebar-gap"], [data-slot="sidebar-trigger"], [data-slot="sidebar"] { display: none !important; }
+}
