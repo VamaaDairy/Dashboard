@@ -12,6 +12,107 @@
    ]
   },
   {
+   "group": "Masters",
+   "items": [
+    {
+     "label": "Customer Masters",
+     "route": "distribution",
+     "url": "/distribution",
+     "visible": "`this.hasPermission(\"distribution\")"
+    },
+    {
+     "label": "Customer Types & Classes",
+     "route": "customerTypeMaster",
+     "url": "/customerTypeMaster",
+     "visible": "`this.hasPermission(\"customerTypeMaster\")"
+    },
+    {
+     "label": "Customer Wise Route Mapping",
+     "route": "customerRouteMapping",
+     "url": "/customerRouteMapping",
+     "visible": "`this.hasPermission(\"customerRouteMapping\")"
+    },
+    {
+     "label": "Route Management",
+     "route": "beat",
+     "url": "/beat",
+     "visible": "`this.hasPermission(\"beat\")"
+    },
+    {
+     "label": "Employee Profile",
+     "route": "staffs",
+     "url": "/staffs",
+     "visible": "`this.hasPermission(\"staffs\")"
+    },
+    {
+     "label": "Employee Master",
+     "route": "employeecustomermaster",
+     "url": "/employeecustomermaster",
+     "visible": "`this.hasPermission(\"employeecustomermaster\")"
+    },
+    {
+     "label": "Designations",
+     "route": "designationMaster",
+     "url": "/designationMaster",
+     "visible": "`this.hasPermission(\"designationMaster\")"
+    },
+    {
+     "label": "Channels",
+     "route": "channelMaster",
+     "url": "/channelMaster",
+     "visible": "`this.hasPermission(\"channelMaster\")"
+    },
+    {
+     "label": "Channel Margins",
+     "route": "fpchannelrates",
+     "url": "/fpchannelrates",
+     "visible": "`this.hasPermission(\"fpchannelrates\")"
+    },
+    {
+     "label": "Slab Pricing",
+     "route": "priceSlabs",
+     "url": "/priceSlabs",
+     "visible": "`this.hasPermission(\"priceSlabs\")"
+    },
+    {
+     "label": "Product Master",
+     "route": "fpproducts",
+     "url": "/fpproducts",
+     "visible": "`this.hasPermission(\"fpproducts\")"
+    },
+    {
+     "label": "Categories & Sub-categories",
+     "route": "categoryMaster",
+     "url": "/categoryMaster",
+     "visible": "`this.hasPermission(\"categoryMaster\")"
+    },
+    {
+     "label": "Tax Codes",
+     "route": "taxMaster",
+     "url": "/taxMaster",
+     "visible": "`this.hasPermission(\"taxMaster\")"
+    },
+    {
+     "label": "States",
+     "route": "stateMaster",
+     "url": "/stateMaster",
+     "visible": "`this.hasPermission(\"stateMaster\")"
+    },
+    {
+     "label": "City Master",
+     "route": "cityMaster",
+     "url": "/cityMaster",
+     "visible": "`this.hasPermission(\"cityMaster\")"
+    },
+    {
+     "label": "Divisions",
+     "route": "divisionMaster",
+     "url": "/divisionMaster",
+     "visible": "`this.hasPermission(\"divisionMaster\")"
+    }
+   ]
+  },
+  {
    "group": "Insights",
    "items": [
     {

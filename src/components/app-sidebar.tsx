@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
+  Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Database, Droplets, FileClock, Fuel, Home, LogOut,
   MapPinned, MessageCircle, Package, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
@@ -35,7 +35,7 @@ interface NavItem {
 }
 /** Orders: one sidebar section per group of src/lib/orders/sidebar.json, in its order. */
 const ORDERS_ICONS: Record<string, React.ElementType> = {
-  Insights: BarChart3, "AI Order Suggestion": Sparkles, "AI Intelligence": Sparkles, Employees: Users, Customers: Contact,
+  Masters: Database, Insights: BarChart3, "AI Order Suggestion": Sparkles, "AI Intelligence": Sparkles, Employees: Users, Customers: Contact,
   "Product Management": Package, Purchase: ShoppingBag, Primary: Truck, Secondary: ShoppingBag, "Field Force Management": MapPinned,
   Promoters: Users, "KPI TARGET": Target, "Van Sales Management": Truck, "Master Configuration": Settings2, "Integration Dashboard": RefreshCw,
 };
