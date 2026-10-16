@@ -17,10 +17,6 @@
     "db:seed:rate-chart": "tsx db/seed-rate-chart.ts",
     "db:verify": "tsx db/verify.ts",
     "db:seed:demo": "tsx --conditions=react-server db/seed-demo.ts",
-    "db:seed:orders": "tsx db/seed-orders.ts",
-    "db:seed:orders-extra": "tsx db/seed-orders-extra.ts",
-    "db:seed:fp": "tsx db/seed-fp.ts",
-    "db:reseed:fp": "tsx db/seed-fp.ts --reset",
     "db:seed:sku-packing": "tsx --conditions=react-server db/seed-sku-packing.ts"
   },
   "dependencies": {

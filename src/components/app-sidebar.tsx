@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Beaker, BarChart3, Boxes, MapPinned, Settings2, Sparkles, Target, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
-  MessageCircle, Package, ReceiptText, RefreshCw, Scale, Truck, UserPlus, Users, Zap,
+  Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
+  MapPinned, MessageCircle, Package, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
-import fpSidebar from "@/lib/fp/spec/sidebar.json";
+import ordersSidebar from "@/lib/orders/sidebar.json";
 
 const CLASS_ICONS: Record<string, React.ElementType> = {
   milk_batch: Droplets,
@@ -28,11 +28,35 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
  * The two things done every day, and nothing else at this level. Everything
  * that is set up once and then left alone lives further down.
  */
+interface NavLeaf { href: string; key: string; label: string; exact?: boolean }
 interface NavItem {
   href: string; key: string; label: string; icon: React.ElementType; exact?: boolean;
-  children?: { href: string; key: string; label: string; exact?: boolean }[];
+  children?: NavLeaf[];
 }
+/** Orders: one sidebar section per group of src/lib/orders/sidebar.json, in its order. */
+const ORDERS_ICONS: Record<string, React.ElementType> = {
+  Insights: BarChart3, "AI Order Suggestion": Sparkles, "AI Intelligence": Sparkles, Employees: Users, Customers: Contact,
+  "Product Management": Package, Purchase: ShoppingBag, Primary: Truck, Secondary: ShoppingBag, "Field Force Management": MapPinned,
+  Promoters: Users, "KPI TARGET": Target, "Van Sales Management": Truck, "Master Configuration": Settings2, "Integration Dashboard": RefreshCw,
+};
+const ORDERS_SECTIONS: NavItem[] = (() => {
+  const seen = new Set<string>();
+  const leaf = (i: { label: string; route: string; url: string }): NavLeaf =>
+    i.route === "homeDashboard"
+      ? { href: "/orders/companyDashboard", key: "fp.companyDashboard", label: i.label }
+      : { href: `/orders${i.url}`, key: `fp.${i.route}`, label: i.label };
+  const out: NavItem[] = [];
+  for (const g of (ordersSidebar as { groups: Array<{ group: string; items: Array<{ label: string; route: string; url: string }> }> }).groups) {
+    const items = g.items.map(leaf).filter((i) => (seen.has(i.key) ? false : (seen.add(i.key), true)));
+    if (!items.length) continue;
+    if (g.group === "(top)") out.push({ ...items[0], icon: Home });
+    else out.push({ href: items[0].href, key: `orders.${g.group}`, label: g.group, icon: ORDERS_ICONS[g.group] ?? Boxes, children: items });
+  }
+  return out;
+})();
+
 const DAILY: NavItem[] = [
+  ...ORDERS_SECTIONS,
   { href: "/", key: "today", label: "Today", icon: Home, exact: true },
   {
     href: "/procurement", key: "procurement", label: "Milk in", icon: Droplets,
@@ -76,29 +100,6 @@ const DAILY: NavItem[] = [
     ],
   },
   {
-    href: "/orders", key: "orders", label: "Orders", icon: ShoppingBag,
-    children: [
-      { href: "/orders/insights", key: "orders.insights", label: "Insights" },
-      { href: "/orders/primary", key: "orders.primary", label: "Primary" },
-      { href: "/orders/secondary", key: "orders.secondary", label: "Secondary" },
-      { href: "/orders/counter-sales", key: "orders.counter", label: "Counter sales" },
-      { href: "/orders/products", key: "orders.products", label: "Products" },
-      { href: "/orders/customers", key: "orders.customers", label: "Customers" },
-      { href: "/orders/inventory", key: "orders.inventory", label: "Inventory" },
-      { href: "/orders/purchase", key: "orders.purchase", label: "Purchase" },
-      { href: "/orders/collections", key: "orders.collections", label: "Collections" },
-      { href: "/orders/logistics", key: "orders.logistics", label: "Delivery & returns" },
-      { href: "/orders/engage", key: "orders.engage", label: "Engage & training" },
-      { href: "/orders/field-force", key: "orders.fieldforce", label: "Field Force Management" },
-      { href: "/orders/kpi-target", key: "orders.kpi", label: "KPI Target" },
-      { href: "/orders/admin", key: "orders.admin", label: "Uploads & settings" },
-      { href: "/orders/ai", key: "orders.ai", label: "Smart tools" },
-      { href: "/orders/reports", key: "orders.reports", label: "Download Reports" },
-      { href: "/orders/master-config", key: "orders.config", label: "Master Configuration" },
-      { href: "/orders/support", key: "orders.support", label: "Support Dashboard" },
-    ],
-  },
-  {
     href: "/whatsapp", key: "whatsapp", label: "WhatsApp shop", icon: MessageCircle,
     children: [
       { href: "/whatsapp/chats", key: "whatsapp", label: "Chats" },
@@ -127,24 +128,6 @@ const DAILY: NavItem[] = [
   },
   { href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale },
 ];
-
-/** The field-sales portal, in the order of its own sidebar (src/lib/fp/spec/sidebar.json). */
-const FP_ICONS: Record<string, React.ElementType> = {
-  Insights: BarChart3, "AI Order Suggestion": Sparkles, "AI Intelligence": Sparkles, Employees: Users, Customers: Contact,
-  "Product Management": Package, Purchase: ShoppingBag, Primary: Truck, Secondary: ShoppingBag, "Field Force Management": MapPinned,
-  Promoters: Users, "KPI TARGET": Target, "Van Sales Management": Truck, "Master Configuration": Settings2, "Integration Dashboard": RefreshCw,
-};
-const FP_NAV: NavItem[] = (fpSidebar as { groups: Array<{ group: string; items: Array<{ label: string; route: string; url: string }> }> }).groups.flatMap((g): NavItem[] => {
-  const seen = new Set<string>();
-  const items = g.items.filter((i) => (seen.has(i.route) ? false : (seen.add(i.route), true)))
-    .map((i) => i.route === "homeDashboard"
-      ? { href: "/fp/companyDashboard", key: "fp.companyDashboard", label: i.label }
-      : { href: `/fp${i.url}`, key: `fp.${i.route}`, label: i.label });
-  if (!items.length) return [];
-  if (g.group === "(top)") return [{ ...items[0], icon: Home }];
-  return [{ href: items[0].href, key: `fpgroup.${g.group}`, label: g.group, icon: FP_ICONS[g.group] ?? Boxes, children: items }];
-});
-DAILY.push(...FP_NAV);
 
 /** Opened when the model itself changes - rarely, and never during a normal day. */
 const SETUP = [
@@ -263,7 +246,7 @@ export function AppSidebar({
                       {item.children.map((sub) => (
                         <SidebarMenuSubItem key={sub.href}>
                           <SidebarMenuSubButton
-                            isActive={"exact" in sub && sub.exact ? pathname === sub.href : pathname.startsWith(sub.href)}
+                            isActive={sub.exact ? pathname === sub.href : pathname.startsWith(sub.href)}
                             render={<Link href={sub.href}>{sub.label}</Link>}
                           />
                         </SidebarMenuSubItem>

@@ -5,7 +5,7 @@
  * Owners can do everything. Everyone else has, per resource, no access (the
  * default), "view" (pages open, nothing can be changed) or "edit".
  */
-import fpResources from "./fp/spec/resources.json";
+import ordersResources from "./orders/resources.json";
 
 export type Level = "none" | "view" | "edit";
 export type AccessMap = Record<string, Level>;
@@ -48,29 +48,11 @@ export const RESOURCES: Resource[] = [
   { key: "cn.finance", label: "Finance posting (needs Complaints & CN too)", group: "CN Management", path: "/cn/finance" },
   { key: "cn.dashboard", label: "Dashboard", group: "CN Management", path: "/cn/dashboard" },
   { key: "orders", label: "Orders - overview", group: "Orders", path: "/orders" },
-  { key: "orders.insights", label: "Insights", group: "Orders", path: "/orders/insights" },
-  { key: "orders.primary", label: "Primary", group: "Orders", path: "/orders/primary" },
-  { key: "orders.secondary", label: "Secondary", group: "Orders", path: "/orders/secondary" },
-  { key: "orders.counter", label: "Counter sales", group: "Orders", path: "/orders/counter-sales" },
-  { key: "orders.products", label: "Products", group: "Orders", path: "/orders/products" },
-  { key: "orders.customers", label: "Customers", group: "Orders", path: "/orders/customers" },
-  { key: "orders.inventory", label: "Inventory", group: "Orders", path: "/orders/inventory" },
-  { key: "orders.purchase", label: "Purchase", group: "Orders", path: "/orders/purchase" },
-  { key: "orders.collections", label: "Collections", group: "Orders", path: "/orders/collections" },
-  { key: "orders.logistics", label: "Delivery & returns", group: "Orders", path: "/orders/logistics" },
-  { key: "orders.engage", label: "Engage & training", group: "Orders", path: "/orders/engage" },
-  { key: "orders.fieldforce", label: "Field Force Management", group: "Orders", path: "/orders/field-force" },
-  { key: "orders.kpi", label: "KPI Target", group: "Orders", path: "/orders/kpi-target" },
-  { key: "orders.admin", label: "Uploads, settings & integration", group: "Orders", path: "/orders/admin" },
-  { key: "orders.ai", label: "Smart tools", group: "Orders", path: "/orders/ai" },
-  { key: "orders.reports", label: "Download Reports", group: "Orders", path: "/orders/reports" },
-  { key: "orders.config", label: "Master Configuration", group: "Orders", path: "/orders/master-config" },
-  { key: "orders.support", label: "Support Dashboard", group: "Orders", path: "/orders/support" },
   { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
-  // the field-sales portal: one resource per screen, grouped as in its sidebar
-  ...(fpResources as Array<{ key: string; label: string; group: string; slug: string }>).map((r) => ({
-    key: r.key, label: r.label, group: `Field sales - ${r.group}`, path: `/fp/${r.slug}`,
+  // every Orders screen is its own resource
+  ...(ordersResources as Array<{ key: string; label: string; group: string; slug: string }>).map((r) => ({
+    key: r.key, label: r.label, group: `Orders - ${r.group}`, path: `/orders/${r.slug}`,
   })),
   { key: "masters", label: "Ingredients, packaging & other masters", group: "Rates & masters", path: "/c" },
   { key: "reports", label: "Reports", group: "Setup", path: "/reports" },
