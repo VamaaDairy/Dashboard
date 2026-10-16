@@ -5,7 +5,8 @@ const DAYS = 14;
 export interface TrafficRow { staff: string; days: Array<{ day: string; visits: number; status: string | null }> }
 
 /** Employee x day grid: how many visits each made, and what the attendance said (green / amber / red in the UI). */
-export async function dayWiseVisits(): Promise<{ days: string[]; rows: TrafficRow[] }> {
+export async function dayWiseVisits(): Promise<{ days: string[]; rows: TrafficRow[]; min: number }> {
+  const min = Number((await query<{ value: string }>(`select value from ord_setting where key = 'min_visits_per_day'`))[0]?.value ?? 3) || 3;
   const rows = await query<{ staff: string; day: string; visits: number; status: string | null }>(
     `select s.name as staff, to_char(d, 'YYYY-MM-DD') as day,
             (select count(*)::int from ord_visit v where v.staff_id = s.id and v.visit_date = d) as visits,
@@ -19,7 +20,7 @@ export async function dayWiseVisits(): Promise<{ days: string[]; rows: TrafficRo
     by.set(r.staff, t);
   }
   const list = [...by.values()];
-  return { days: list[0]?.days.map((d) => d.day) ?? [], rows: list };
+  return { days: list[0]?.days.map((d) => d.day) ?? [], rows: list, min };
 }
 
 export interface CoverageRow { staff: string; customers: number; visited: number; billed: number }

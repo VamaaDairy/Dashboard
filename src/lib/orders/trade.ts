@@ -164,7 +164,7 @@ export async function setOrderStatus(id: string, status: string): Promise<void> 
     if (status === "invoiced" || status === "delivered") {
       await db.query(
         `insert into ord_invoice (order_id, customer_id, invoice_date, due_date, amount)
-         select o.id, o.customer_id, current_date, current_date + c.credit_days, o.total
+         select o.id, o.customer_id, current_date, current_date + case when c.credit_days > 0 then c.credit_days else coalesce((select value::int from ord_setting where key = 'default_credit_days'), 15) end, o.total
            from ord_order o join ord_customer c on c.id = o.customer_id where o.id = $1
          on conflict (order_id) do nothing`, [id]);
     } else {

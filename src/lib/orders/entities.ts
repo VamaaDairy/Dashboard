@@ -487,6 +487,18 @@ export const ENTITIES: Record<string, Entity> = {
     ],
   },
 
+  sync_log: {
+    key: "sync_log", title: "Sync log", singular: "sync entry", table: "ord_sync_log",
+    search: ["message"], order: "t.run_at desc", label: "r.entity",
+    cols: [
+      { key: "entity", label: "Entity", type: "select", options: ["customers", "products", "inventory", "stock_transfer", "bills", "transactions", "orders", "van_stock"], initial: "customers" },
+      { key: "status", label: "Status", type: "select", options: ["success", "partial", "failed"], initial: "success", chip: true },
+      { key: "records", label: "Records", type: "number", initial: "0" },
+      { key: "message", label: "Message", type: "text" },
+      { key: "run_at", label: "Run at", type: "text", sql: "to_char(t.run_at, 'DD Mon YYYY HH24:MI')" },
+    ],
+  },
+
   // ---- support -------------------------------------------------------
   ticket: {
     key: "ticket", title: "Tickets", singular: "ticket", table: "ord_ticket",

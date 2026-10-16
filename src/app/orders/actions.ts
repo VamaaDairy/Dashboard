@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { deleteRow, saveRow } from "@/lib/orders/crud";
+import { saveSettings } from "@/lib/orders/settings";
+import { importCsv } from "@/lib/orders/upload";
 import {
   adjustStock, deleteOrder, deletePurchase, saveOrder, savePurchase, setOrderStatus, setPurchaseStatus,
   type OrderInput, type PurchaseInput,
@@ -26,6 +28,7 @@ const ENTITY_ACCESS: Record<string, string> = {
   leave: "orders.fieldforce", holiday: "orders.fieldforce", hiring: "orders.fieldforce", promoter: "orders.fieldforce",
   display_audit: "orders.fieldforce", location_log: "orders.fieldforce",
   broadcast: "orders.engage", catalogue: "orders.engage", quiz: "orders.engage", quiz_question: "orders.engage", quiz_result: "orders.engage",
+  sync_log: "orders.admin",
   kpi_target: "orders.kpi", ticket: "orders.support",
 };
 
@@ -120,6 +123,29 @@ export async function adjustStockAction(productId: string, qty: number, reason: 
   return run(async () => {
     await need("orders.inventory");
     await adjustStock(productId, qty, reason, note);
+    touch();
+  });
+}
+
+const UPLOAD_ACCESS = "orders.admin";
+
+export async function uploadCsvAction(entity: string, text: string) {
+  return run(async () => {
+    await need(UPLOAD_ACCESS);
+    // each entity needs edit on its own section too, so an upload can't reach further than the screens do
+    const own = entity === "opening_stock" ? "orders.inventory" : ENTITY_ACCESS[entity];
+    if (!own) throw new Error("That cannot be uploaded");
+    await need(own);
+    const res = await importCsv(entity, text);
+    touch();
+    return res;
+  });
+}
+
+export async function saveSettingsAction(values: Record<string, string>) {
+  return run(async () => {
+    await need(UPLOAD_ACCESS);
+    await saveSettings(values);
     touch();
   });
 }

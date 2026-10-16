@@ -126,7 +126,8 @@ export async function saveRow(entityKey: string, id: string | null, values: Reco
   const data: Record<string, unknown> = {};
   for (const c of cols) data[c.key] = clean(c, values[c.key]);
   for (const [k, v] of Object.entries(e.fixed ?? {})) data[k] = v;
-  const keys = Object.keys(data);
+  // on insert, a blank leaves the column to its database default (several are NOT NULL with a default)
+  const keys = Object.keys(data).filter((k) => id !== null || data[k] !== null);
   const vals = keys.map((k) => data[k]);
   try {
     if (id) {
@@ -156,6 +157,7 @@ function friendly(err: unknown, e: Entity): Error {
   const code = (err as { code?: string }).code;
   if (code === "23505") return new Error(`That ${e.singular} already exists (duplicate code or name).`);
   if (code === "23503") return new Error(`This ${e.singular} is used elsewhere - remove or change those first.`);
+  if (code === "23502") return new Error(`A required value for this ${e.singular} is missing.`);
   if (code === "23514") return new Error(`One of the values is not allowed for a ${e.singular}.`);
   return err instanceof Error ? err : new Error("Could not save");
 }

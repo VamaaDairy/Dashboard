@@ -43,18 +43,18 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
 }
 
 async function DayWise() {
-  const { days, rows } = await dayWiseVisits();
+  const { days, rows, min } = await dayWiseVisits();
   const tone = (visits: number, status: string | null) =>
     status === "leave" ? "bg-sky-500/20 text-sky-700"
     : status === "absent" ? "bg-destructive/15 text-destructive"
-    : visits >= 3 ? "bg-emerald-500/20 text-emerald-700"
+    : visits >= min ? "bg-emerald-500/20 text-emerald-700"
     : visits >= 1 ? "bg-amber-500/20 text-amber-700"
     : status === "present" ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground";
   return (
     <Panel title="Visits per day (last 14 days)">
       <div className="flex flex-wrap gap-3 border-b border-border px-4 py-2 text-[12px] text-muted-foreground">
-        <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500/60" />3+ visits</span>
-        <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-500/60" />1–2 visits</span>
+        <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500/60" />{min}+ visits</span>
+        <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-500/60" />1 to {min - 1} visits</span>
         <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-destructive/50" />present with no visit, or absent</span>
         <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-sky-500/50" />leave</span>
       </div>
