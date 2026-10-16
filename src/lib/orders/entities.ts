@@ -106,6 +106,8 @@ export const ENTITIES: Record<string, Entity> = {
       { key: "city", label: "City", type: "text" },
       { key: "state", label: "State", type: "text", hideInList: true },
       { key: "gst_no", label: "GSTIN", type: "text", hideInList: true },
+      { key: "lat", label: "Latitude", type: "number", hideInList: true },
+      { key: "lng", label: "Longitude", type: "number", hideInList: true },
       { key: "credit_limit", label: "Credit limit", type: "money", hideInList: true },
       { key: "credit_days", label: "Credit days", type: "number", hideInList: true },
       { key: "status", label: "Status", type: "select", options: ["active", "pending", "inactive"], initial: "active", ...STAT },

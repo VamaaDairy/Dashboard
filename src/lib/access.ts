@@ -46,6 +46,7 @@ export const RESOURCES: Resource[] = [
   { key: "cn.finance", label: "Finance posting (needs Complaints & CN too)", group: "CN Management", path: "/cn/finance" },
   { key: "cn.dashboard", label: "Dashboard", group: "CN Management", path: "/cn/dashboard" },
   { key: "orders", label: "Orders - overview", group: "Orders", path: "/orders" },
+  { key: "orders.insights", label: "Insights", group: "Orders", path: "/orders/insights" },
   { key: "orders.primary", label: "Primary", group: "Orders", path: "/orders/primary" },
   { key: "orders.secondary", label: "Secondary", group: "Orders", path: "/orders/secondary" },
   { key: "orders.counter", label: "Counter sales", group: "Orders", path: "/orders/counter-sales" },

@@ -77,6 +77,7 @@ const DAILY: NavItem[] = [
   {
     href: "/orders", key: "orders", label: "Orders", icon: ShoppingBag,
     children: [
+      { href: "/orders/insights", key: "orders.insights", label: "Insights" },
       { href: "/orders/primary", key: "orders.primary", label: "Primary" },
       { href: "/orders/secondary", key: "orders.secondary", label: "Secondary" },
       { href: "/orders/counter-sales", key: "orders.counter", label: "Counter sales" },

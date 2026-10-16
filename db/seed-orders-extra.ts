@@ -34,6 +34,8 @@ async function main() {
       ($1,'Ghee is made from?','Milk fat','Vegetable oil','Cream powder','a'),
       ($1,'Ideal storage for ghee?','Freezer','Cool dry place','Open sunlight','b')`, [quiz]);
     await db.query(`insert into ord_quiz_result (quiz_id, staff_id, score_pct) select $1, id, 80 from ord_staff where code in ('E002','E003')`, [quiz]);
+    await db.query(`update ord_customer set lat = 18.45 + (hashtext(code) % 100)/1000.0, lng = 73.78 + (hashtext(code || 'x') % 120)/1000.0 where lat is null`);
+    await db.query(`update ord_location_log set lat = 18.52, lng = 73.85`);
     await db.query("commit");
     console.log("seeded extra Orders demo rows");
   } catch (e) { await db.query("rollback"); throw e; } finally { await db.end(); }
