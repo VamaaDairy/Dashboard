@@ -30,8 +30,8 @@ export function fmtCell(v: unknown, sql: string): string {
 
 type Pending = { action: ActionDef; rowId: string } | null;
 
-export function FpGrid({ routeKey, cols, rows, form, refs, editable, canEdit, title, actions, hasDetail, printBase, modes }: {
-  routeKey: string; cols: GridCol[]; rows: GridCell[]; form: FormField[]; refs: Record<string, Option[]>;
+export function FpGrid({ routeKey, entity, cols, rows, form, refs, editable, canEdit, title, actions, hasDetail, printBase, modes }: {
+  routeKey: string; entity?: string; cols: GridCol[]; rows: GridCell[]; form: FormField[]; refs: Record<string, Option[]>;
   editable: boolean; canEdit: boolean; title: string;
   actions: ActionDef[]; hasDetail: boolean; printBase: string | null; modes: Option[];
 }) {
@@ -61,20 +61,20 @@ export function FpGrid({ routeKey, cols, rows, form, refs, editable, canEdit, ti
       return;
     }
     start(async () => {
-      const res = await fpLoad(routeKey, id);
+      const res = await fpLoad(routeKey, id, entity);
       if (res.ok) { setValues({ ...Object.fromEntries(form.map((f) => [f.field, ""])), ...res.data }); setEditing(id); } else alert(res.error);
     });
   }
   function submit(e: React.FormEvent) {
     e.preventDefault();
     start(async () => {
-      const res = await fpSave(routeKey, editing === "new" ? null : editing, values);
+      const res = await fpSave(routeKey, editing === "new" ? null : editing, values, entity);
       if (res.ok) setEditing(null); else setError(res.error);
     });
   }
   function remove(id: string) {
     if (!confirm("Delete this record?")) return;
-    start(async () => { const res = await fpDelete(routeKey, id); if (!res.ok) alert(res.error); });
+    start(async () => { const res = await fpDelete(routeKey, id, entity); if (!res.ok) alert(res.error); });
   }
 
   async function loadDetail(id: string): Promise<Detail | null> {

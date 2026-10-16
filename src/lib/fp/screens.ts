@@ -177,3 +177,26 @@ export function screenFor(routeKey: string): Screen | null {
   cache.set(routeKey, s);
   return s;
 }
+
+const SKIP_COLS = new Set(["uid", "createdAt", "updatedAt"]);
+
+/** A list screen for one whole entity: its own columns, foreign keys shown by name. Used by tabbed master screens. */
+export function entityScreen(routeKey: string, entity: string): Screen | null {
+  const route = ROUTES.find((x) => x.key === routeKey);
+  const table = tableFor(entity);
+  if (!route || !table) return null;
+  const cols: ScreenCol[] = [];
+  for (const c of table.columns) {
+    if (SKIP_COLS.has(c.field) || cols.length >= 14) continue;
+    if (c.sql === "jsonb") continue;
+    const rel = c.fk ? c.field.replace(/Uid$/, "") : null;
+    const res = rel && table.relations[rel] ? resolvePath(table, rel) : resolvePath(table, c.field);
+    if (!res) continue;
+    cols.push({ key: `c${cols.length}`, label: c.field.replace(/Uid$/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (x) => x.toUpperCase()), path: c.field, expr: res.expr, sql: res.sql, joins: res.joins });
+  }
+  const textCol = cols.find((c) => c.sql === "text");
+  return {
+    route, comp: null, table, cols, skipped: 0, filters: [], dateCol: null, buttons: [], tabs: [], editable: true,
+    where: null, dateExpr: null, order: textCol ? textCol.expr : null, statusExpr: null,
+  };
+}

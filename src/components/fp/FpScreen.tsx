@@ -23,7 +23,7 @@ const PRINT: Record<string, string> = {
 const FIELD = "h-8 rounded-lg border border-border bg-background px-2 text-[13px] outline-none focus:border-primary";
 
 /** A route's list screen: its filters, grid, paging, and add / edit when the spec has them. */
-export async function FpScreen({ screen, sp, above, heading }: { screen: Screen; sp: Record<string, string>; above?: ReactNode; heading?: string }) {
+export async function FpScreen({ screen, sp, above, heading, tab, entity, below }: { screen: Screen; sp: Record<string, string>; above?: ReactNode; below?: ReactNode; heading?: string; tab?: string; entity?: string }) {
   const r = screen.route;
   const path = fpHref(r);
   const page = Math.max(1, Number(sp.page) || 1);
@@ -46,7 +46,7 @@ export async function FpScreen({ screen, sp, above, heading }: { screen: Screen;
   ]);
   const opts = Object.fromEntries(statusOpts);
 
-  const keep = { ...values, q: sp.q, sort: sp.sort, dir: sp.dir };
+  const keep = { ...values, q: sp.q, sort: sp.sort, dir: sp.dir, t: tab };
   const sortHref = (key: string) => {
     const next = sp.sort === key && sp.dir !== "desc" ? "desc" : "asc";
     const params = new URLSearchParams();
@@ -64,6 +64,7 @@ export async function FpScreen({ screen, sp, above, heading }: { screen: Screen;
         title={`${data.total.toLocaleString("en-IN")} record${data.total === 1 ? "" : "s"}`}
         actions={
           <form action={path} method="get" className="flex flex-wrap items-center gap-2">
+            {tab && <input type="hidden" name="t" value={tab} />}
             {screen.filters.map((f) => (
               <label key={f.key} className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
                 {f.kind === "from" || f.kind === "to" || f.kind === "day"
@@ -83,7 +84,7 @@ export async function FpScreen({ screen, sp, above, heading }: { screen: Screen;
           <p className="px-4 py-12 text-center text-[13px] text-muted-foreground">This screen has no list columns.</p>
         ) : (
           <>
-            <FpGrid routeKey={r.key} cols={cols} rows={data.rows} form={form} refs={refs} editable={screen.editable} canEdit={editable} title={r.title || r.key}
+            <FpGrid routeKey={r.key} entity={entity} cols={cols} rows={data.rows} form={form} refs={refs} editable={screen.editable} canEdit={editable} title={r.title || r.key}
               actions={actions} hasDetail={!!DETAILS[r.key]} printBase={PRINT[r.key] ?? null} modes={modes} />
             <Pager path={path} params={{ ...Object.fromEntries(Object.entries(keep).map(([k, v]) => [k, v ?? undefined])) }} page={data.page} pageSize={data.pageSize} total={data.total} />
           </>

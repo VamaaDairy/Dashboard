@@ -4,7 +4,7 @@ import { DocEditor, type ProductOpt } from "@/components/fp/DocEditor";
 import { FpScreen } from "@/components/fp/FpScreen";
 import { Panel } from "@/components/orders/common";
 import { optionsFor, type Option } from "./crud";
-import { screenFor } from "./screens";
+import { entityScreen, screenFor } from "./screens";
 import type { DocKind } from "@/app/fp/actions";
 import { PrintStockTransfer, PrintTransaction } from "@/components/fp/PrintDoc";
 import { SectionShell } from "@/components/orders/SectionShell";
@@ -16,6 +16,12 @@ import { Panel as MapPanel } from "@/components/orders/common";
 import { TeamMap } from "@/components/orders/TeamMap";
 import { BarChart3, CalendarCheck, Gauge, Layers, MapPinned, Globe2, Users2 } from "lucide-react";
 import { dashFilters } from "./dash";
+import { SectionTabs } from "@/components/orders/SectionTabs";
+import { TABBED } from "./tabs";
+import { ConfigEditor } from "@/components/fp/ConfigEditor";
+import { configFor, configRecords, loadConfig } from "./configs";
+import { canEdit as canEditKey } from "@/lib/orders/session";
+import { Settings2 } from "lucide-react";
 import { CATEGORY_FIELDS, categoryInsights, customerPoints, dayWise, employeePoints, marketVisits, overallSummary, productivityReport } from "./insights";
 
 /**
@@ -77,6 +83,40 @@ async function DocView({ routeKey, id }: { routeKey: string; id: string | undefi
 
 export async function customScreen(routeKey: string, sp: Record<string, string>): Promise<ReactNode | null> {
   if (routeKey === "companyDashboard") return <CompanyDashboardView sp={sp} />;
+  const cfg = configFor(routeKey);
+  if (cfg) {
+    const records = await configRecords(cfg);
+    const id = records.find((r) => r.id === sp.id)?.id ?? records[0]?.id ?? "";
+    const [value, editable] = await Promise.all([id ? loadConfig(cfg, id) : Promise.resolve({}), canEditKey(`fp.${routeKey}`)]);
+    return (
+      <SectionShell icon={Settings2} title={cfg.title} subtitle={cfg.subtitle}>
+        <Panel
+          title={cfg.entity === "channel" ? "Channel" : "Designation"}
+          actions={
+            <form action={`/fp/${cfg.route}`} className="flex items-center gap-2">
+              <select name="id" defaultValue={id} className="h-8 min-w-48 rounded-lg border border-border bg-background px-2 text-[13px]">{records.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select>
+              <button className="h-8 rounded-lg border border-border bg-white px-3 text-[12px] font-medium hover:bg-muted">Open</button>
+            </form>
+          }
+        >
+          {id ? <ConfigEditor key={id} routeKey={routeKey} recordId={id} mode={cfg.mode} fields={cfg.fields} flags={cfg.flags} initial={value} canEdit={editable} custom={cfg.custom} />
+              : <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">Nothing to configure yet.</p>}
+        </Panel>
+      </SectionShell>
+    );
+  }
+  const tabs = TABBED[routeKey];
+  if (tabs) {
+    const active = tabs.find((t) => t.key === sp.t) ?? tabs[0];
+    const screen = entityScreen(routeKey, active.entity);
+    if (screen) {
+      const path = `/fp/${screen.route.url.replace(/^\//, "")}`;
+      return (
+        <FpScreen screen={screen} sp={sp} tab={active.key} entity={active.entity} heading={screen.route.title}
+          above={<SectionTabs path={path} tabs={tabs.map((t) => ({ key: t.key, label: t.label }))} active={active.key} />} />
+      );
+    }
+  }
   if (routeKey === "activity") return <ReportScreen icon={Users2} title="Market Visits" path="/fp/activity" sp={sp} load={marketVisits} />;
   if (routeKey === "frontlineEmployee") return <ReportScreen icon={CalendarCheck} title="Day-wise Visit Dashboard" path="/fp/frontlineEmployee" sp={sp} day show={["region", "team", "designation"]} load={(f) => dayWise(f, f.to)} />;
   if (routeKey === "productivity") return <ReportScreen icon={Gauge} title="Sales Rep Productivity" path="/fp/productivity" sp={sp} load={productivityReport} />;

@@ -6,17 +6,20 @@ import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { deleteFpRow, getFpRow, saveFpRow } from "@/lib/fp/crud";
 import { screenFor } from "@/lib/fp/screens";
+import { tabEntities } from "@/lib/fp/tabs";
+import { configFor, saveConfig } from "@/lib/fp/configs";
 import { ROW_ACTIONS } from "@/lib/fp/rowActions";
 import { createBookingOrder, createCounterSale, createReturn, createStockTransfer, type OrderLineInput } from "@/lib/fp/dms";
 
 export type FpResult<T = undefined> = ({ ok: true } & (T extends undefined ? object : { data: T })) | { ok: false; error: string };
 
-async function guard(routeKey: string) {
+async function guard(routeKey: string, entity?: string) {
+  const tab = entity ? tabEntities(routeKey).includes(entity) : false;
   const screen = screenFor(routeKey);
-  if (!screen?.table || !screen.editable) throw new Error("This screen cannot change records.");
+  if (!tab && (!screen?.table || !screen.editable)) throw new Error("This screen cannot change records.");
   const user = await userFromToken((await cookies()).get("session")?.value);
   if (!user || !atLeast(levelFor(user, `fp.${routeKey}`), "edit")) throw new Error("You do not have permission to change this.");
-  return screen.table.entity;
+  return tab ? entity! : screen!.table!.entity;
 }
 
 async function run<T>(fn: () => Promise<T>): Promise<FpResult<T>> {
@@ -24,25 +27,25 @@ async function run<T>(fn: () => Promise<T>): Promise<FpResult<T>> {
   catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" }; }
 }
 
-export async function fpSave(routeKey: string, id: string | null, values: Record<string, unknown>) {
+export async function fpSave(routeKey: string, id: string | null, values: Record<string, unknown>, entityName?: string) {
   return run(async () => {
-    const entity = await guard(routeKey);
+    const entity = await guard(routeKey, entityName);
     const saved = await saveFpRow(entity, id, values);
     revalidatePath("/fp", "layout");
     return saved;
   });
 }
 
-export async function fpDelete(routeKey: string, id: string) {
+export async function fpDelete(routeKey: string, id: string, entityName?: string) {
   return run(async () => {
-    const entity = await guard(routeKey);
+    const entity = await guard(routeKey, entityName);
     await deleteFpRow(entity, id);
     revalidatePath("/fp", "layout");
   });
 }
 
-export async function fpLoad(routeKey: string, id: string) {
-  return run(async () => getFpRow(await guard(routeKey), id));
+export async function fpLoad(routeKey: string, id: string, entityName?: string) {
+  return run(async () => getFpRow(await guard(routeKey, entityName), id));
 }
 
 async function needEdit(routeKey: string) {
@@ -83,5 +86,17 @@ export async function fpCreateDoc(routeKey: string, i: DocInput) {
     }
     revalidatePath("/fp", "layout");
     return id;
+  });
+}
+
+/** Save one channel's / designation's settings (the JSON column behind a configuration screen). */
+export async function fpSaveConfig(routeKey: string, recordId: string, value: Record<string, unknown>) {
+  return run(async () => {
+    await needEdit(routeKey);
+    const def = configFor(routeKey);
+    if (!def) throw new Error("This screen has no settings to save");
+    if (!/^[0-9a-f-]{36}$/i.test(recordId)) throw new Error("Pick a record first");
+    await saveConfig(def, recordId, value);
+    revalidatePath("/fp", "layout");
   });
 }
