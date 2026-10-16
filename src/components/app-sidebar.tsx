@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Beaker, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
+  Beaker, BarChart3, Boxes, MapPinned, Settings2, Sparkles, Target, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
   MessageCircle, Package, ReceiptText, RefreshCw, Scale, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
+import fpSidebar from "@/lib/fp/spec/sidebar.json";
 
 const CLASS_ICONS: Record<string, React.ElementType> = {
   milk_batch: Droplets,
@@ -127,6 +128,22 @@ const DAILY: NavItem[] = [
   { href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale },
 ];
 
+/** The field-sales portal, in the order of its own sidebar (src/lib/fp/spec/sidebar.json). */
+const FP_ICONS: Record<string, React.ElementType> = {
+  Insights: BarChart3, "AI Order Suggestion": Sparkles, "AI Intelligence": Sparkles, Employees: Users, Customers: Contact,
+  "Product Management": Package, Purchase: ShoppingBag, Primary: Truck, Secondary: ShoppingBag, "Field Force Management": MapPinned,
+  Promoters: Users, "KPI TARGET": Target, "Van Sales Management": Truck, "Master Configuration": Settings2, "Integration Dashboard": RefreshCw,
+};
+const FP_NAV: NavItem[] = (fpSidebar as { groups: Array<{ group: string; items: Array<{ label: string; route: string; url: string }> }> }).groups.flatMap((g): NavItem[] => {
+  const seen = new Set<string>();
+  const items = g.items.filter((i) => (seen.has(i.route) ? false : (seen.add(i.route), true)))
+    .map((i) => ({ href: `/fp${i.url}`, key: `fp.${i.route}`, label: i.label }));
+  if (!items.length) return [];
+  if (g.group === "(top)") return [{ ...items[0], icon: Home }];
+  return [{ href: items[0].href, key: `fpgroup.${g.group}`, label: g.group, icon: FP_ICONS[g.group] ?? Boxes, children: items }];
+});
+DAILY.push(...FP_NAV);
+
 /** Opened when the model itself changes - rarely, and never during a normal day. */
 const SETUP = [
   { href: "/audit", key: "audit", label: "Change log", icon: FileClock },
@@ -157,7 +174,7 @@ export function AppSidebar({
   // Which sections with sub-items are expanded. The one you're in opens by
   // itself; the rest remember how you left them (per browser, best effort).
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(DAILY.filter((i) => i.children).map((i) => [i.href, pathname.startsWith(i.href)])),
+    Object.fromEntries(DAILY.filter((i) => i.children).map((i) => [i.href, i.children!.some((c) => pathname.startsWith(c.href)) || pathname.startsWith(i.href)])),
   );
   useEffect(() => {
     try {
@@ -167,7 +184,7 @@ export function AppSidebar({
     } catch { /* storage unavailable - keep the defaults */ }
   }, []);
   useEffect(() => {
-    const here = DAILY.find((i) => i.children && pathname.startsWith(i.href));
+    const here = DAILY.find((i) => i.children && (i.children.some((c) => pathname.startsWith(c.href)) || pathname.startsWith(i.href)));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- open the section you've just navigated into
     if (here) setOpenSections((s) => (s[here.href] ? s : { ...s, [here.href]: true }));
   }, [pathname]);

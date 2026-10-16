@@ -5,6 +5,8 @@
  * Owners can do everything. Everyone else has, per resource, no access (the
  * default), "view" (pages open, nothing can be changed) or "edit".
  */
+import fpResources from "./fp/spec/resources.json";
+
 export type Level = "none" | "view" | "edit";
 export type AccessMap = Record<string, Level>;
 
@@ -66,6 +68,10 @@ export const RESOURCES: Resource[] = [
   { key: "orders.support", label: "Support Dashboard", group: "Orders", path: "/orders/support" },
   { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
+  // the field-sales portal: one resource per screen, grouped as in its sidebar
+  ...(fpResources as Array<{ key: string; label: string; group: string; slug: string }>).map((r) => ({
+    key: r.key, label: r.label, group: `Field sales - ${r.group}`, path: `/fp/${r.slug}`,
+  })),
   { key: "masters", label: "Ingredients, packaging & other masters", group: "Rates & masters", path: "/c" },
   { key: "reports", label: "Reports", group: "Setup", path: "/reports" },
   { key: "audit", label: "Change log", group: "Setup", path: "/audit" },

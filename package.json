@@ -19,6 +19,7 @@
     "db:seed:demo": "tsx --conditions=react-server db/seed-demo.ts",
     "db:seed:orders": "tsx db/seed-orders.ts",
     "db:seed:orders-extra": "tsx db/seed-orders-extra.ts",
+    "db:seed:fp": "tsx db/seed-fp.ts",
     "db:seed:sku-packing": "tsx --conditions=react-server db/seed-sku-packing.ts"
   },
   "dependencies": {

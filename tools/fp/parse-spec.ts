@@ -162,4 +162,11 @@ const cols = routes.reduce((n, r) => n + r.components.reduce((m, c) => m + c.gri
 console.log(`sidebar: ${sidebar.groups.length} groups, ${sidebar.groups.reduce((n, g) => n + g.items.length, 0)} items, ${sidebar.admin.length} admin`);
 console.log(`routes: ${routes.length} (${routes.filter((r) => r.components.length).length} with components), ${cols} grid columns, ${routes.reduce((n, r) => n + r.apis.length, 0)} api rows`);
 console.log(`entities: ${entities.length}, ${entities.reduce((n, e) => n + e.fields.length, 0)} fields, ${entities.filter((e) => e.fields.some((f) => f.name === "uid")).length} with uid`);
+// compact list for access control and the sidebar (the full routes.json is too big for client code)
+const groupOf = new Map<string, string>();
+for (const g of sidebar.groups) for (const it of g.items) if (!groupOf.has(it.route)) groupOf.set(it.route, g.group);
+for (const it of sidebar.admin) if (!groupOf.has(it.route)) groupOf.set(it.route, "Admin");
+const resources = routes.map((r) => ({ key: "fp." + r.key, label: r.title || r.key, group: groupOf.get(r.key) ?? "Other screens", slug: r.url.replace(/^\//, "") }));
+writeFileSync(join(OUT, "resources.json"), JSON.stringify(resources));
+console.log(`resources: ${resources.length}`);
 void apiAt;
