@@ -161,7 +161,7 @@ async function main() {
           await ins("staffChannelActivity", {
             staffUid: s, firmUid: retailers[ri], beatPlanUid: plans[ri], channelActivityUid: ordered ? actOrder : actVisit, staffAttendanceUid: att,
             bpFrequency: "Weekly", bpDayOfVisit: pick(["Mon", "Tue", "Wed", "Thu"], ri), dayOfVisit: pick(["Mon", "Tue", "Wed", "Thu"], ri), scheduledTime: day(back, 10 + v), startTime: day(back, 10 + v, 5), endTime: day(back, 10 + v, 25),
-            timeSpent: 20, bookingOrder: ordered ? 1 : 0, status: "Completed", startAddress: "Pune", endAddress: "Pune", startLat: 18.5, startLng: 73.8, deviation: v === 2 ? 1 : 0, markVisit: ordered ? 0 : 1,
+            timeSpent: 20, bookingOrder: ordered ? 1 : 0, status: "Completed", startAddress: "Pune", endAddress: "Pune", startLat: 18.5, startLng: 73.8, deviation: v === 2 ? "Deviated" : "Not Deviated", markVisit: ordered ? 0 : 1,
           } as never);
         }
       }

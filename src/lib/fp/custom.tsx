@@ -10,6 +10,13 @@ import { PrintStockTransfer, PrintTransaction } from "@/components/fp/PrintDoc";
 import { SectionShell } from "@/components/orders/SectionShell";
 import { DETAILS } from "./rowActions";
 import { ScrollText } from "lucide-react";
+import { CompanyDashboardView } from "@/components/fp/dash/CompanyDashboard";
+import { ReportScreen } from "@/components/fp/dash/ReportScreen";
+import { Panel as MapPanel } from "@/components/orders/common";
+import { TeamMap } from "@/components/orders/TeamMap";
+import { BarChart3, CalendarCheck, Gauge, Layers, MapPinned, Globe2, Users2 } from "lucide-react";
+import { dashFilters } from "./dash";
+import { CATEGORY_FIELDS, categoryInsights, customerPoints, dayWise, employeePoints, marketVisits, overallSummary, productivityReport } from "./insights";
 
 /**
  * Routes that are not a plain list: a document editor (above the list of what it created), or a
@@ -69,6 +76,29 @@ async function DocView({ routeKey, id }: { routeKey: string; id: string | undefi
 }
 
 export async function customScreen(routeKey: string, sp: Record<string, string>): Promise<ReactNode | null> {
+  if (routeKey === "companyDashboard") return <CompanyDashboardView sp={sp} />;
+  if (routeKey === "activity") return <ReportScreen icon={Users2} title="Market Visits" path="/fp/activity" sp={sp} load={marketVisits} />;
+  if (routeKey === "frontlineEmployee") return <ReportScreen icon={CalendarCheck} title="Day-wise Visit Dashboard" path="/fp/frontlineEmployee" sp={sp} day show={["region", "team", "designation"]} load={(f) => dayWise(f, f.to)} />;
+  if (routeKey === "productivity") return <ReportScreen icon={Gauge} title="Sales Rep Productivity" path="/fp/productivity" sp={sp} load={productivityReport} />;
+  if (routeKey === "overallSummaryDashboard") return <ReportScreen icon={Globe2} title="Overall Summary Dashboard" path="/fp/overall-summary-dashboard" sp={sp} show={[]} load={overallSummary} />;
+  if (routeKey === "categoryInsights")
+    return <ReportScreen icon={Layers} title="Category Insights" path="/fp/categoryInsights" sp={sp} tabs={CATEGORY_FIELDS.map(([key, label]) => ({ key, label }))} load={(f) => categoryInsights(f, sp.field ?? "category")} />;
+  if (routeKey === "location" || routeKey === "empmapview") {
+    const pts = await employeePoints(dashFilters(sp));
+    return (
+      <SectionShell icon={MapPinned} title="Employee Map View" subtitle={`${pts.length} employees with a recorded location`}>
+        <MapPanel title="Last known position"><TeamMap points={pts} /></MapPanel>
+      </SectionShell>
+    );
+  }
+  if (routeKey === "customerLocation") {
+    const pts = await customerPoints({ state: sp.state ?? "", team: sp.team ?? "", channel: sp.channel ?? "" });
+    return (
+      <SectionShell icon={BarChart3} title="Customer Map" subtitle={`${pts.length} customers with coordinates`}>
+        <MapPanel title="Customers"><TeamMap points={pts} /></MapPanel>
+      </SectionShell>
+    );
+  }
   if (routeKey === "printTransaction" || routeKey === "printStockTransfer") {
     if (!sp.id) return <SectionShell icon={ScrollText} title="Print" subtitle="Use the Print link on an invoice or stock transfer."><p className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-[13px] text-muted-foreground">No document selected.</p></SectionShell>;
     return routeKey === "printTransaction" ? <PrintTransaction id={sp.id} /> : <PrintStockTransfer id={sp.id} />;

@@ -137,7 +137,9 @@ const FP_ICONS: Record<string, React.ElementType> = {
 const FP_NAV: NavItem[] = (fpSidebar as { groups: Array<{ group: string; items: Array<{ label: string; route: string; url: string }> }> }).groups.flatMap((g): NavItem[] => {
   const seen = new Set<string>();
   const items = g.items.filter((i) => (seen.has(i.route) ? false : (seen.add(i.route), true)))
-    .map((i) => ({ href: `/fp${i.url}`, key: `fp.${i.route}`, label: i.label }));
+    .map((i) => i.route === "homeDashboard"
+      ? { href: "/fp/companyDashboard", key: "fp.companyDashboard", label: i.label }
+      : { href: `/fp${i.url}`, key: `fp.${i.route}`, label: i.label });
   if (!items.length) return [];
   if (g.group === "(top)") return [{ ...items[0], icon: Home }];
   return [{ href: items[0].href, key: `fpgroup.${g.group}`, label: g.group, icon: FP_ICONS[g.group] ?? Boxes, children: items }];
