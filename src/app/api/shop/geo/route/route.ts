@@ -15,5 +15,5 @@ export async function GET(req: NextRequest) {
   const from = pt(req.nextUrl.searchParams.get("from")), to = pt(req.nextUrl.searchParams.get("to"));
   if (!from || !to) return fail(400, "from and to are needed as lat,lng.");
   const r = await route(from, to);
-  return NextResponse.json(r ?? { distanceM: null, durationS: null, points: [] });
+  return NextResponse.json(r ?? { distanceM: null, durationS: null, points: [], steps: [] });
 }
