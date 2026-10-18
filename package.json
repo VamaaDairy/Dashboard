@@ -18,7 +18,8 @@
     "db:seed:rate-chart": "tsx db/seed-rate-chart.ts",
     "db:verify": "tsx db/verify.ts",
     "db:seed:demo": "tsx --conditions=react-server db/seed-demo.ts",
-    "db:seed:sku-packing": "tsx --conditions=react-server db/seed-sku-packing.ts"
+    "db:seed:sku-packing": "tsx --conditions=react-server db/seed-sku-packing.ts",
+    "db:seed:sku-pack-rate": "tsx db/seed-sku-pack-rate.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

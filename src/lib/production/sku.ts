@@ -14,6 +14,7 @@ export interface SkuDayRow {
   shelf_life_days: number | null;
   bulk_product_id: string | null;
   bulk_qty_per_pc: number | null;
+  pack_rate_per_pc: number | null;   // ₹ packing cost per piece; replaces the packing list when set
   is_active: boolean;
   saved: boolean;
   cases: number;
@@ -39,7 +40,7 @@ export interface SkuHistoryDay {
 export async function getSkuDay(date: string): Promise<SkuDayRow[]> {
   return query<SkuDayRow>(
     `select s.id as sku_id, s.code, s.name, s.category, s.case_unit, s.pcs_per_case, s.shelf_life_days,
-            s.bulk_product_id, s.bulk_qty_per_pc, s.is_active,
+            s.bulk_product_id, s.bulk_qty_per_pc, s.pack_rate_per_pc, s.is_active,
             (d.id is not null) as saved, coalesce(d.cases, 0) as cases, coalesce(d.loose_pcs, 0) as loose_pcs
        from sku s
        left join sku_pack_day d on d.sku_id = s.id and d.day = $2

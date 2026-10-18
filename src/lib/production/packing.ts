@@ -1,3 +1,14 @@
+/** The single material line for a SKU costed at a flat packing rate per piece. */
+export const RATE_LINE_NAME = "Packing cost (rate per pc)";
+
+/**
+ * A day's packing material for a SKU with a packing rate per piece: one line,
+ * pieces packed at that rate. Empty when nothing was packed.
+ */
+export function rateMaterial(rate: number, pcs: number) {
+  return pcs > 0 ? [{ packaging_id: null, name: RATE_LINE_NAME, unit: "pcs" as const, qty: pcs, price: rate }] : [];
+}
+
 /**
  * A day's packing material from a SKU's standing list: each line's quantity
  * per piece (or per full case) times what was packed, at the item's rate.

@@ -5,6 +5,7 @@ import { query, tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import type { Result } from "@/app/tanks/actions";
 import { BASIS_LABEL, qtyFromBasis, standardMaterial, type Basis } from "@/lib/production/packing";
+import { rateMaterial, standardMaterial } from "@/lib/production/packing";
 
 function amount(raw: string | number | null | undefined, label: string): number {
   const t = String(raw ?? "").replace(/,/g, "").trim();
@@ -38,15 +39,21 @@ export async function saveSkuDay(
     const scenario = await activeScenarioId();
     await tx(async (client) => {
       for (const r of rows) {
-        const sku = await client.query<{ name: string }>(`select name from sku where id = $1 and scenario_id = $2`, [r.sku_id, scenario]);
+        const sku = await client.query<{ name: string; pcs_per_case: number; pack_rate_per_pc: string | null }>(
+          `select name, pcs_per_case, pack_rate_per_pc from sku where id = $1 and scenario_id = $2`, [r.sku_id, scenario]);
         const name = sku.rows[0]?.name;
+        const packRate = sku.rows[0]?.pack_rate_per_pc == null ? null : Number(sku.rows[0].pack_rate_per_pc);
         if (!name) throw new Error("A SKU in the list no longer exists - reload the page");
         const cases = amount(r.cases, `${name}: cases`);
         const loose = amount(r.loose_pcs, `${name}: loose pieces`);
 
         await client.query(`delete from sku_pack_material where sku_id = $1 and day = $2`, [r.sku_id, date]);
         let materials = r.materials ?? [];
-        if (materials.length === 0 && (cases > 0 || loose > 0)) {
+        if (materials.length === 0 && (cases > 0 || loose > 0) && packRate !== null) {
+          // a SKU with a packing rate per piece: one line, pieces x rate
+          materials = rateMaterial(packRate, cases * sku.rows[0].pcs_per_case + loose)
+            .map((m) => ({ packaging_id: null, name: m.name, qty: String(m.qty), unit: m.unit, price: String(m.price) }));
+        } else if (materials.length === 0 && (cases > 0 || loose > 0)) {
           const list = await client.query<{ packaging_id: string; name: string; unit: "kg" | "pcs"; qty: number; per: "pc" | "case"; rate: number | null; pcs_per_case: number }>(
             `select i.packaging_id, o.name,
                     case when coalesce(u.value_text, u.computed_text) = 'kg' then 'kg' else 'pcs' end as unit,
@@ -96,25 +103,29 @@ export async function saveSkuDay(
   }
 }
 
-/** A SKU's setup: pieces per case, which bulk product fills it and how much one piece holds, on the list or not. */
+/**
+ * A SKU's setup: pieces per case, which bulk product fills it and how much one
+ * piece holds, its packing cost per piece (blank = use the packing list), on the list or not.
+ */
 export async function saveSku(
   id: string,
-  v: { pcs_per_case: string; bulk_product_id: string; bulk_qty_per_pc: string; is_active: boolean },
+  v: { pcs_per_case: string; bulk_product_id: string; bulk_qty_per_pc: string; pack_rate_per_pc: string; is_active: boolean },
 ): Promise<Result> {
   try {
     const scenario = await activeScenarioId();
     const pcs = amount(v.pcs_per_case, "Pieces per case");
     if (!Number.isInteger(pcs) || pcs < 1) throw new Error("Pieces per case must be a whole number, at least 1");
     const perPc = String(v.bulk_qty_per_pc ?? "").trim() === "" ? null : amount(v.bulk_qty_per_pc, "Quantity per piece");
+    const packRate = String(v.pack_rate_per_pc ?? "").trim() === "" ? null : amount(v.pack_rate_per_pc, "Packing cost per piece");
     const bulk = v.bulk_product_id || null;
     if (bulk) {
       const ok = await query(`select 1 from bulk_product where id = $1 and scenario_id = $2`, [bulk, scenario]);
       if (!ok.length) throw new Error("That bulk product no longer exists - reload the page");
     }
     await query(
-      `update sku set pcs_per_case = $2, bulk_product_id = $3, bulk_qty_per_pc = $4, is_active = $5
+      `update sku set pcs_per_case = $2, bulk_product_id = $3, bulk_qty_per_pc = $4, is_active = $5, pack_rate_per_pc = $7
         where id = $1 and scenario_id = $6`,
-      [id, pcs, bulk, perPc, v.is_active, scenario],
+      [id, pcs, bulk, perPc, v.is_active, scenario, packRate],
     );
     revalidatePath("/daily", "layout");
     return { ok: true };
