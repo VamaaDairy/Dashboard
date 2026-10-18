@@ -9,6 +9,7 @@ import '../state/orders_state.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'address_picker_screen.dart';
+import 'customer_login_screen.dart';
 import 'order_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -101,6 +102,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _serverFields = e.fields;
       });
       _form.currentState?.validate();
+      // signed out meanwhile (e.g. signed in on another phone): sign in again, then try once more
+      if (e.message.contains('sign in') && await CustomerLoginScreen.ensure(context, reason: 'Please sign in again to place your order.') && mounted) {
+        setState(() => _error = null);
+        await _place();
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {

@@ -201,7 +201,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text("What's on your mind?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 108,
+                  height: 114,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),

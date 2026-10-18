@@ -18,12 +18,15 @@ String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(
 
 /// The Ola map with dots and an optional route line. Shows a quiet note instead when maps are not switched on.
 class GaiaMap extends StatefulWidget {
-  const GaiaMap({super.key, required this.markers, this.route = const [], this.height = 220, this.radius = 16});
+  const GaiaMap({super.key, required this.markers, this.route = const [], this.height = 220, this.radius = 16, this.follow});
 
   final List<MapMarker> markers;
   final List<GeoPoint> route;
   final double height;
   final double radius;
+
+  /// Turn-by-turn mode: keep the camera close on this point (the rider) instead of fitting everything.
+  final GeoPoint? follow;
 
   @override
   State<GaiaMap> createState() => _GaiaMapState();
@@ -61,6 +64,11 @@ class _GaiaMapState extends State<GaiaMap> {
         circleStrokeColor: '#FFFFFF',
         circleStrokeWidth: 3,
       ));
+    }
+    final f = widget.follow;
+    if (f != null) {
+      await c.animateCamera(CameraUpdate.newLatLngZoom(LatLng(f.lat, f.lng), 16.5));
+      return;
     }
     if (!_fitted || widget.markers.length > 1) {
       final pts = [...widget.markers.map((m) => m.point), ...widget.route];

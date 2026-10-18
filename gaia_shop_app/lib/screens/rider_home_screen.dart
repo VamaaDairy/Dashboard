@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../gaia_map.dart';
 import '../models.dart';
 import '../state/map_state.dart';
 import '../state/rider_state.dart';
@@ -24,9 +25,15 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   void initState() {
     super.initState();
     final rider = context.read<RiderState>();
-    context.read<MapState>().load();
-    rider.refresh();
-    rider.startSharing();
+    // after the first frame: right after sign-in this screen is built inside the rebuild that
+    // login() triggered, and loading notifies listeners - doing that mid-build lost the update
+    // in release builds and left the spinner up forever
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<MapState>().load();
+      rider.refresh();
+      rider.startSharing();
+    });
     // new assignments show up without pulling down
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => rider.refresh());
   }
@@ -74,6 +81,16 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           children: [
             _status(rider),
+            const SizedBox(height: 14),
+            // everything on today's round at a glance: you (blue) and each drop (green = still to pick up, orange = on the way)
+            GaiaMap(
+              height: 300,
+              markers: [
+                for (final o in orders)
+                  if (o.hasPin) MapMarker(GeoPoint(o.lat!, o.lng!), o.status == 'out_for_delivery' ? const Color(0xFFF08C00) : Brand.gaiaGreen, radius: 10),
+                if (rider.here != null) MapMarker(rider.here!, Brand.accent, radius: 11),
+              ],
+            ),
             const SizedBox(height: 14),
             if (rider.error != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(rider.error!, style: const TextStyle(color: Brand.danger))),
             if (orders.isEmpty && !rider.loading)

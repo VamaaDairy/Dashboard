@@ -28,10 +28,10 @@ export function LiveMap() {
   useEffect(() => {
     let dead = false;
     (async () => {
-      const cfg = (await (await fetch("/api/shop/geo/config")).json()) as { enabled: boolean; styleUrl: string | null };
+      const cfg = (await (await fetch("/api/shop/geo/config")).json()) as { enabled: boolean; styleUrl: string | null; stylePath?: string | null };
       if (dead || !box.current) return;
       if (!cfg.enabled || !cfg.styleUrl) { setNote("Maps are not switched on: set OLA_MAPS_API_KEY on the server."); return; }
-      map.current = new maplibregl.Map({ container: box.current, style: cfg.styleUrl, center: [77.59, 12.97], zoom: 10 });
+      map.current = new maplibregl.Map({ container: box.current, style: cfg.stylePath ? `${location.origin}${cfg.stylePath}` : cfg.styleUrl, center: [77.59, 12.97], zoom: 10 });
       map.current.addControl(new maplibregl.NavigationControl(), "top-right");
       setNote("");
     })().catch(() => setNote("Could not load the map."));

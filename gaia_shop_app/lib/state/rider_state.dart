@@ -61,7 +61,7 @@ class RiderState extends ChangeNotifier {
 
   Future<void> refresh() async {
     final t = _token;
-    if (t == null) return;
+    if (t == null || loading) return;
     loading = true;
     error = null;
     notifyListeners();

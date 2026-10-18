@@ -14,4 +14,5 @@ create table shop_customer (
   created_at   timestamptz not null default now()
 );
 
-create index shop_order_phone_ix on shop_order (phone, created_at desc);
+-- shop_order_phone_ix already exists from 047; "if not exists" keeps this file re-runnable
+create index if not exists shop_order_phone_ix on shop_order (phone, created_at desc);

@@ -36,7 +36,9 @@ class Api {
     return ((j['banners'] as List?) ?? []).map((e) => ShopBanner.fromJson(e as Map<String, dynamic>, base: _base)).toList();
   }
 
+  /// Places an order for the signed-in customer ([token] from sign-in; the backend requires it).
   Future<Order> placeOrder({
+    required String token,
     required Customer customer,
     String? notes,
     required List<CartLine> lines,
@@ -52,7 +54,7 @@ class Api {
       // only what was chosen: the server looks the prices up itself
       'lines': [for (final l in lines) {'sku': l.sku, 'qty': l.qty}],
     });
-    return Order.fromJson(await _send(() => _http.post(_u('/orders'), headers: _json, body: body)));
+    return Order.fromJson(await _send(() => _http.post(_u('/orders'), headers: {..._json, 'authorization': 'Bearer $token'}, body: body)));
   }
 
   Future<Order> order(String accessKey) async => Order.fromJson(await _send(() => _http.get(_u('/orders/$accessKey'))));
@@ -65,11 +67,18 @@ class Api {
 
   // ---- customer sign-in (mobile number + 5-digit PIN) ----
 
-  /// Signs in; a number with no account yet is registered with this PIN (the name is used then).
-  Future<({String token, String name, String phone})> customerLogin(String phone, String pin, {String name = ''}) async {
-    final j = await _send(() => _http.post(_u('/customer/login'), headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'name': name})));
-    final c = j['customer'] as Map<String, dynamic>;
-    return (token: j['token'] as String, name: c['name'] as String, phone: c['phone'] as String);
+  /// [signUp] creates the account (needs [name]; refused if the number already has one),
+  /// otherwise signs in to an existing one. Returns the session token and the saved account.
+  Future<({String token, Customer customer})> customerLogin(String phone, String pin, {String name = '', bool signUp = false}) async {
+    final j = await _send(() => _http.post(_u('/customer/login'),
+        headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'name': name, 'mode': signUp ? 'signup' : 'signin'})));
+    return (token: j['token'] as String, customer: Customer.fromJson(j['customer'] as Map<String, dynamic>));
+  }
+
+  /// The signed-in account, with the address it last ordered to.
+  Future<Customer> customerMe(String token) async {
+    final j = await _send(() => _http.get(_u('/customer/me'), headers: {'authorization': 'Bearer $token'}));
+    return Customer.fromJson(j['customer'] as Map<String, dynamic>);
   }
 
   Future<List<Order>> customerOrders(String token) async {
@@ -81,7 +90,51 @@ class Api {
 
   Future<MapConfig> mapConfig() async {
     final j = await _send(() => _http.get(_u('/geo/config')));
-    return MapConfig(enabled: j['enabled'] == true, styleUrl: j['styleUrl'] as String?);
+    return MapConfig(enabled: j['enabled'] == true, styleUrl: j['styleUrl'] as String?, stylePath: j['stylePath'] as String?);
+  }
+
+  /// Full URL of something on the backend, e.g. the map style.
+  String absolute(String path) => '$_base$path';
+
+  /// Ola's style made drawable on the phone, for backends that don't serve /geo/style yet:
+  /// the key from [styleUrl] is put on every tile, font and icon URL (Ola refuses them without it).
+  Future<String?> keyedOlaStyle(String styleUrl) async {
+    final key = Uri.parse(styleUrl).queryParameters['api_key'];
+    if (key == null || key.isEmpty) return null;
+    String withKey(String u) => '$u${u.contains('?') ? '&' : '?'}api_key=$key';
+    Future<Map<String, dynamic>?> get(String u) async {
+      try {
+        final r = await _http.get(Uri.parse(u.contains('api_key=') ? u : withKey(u))).timeout(_timeout);
+        if (r.statusCode != 200) return null;
+        final d = jsonDecode(utf8.decode(r.bodyBytes));
+        return d is Map<String, dynamic> ? d : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final style = await get(styleUrl);
+    if (style == null) return null;
+    final sources = (style['sources'] as Map?)?.cast<String, dynamic>() ?? {};
+    await Future.wait(sources.entries.toList().map((e) async {
+      final src = (e.value as Map).cast<String, dynamic>();
+      final url = src['url'];
+      if (url is! String) return;
+      final tj = await get(url);
+      final tiles = tj?['tiles'];
+      if (tj == null || tiles is! List) return;
+      sources[e.key] = {
+        for (final kv in src.entries) if (kv.key != 'url') kv.key: kv.value,
+        'tiles': [for (final t in tiles) withKey('$t')],
+        if (tj['minzoom'] != null) 'minzoom': tj['minzoom'],
+        if (tj['maxzoom'] != null) 'maxzoom': tj['maxzoom'],
+        if (tj['attribution'] != null) 'attribution': tj['attribution'],
+      };
+    }));
+    style['sources'] = sources;
+    if (style['sprite'] is String) style['sprite'] = withKey(style['sprite'] as String);
+    if (style['glyphs'] is String) style['glyphs'] = withKey(style['glyphs'] as String);
+    return jsonEncode(style);
   }
 
   Future<List<PlaceSuggestion>> searchPlaces(String q, {GeoPoint? near}) async {

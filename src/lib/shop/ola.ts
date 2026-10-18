@@ -13,6 +13,54 @@ export const olaEnabled = () => key().length > 0;
 export const mapStyleUrl = () =>
   olaEnabled() ? `${BASE}/tiles/vector/v1/styles/default-light-standard/style.json?api_key=${encodeURIComponent(tileKey())}` : null;
 
+type Json = Record<string, unknown>;
+let styleCache: { at: number; json: Json } | null = null;
+
+/**
+ * Ola's map style, ready to draw. Ola wants the key on every tile, font and icon request, but its
+ * style.json and tile manifests leave it off - MapLibre (the app and the dashboard) then gets 401s
+ * and draws an empty map. Here each vector source's manifest is read on the server and inlined as
+ * tile URLs that carry the key, and the sprite and font URLs get it too. Cached for 6 hours.
+ */
+export async function mapStyle(): Promise<Json | null> {
+  if (!olaEnabled()) return null;
+  if (styleCache && Date.now() - styleCache.at < 6 * 3600_000) return styleCache.json;
+  const k = encodeURIComponent(tileKey());
+  const withKey = (u: string) => `${u}${u.includes("?") ? "&" : "?"}api_key=${k}`;
+  const get = async (u: string): Promise<Json | null> => {
+    try {
+      const r = await fetch(withKey(u), { signal: AbortSignal.timeout(8000), cache: "no-store" });
+      return r.ok ? ((await r.json()) as Json) : (console.error("ola style", u, r.status), null);
+    } catch (e) {
+      console.error("ola style", u, e);
+      return null;
+    }
+  };
+  const style = await get(`${BASE}/tiles/vector/v1/styles/default-light-standard/style.json`);
+  if (!style) return null;
+  const sources = (style.sources ?? {}) as Record<string, Json>;
+  await Promise.all(
+    Object.entries(sources).map(async ([name, src]) => {
+      if (typeof src.url !== "string") return;
+      const tj = await get(src.url);
+      const tiles = Array.isArray(tj?.tiles) ? (tj.tiles as string[]) : null;
+      if (!tj || !tiles) return;
+      const { url: _u, ...rest } = src;
+      sources[name] = {
+        ...rest,
+        tiles: tiles.map(withKey),
+        ...(tj.minzoom !== undefined ? { minzoom: tj.minzoom } : {}),
+        ...(tj.maxzoom !== undefined ? { maxzoom: tj.maxzoom } : {}),
+        ...(tj.attribution ? { attribution: tj.attribution } : {}),
+      };
+    }),
+  );
+  if (typeof style.sprite === "string") style.sprite = withKey(style.sprite);
+  if (typeof style.glyphs === "string") style.glyphs = withKey(style.glyphs);
+  styleCache = { at: Date.now(), json: style };
+  return style;
+}
+
 async function call<T>(path: string, params: Record<string, string>, method: "GET" | "POST" = "GET"): Promise<T | null> {
   if (!olaEnabled()) return null;
   const url = new URL(BASE + path);

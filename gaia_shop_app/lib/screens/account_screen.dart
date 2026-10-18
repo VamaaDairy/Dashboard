@@ -36,8 +36,8 @@ class AccountScreen extends StatelessWidget {
                 : ListTile(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     leading: const CircleAvatar(backgroundColor: Brand.accentTint, child: Icon(Icons.person_outline, color: Brand.accent)),
-                    title: const Text('Sign in', style: TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const Text('Mobile number and PIN - keep your orders on any phone'),
+                    title: const Text('Sign in or create account', style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('Needed to place orders - your orders stay with your account on any phone'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CustomerLoginScreen())),
                   ),

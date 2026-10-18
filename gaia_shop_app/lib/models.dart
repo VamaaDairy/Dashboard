@@ -325,9 +325,14 @@ class RoutePath {
 }
 
 class MapConfig {
-  const MapConfig({required this.enabled, this.styleUrl});
+  const MapConfig({required this.enabled, this.styleUrl, this.stylePath});
   final bool enabled;
+
+  /// Ola's own style URL (its tiles come back 401 unless the key is added to each request).
   final String? styleUrl;
+
+  /// The ready-to-draw style on our backend, with the key on every tile URL. Newer backends only.
+  final String? stylePath;
 }
 
 /// A signed-in delivery rider.

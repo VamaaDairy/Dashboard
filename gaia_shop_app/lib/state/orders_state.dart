@@ -6,9 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api.dart';
 import '../models.dart';
 
-/// The customer's own orders. Signed in (mobile number + 5-digit PIN), the backend lists every
-/// order placed with that number. Not signed in, the phone keeps each order's secret key and
-/// asks the backend for the details, so nobody else's orders can be seen.
+/// The customer's account and orders. Ordering needs an account (mobile number + 5-digit PIN);
+/// the backend keeps every order against it, so history follows the customer to any phone.
+/// Order keys are also kept on the phone so orders placed before accounts still show.
 class OrdersState extends ChangeNotifier {
   OrdersState(this._api, this._prefs) {
     _keys = _prefs.getStringList(_keysKey) ?? [];
@@ -39,12 +39,21 @@ class OrdersState extends ChangeNotifier {
 
   bool get signedIn => _token != null;
 
-  /// Signs in with the mobile number and PIN (creating the account the first time, which needs a name).
-  Future<void> signIn(String phone, String pin, {String name = ''}) async {
-    final r = await _api.customerLogin(phone, pin, name: name);
+  /// Signs in to an existing account, or with [signUp] creates one (name needed).
+  /// The account's saved delivery address pre-fills checkout.
+  Future<void> signIn(String phone, String pin, {String name = '', bool signUp = false}) async {
+    final r = await _api.customerLogin(phone, pin, name: name, signUp: signUp);
     _token = r.token;
     await _prefs.setString(_tokenKey, r.token);
-    customer = Customer(name: r.name, phone: r.phone, address: customer.address, pincode: customer.pincode, lat: customer.lat, lng: customer.lng);
+    final c = r.customer;
+    customer = Customer(
+      name: c.name,
+      phone: c.phone,
+      address: c.address.isNotEmpty ? c.address : customer.address,
+      pincode: c.pincode.isNotEmpty ? c.pincode : customer.pincode,
+      lat: c.lat ?? customer.lat,
+      lng: c.lng ?? customer.lng,
+    );
     await _prefs.setString(_customerKey, jsonEncode(customer.toJson()));
     notifyListeners();
     await refresh();
@@ -57,9 +66,18 @@ class OrdersState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Places the order. On success it is remembered, along with the delivery details for next time.
+  /// Places the order on the signed-in account. On success it is remembered, along with the
+  /// delivery details for next time. Throws [ApiException] asking to sign in when there is no account.
   Future<Order> place({required Customer who, String? notes, required List<CartLine> lines}) async {
-    final o = await _api.placeOrder(customer: who, notes: notes, lines: lines);
+    final t = _token;
+    if (t == null) throw ApiException('Please sign in or create an account to place your order.');
+    final Order o;
+    try {
+      o = await _api.placeOrder(token: t, customer: who, notes: notes, lines: lines);
+    } on ApiException catch (e) {
+      if (e.message.contains('sign in')) await signOut(); // signed in on another phone since
+      rethrow;
+    }
     _keys = [o.accessKey, ..._keys.where((k) => k != o.accessKey)].take(50).toList();
     await _prefs.setStringList(_keysKey, _keys);
     customer = who;

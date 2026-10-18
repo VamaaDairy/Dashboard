@@ -15,6 +15,8 @@ export interface OrderInput {
   lat: number | null;
   lng: number | null;
   lines: Array<{ sku: string; qty: number }>;
+  /** The signed-in account placing it (the app requires one). */
+  customerId?: number | null;
 }
 
 export type PlaceResult = { ok: true; accessKey: string } | { ok: false; error: string };
@@ -48,10 +50,14 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
 
   const key = await tx(async (c) => {
     const o = await c.query(
-      `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id, access_key`,
-      [input.name, input.phone, input.address, input.pincode, input.notes, input.lat, input.lng, subtotal, fee, subtotal + fee],
+      `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, customer_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id, access_key`,
+      [input.name, input.phone, input.address, input.pincode, input.notes, input.lat, input.lng, subtotal, fee, subtotal + fee, input.customerId ?? null],
     );
+    // the account remembers where it last ordered to, so the next checkout is pre-filled
+    if (input.customerId) {
+      await c.query(`update shop_customer set address = $2, pincode = $3, lat = $4, lng = $5 where id = $1`, [input.customerId, input.address, input.pincode, input.lat, input.lng]);
+    }
     for (const i of items) {
       await c.query(
         `insert into shop_order_item (order_id, sku_code, name, image_url, qty, unit_price, line_total) values ($1, $2, $3, $4, $5, $6, $7)`,

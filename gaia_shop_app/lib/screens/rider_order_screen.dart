@@ -8,6 +8,7 @@ import '../models.dart';
 import '../state/rider_state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'rider_navigation_screen.dart';
 
 /// One delivery: the map to the customer, who they are, what to hand over, and the two steps - picked up, delivered.
 class RiderOrderScreen extends StatefulWidget {
@@ -82,10 +83,8 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
     if (mounted) setState(() => _busy = false);
   }
 
-  Future<void> _navigate(Order o) => launchUrl(
-        Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}&travelmode=two-wheeler'),
-        mode: LaunchMode.externalApplication,
-      );
+  /// Turn-by-turn on Ola Maps inside the app.
+  Future<void> _navigate(Order o) => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RiderNavigationScreen(order: o)));
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +104,7 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
         children: [
           if (o.hasPin) ...[
             GaiaMap(
-              height: 240,
+              height: 340,
               route: _route?.points ?? const [],
               markers: [
                 MapMarker(GeoPoint(o.lat!, o.lng!), Brand.gaiaGreen, radius: 10),
@@ -121,7 +120,12 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
                   Text('${_route!.eta} · ${_route!.distance}', style: const TextStyle(fontWeight: FontWeight.w800)),
                 ],
                 const Spacer(),
-                OutlinedButton.icon(onPressed: () => _navigate(o), icon: const Icon(Icons.navigation_outlined, size: 18), label: const Text('Navigate')),
+                FilledButton.icon(
+                  onPressed: () => _navigate(o),
+                  style: FilledButton.styleFrom(minimumSize: const Size(150, 44)),
+                  icon: const Icon(Icons.navigation, size: 18),
+                  label: const Text('Start navigation'),
+                ),
               ]),
             ),
             if (_route != null && _route!.steps.isNotEmpty)
@@ -135,7 +139,7 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
                       ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(_maneuverIcon(t.maneuver), color: Brand.accent),
+                        leading: Icon(maneuverIcon(t.maneuver), color: Brand.accent),
                         title: Text(t.text),
                         trailing: Text(t.distance, style: const TextStyle(color: Brand.muted)),
                       ),
@@ -209,14 +213,6 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
       );
 }
 
-IconData _maneuverIcon(String m) {
-  if (m.contains('u-turn')) return Icons.u_turn_left;
-  if (m.contains('left')) return Icons.turn_left;
-  if (m.contains('right')) return Icons.turn_right;
-  if (m.contains('roundabout') || m.contains('rotary')) return Icons.roundabout_right;
-  if (m.contains('arrive')) return Icons.flag;
-  return Icons.straight;
-}
 
 /// The customer reads out their 4-digit code; the order is only completed with it.
 class _OtpSheet extends StatefulWidget {

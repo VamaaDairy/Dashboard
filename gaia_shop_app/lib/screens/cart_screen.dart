@@ -7,6 +7,7 @@ import '../state/catalog_state.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'checkout_screen.dart';
+import 'customer_login_screen.dart';
 
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
@@ -97,7 +98,12 @@ class CartScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
           decoration: const BoxDecoration(border: Border(top: BorderSide(color: Brand.line))),
           child: FilledButton(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CheckoutScreen())),
+            // the cart works without an account; placing the order needs one
+            onPressed: () async {
+              final nav = Navigator.of(context);
+              if (!await CustomerLoginScreen.ensure(context, reason: 'Sign in or create an account to place your order. Your cart is saved.')) return;
+              nav.push(MaterialPageRoute<void>(builder: (_) => const CheckoutScreen()));
+            },
             child: Text('Proceed to checkout · ${rupees(cart.total)}'),
           ),
         ),

@@ -203,7 +203,7 @@ class _OrderScreenState extends State<OrderScreen> {
     return [
       const SizedBox(height: 14),
       if (o.hasPin && markers.isNotEmpty) ...[
-        GaiaMap(markers: markers, route: _route?.points ?? const [], height: 230),
+        GaiaMap(markers: markers, route: _route?.points ?? const [], height: 320),
         if (out && eta.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 10),
