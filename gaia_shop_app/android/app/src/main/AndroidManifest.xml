@@ -4,6 +4,12 @@
     <!-- the delivery map: where the customer is, and where a rider is while on a delivery -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- a rider keeps sharing their position with the phone locked or another app open:
+         a location foreground service with an ongoing "Sharing your location" notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <queries>
         <intent><action android:name="android.intent.action.DIAL"/><data android:scheme="tel"/></intent>
         <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>

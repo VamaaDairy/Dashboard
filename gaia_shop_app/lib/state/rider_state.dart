@@ -8,7 +8,7 @@ import '../api.dart';
 import '../models.dart';
 
 /// The delivery rider side of the app: sign-in, the orders given to them, and sharing
-/// their location with the customer while the app is open.
+/// their location with the customer while they have deliveries (kept alive in the background on Android).
 class RiderState extends ChangeNotifier {
   RiderState(this._api, this._prefs) {
     _token = _prefs.getString(_tokenKey);
@@ -103,7 +103,7 @@ class RiderState extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    _sub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 15)).listen(
+    _sub = Geolocator.getPositionStream(locationSettings: _settings()).listen(
       (p) {
         position = p;
         notifyListeners();
@@ -113,6 +113,24 @@ class RiderState extends ChangeNotifier {
         _api.riderLocation(t, p.latitude, p.longitude).catchError((_) {}); // a missed ping is fine; the next one follows
       },
       onError: (_) {},
+    );
+  }
+
+  /// On Android the stream runs in a foreground service, so the position keeps flowing
+  /// with the screen off or another app (a call, WhatsApp) in front.
+  static LocationSettings _settings() {
+    if (defaultTargetPlatform != TargetPlatform.android) return const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 15);
+    return AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 15,
+      intervalDuration: const Duration(seconds: 5),
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
+        notificationTitle: 'Gaia delivery',
+        notificationText: 'Sharing your location with customers while you deliver',
+        notificationChannelName: 'Delivery location',
+        enableWakeLock: true,
+        setOngoing: true,
+      ),
     );
   }
 
