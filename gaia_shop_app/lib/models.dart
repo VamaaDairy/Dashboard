@@ -285,8 +285,18 @@ class PlaceSuggestion {
 }
 
 /// Driving route between two points: the line to draw plus distance and time.
+class RouteStep {
+  const RouteStep(this.text, this.distanceM, this.maneuver);
+  final String text;
+  final double distanceM;
+  final String maneuver;
+
+  String get distance => distanceM < 1000 ? '${distanceM.round()} m' : '${(distanceM / 1000).toStringAsFixed(1)} km';
+}
+
 class RoutePath {
-  const RoutePath({required this.points, this.distanceM, this.durationS});
+  const RoutePath({required this.points, this.distanceM, this.durationS, this.steps = const []});
+  final List<RouteStep> steps;
   final List<GeoPoint> points;
   final double? distanceM;
   final double? durationS;
@@ -308,6 +318,9 @@ class RoutePath {
         points: ((j['points'] as List?) ?? []).map((p) => GeoPoint((p[0] as num).toDouble(), (p[1] as num).toDouble())).toList(),
         distanceM: (j['distanceM'] as num?)?.toDouble(),
         durationS: (j['durationS'] as num?)?.toDouble(),
+        steps: ((j['steps'] as List?) ?? [])
+            .map((t) => RouteStep(t['text'] as String, (t['distanceM'] as num).toDouble(), (t['maneuver'] as String?) ?? ''))
+            .toList(),
       );
 }
 

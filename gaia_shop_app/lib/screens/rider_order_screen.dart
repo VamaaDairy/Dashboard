@@ -124,6 +124,24 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
                 OutlinedButton.icon(onPressed: () => _navigate(o), icon: const Icon(Icons.navigation_outlined, size: 18), label: const Text('Navigate')),
               ]),
             ),
+            if (_route != null && _route!.steps.isNotEmpty)
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text('Directions (${_route!.steps.length} steps)', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  children: [
+                    for (final t in _route!.steps)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(_maneuverIcon(t.maneuver), color: Brand.accent),
+                        title: Text(t.text),
+                        trailing: Text(t.distance, style: const TextStyle(color: Brand.muted)),
+                      ),
+                  ],
+                ),
+              ),
           ] else
             Container(
               padding: const EdgeInsets.all(14),
@@ -189,6 +207,15 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
         decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
         child: child,
       );
+}
+
+IconData _maneuverIcon(String m) {
+  if (m.contains('u-turn')) return Icons.u_turn_left;
+  if (m.contains('left')) return Icons.turn_left;
+  if (m.contains('right')) return Icons.turn_right;
+  if (m.contains('roundabout') || m.contains('rotary')) return Icons.roundabout_right;
+  if (m.contains('arrive')) return Icons.flag;
+  return Icons.straight;
 }
 
 /// The customer reads out their 4-digit code; the order is only completed with it.

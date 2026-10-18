@@ -68,7 +68,8 @@ export async function reverse(lat: number, lng: number): Promise<{ address: stri
   return { address: r.formatted_address, pincode: pin };
 }
 
-export interface Route { distanceM: number; durationS: number; points: Array<[number, number]> }
+export interface RouteStep { text: string; distanceM: number; maneuver: string }
+export interface Route { distanceM: number; durationS: number; points: Array<[number, number]>; steps: RouteStep[] }
 
 /** Google-style encoded polyline (precision 5) -> [lat, lng] pairs. */
 export function decodePolyline(s: string): Array<[number, number]> {
@@ -87,13 +88,15 @@ export function decodePolyline(s: string): Array<[number, number]> {
 }
 
 export async function route(from: { lat: number; lng: number }, to: { lat: number; lng: number }): Promise<Route | null> {
-  const j = await call<{ routes?: Array<{ overview_polyline?: string; legs?: Array<{ distance?: number; duration?: number }> }> }>(
+  const j = await call<{ routes?: Array<{ overview_polyline?: string; legs?: Array<{ distance?: number; duration?: number; steps?: Array<{ instructions?: string; distance?: number; maneuver?: string }> }> }> }>(
     "/routing/v1/directions",
-    { origin: `${from.lat},${from.lng}`, destination: `${to.lat},${to.lng}`, alternatives: "false", steps: "false", overview: "full", mode: "driving" },
+    { origin: `${from.lat},${from.lng}`, destination: `${to.lat},${to.lng}`, alternatives: "false", steps: "true", overview: "full", mode: "driving" },
     "POST",
   );
   const r = j?.routes?.[0];
   if (!r?.overview_polyline) return null;
   const leg = r.legs?.[0];
-  return { distanceM: Number(leg?.distance ?? 0), durationS: Number(leg?.duration ?? 0), points: decodePolyline(r.overview_polyline) };
+  return { distanceM: Number(leg?.distance ?? 0), durationS: Number(leg?.duration ?? 0), points: decodePolyline(r.overview_polyline),
+    steps: (leg?.steps ?? []).map((t) => ({ text: String(t.instructions ?? ""), distanceM: Number(t.distance ?? 0), maneuver: String(t.maneuver ?? "") })).filter((t) => t.text),
+  };
 }
