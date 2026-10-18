@@ -15,12 +15,29 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(const SplashScreen());
+  // keep the opening screen up for a beat even when startup is instant
+  final minSplash = Future<void>.delayed(const Duration(milliseconds: 1500));
   // a startup failure should say what broke instead of leaving the launch logo up
   try {
     final prefs = await SharedPreferences.getInstance();
+    await minSplash;
     runApp(GaiaApp(prefs: prefs));
   } catch (e, st) {
     runApp(MaterialApp(home: Scaffold(body: SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: SingleChildScrollView(child: Text('Gaia could not start.\n\n$e\n\n$st')))))));
+  }
+}
+
+/// Opening screen: the Gaia logo on the dairy doodle pattern.
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Colors.white,
+      child: Image(image: AssetImage('assets/images/splash.jpg'), fit: BoxFit.cover),
+    );
   }
 }
 

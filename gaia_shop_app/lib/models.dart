@@ -1,3 +1,5 @@
+import 'dart:ui' show Color;
+
 double _num(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v') ?? 0;
 
 class Product {
@@ -11,6 +13,7 @@ class Product {
     this.size,
     this.description,
     this.image,
+    this.images = const [],
   });
 
   final String sku;
@@ -20,8 +23,14 @@ class Product {
   final String? size;
   final String? description;
   final String? image;
+
+  /// Every photo of the product; falls back to just [image] on an older backend.
+  final List<String> images;
   final double mrp;
   final double price;
+
+  List<String> get gallery => images.isNotEmpty ? images : [if (image != null && image!.isNotEmpty) image!];
+  int get offPercent => mrp > price ? ((mrp - price) / mrp * 100).round() : 0;
 
   factory Product.fromJson(Map<String, dynamic> j) => Product(
         sku: j['sku'] as String,
@@ -31,6 +40,7 @@ class Product {
         size: j['size'] as String?,
         description: j['description'] as String?,
         image: j['image'] as String?,
+        images: [for (final i in (j['images'] as List?) ?? const []) if (i is String && i.isNotEmpty) i],
         mrp: _num(j['mrp']),
         price: _num(j['price']),
       );
@@ -313,3 +323,49 @@ class RiderProfile {
   final String name;
   final String phone;
 }
+
+/// One slide of the home-screen carousel: an uploaded poster, or a designed card
+/// (title, subtitle, colour) that can point at a product.
+class ShopBanner {
+  const ShopBanner({required this.id, required this.title, required this.bgColor, this.subtitle, this.cta, this.sku, this.image});
+
+  final int id;
+  final String title;
+  final String? subtitle;
+  final String? cta;
+
+  /// Tapping opens this product; on a designed card its photo and price show too.
+  final String? sku;
+  final Color bgColor;
+
+  /// Full URL of an uploaded poster. When set it fills the whole slide.
+  final String? image;
+
+  factory ShopBanner.fromJson(Map<String, dynamic> j, {required String base}) {
+    final img = j['image'] as String?;
+    return ShopBanner(
+      id: (j['id'] as num).toInt(),
+      title: (j['title'] as String?) ?? '',
+      subtitle: j['subtitle'] as String?,
+      cta: j['cta'] as String?,
+      sku: j['sku'] as String?,
+      bgColor: _hex(j['bgColor'] as String?),
+      image: img == null ? null : (img.startsWith('http') ? img : '$base$img'),
+    );
+  }
+
+  static Color _hex(String? s) {
+    final v = int.tryParse((s ?? '').replaceFirst('#', ''), radix: 16);
+    return v == null ? const Color(0xFF2B3990) : Color(0xFF000000 | v);
+  }
+}
+
+/// Shown until the server has banners to give (e.g. an older backend without /banners).
+/// Keep in step with the seed in db/049_shop_banner.sql.
+const defaultBanners = [
+  ShopBanner(id: -1, title: 'Farm-fresh goodness at your doorstep', subtitle: 'Antibiotic free. Untouched by hand.', bgColor: Color(0xFF7EAEF5)),
+  ShopBanner(id: -2, title: 'Quality products curated for your healthy routine', subtitle: 'Gaia Toned Milk, packed fresh every morning', cta: 'Order milk', sku: '1003', bgColor: Color(0xFF4A86E0)),
+  ShopBanner(id: -3, title: 'Pure Desi Ghee, slow-cooked the traditional way', cta: 'Shop ghee', sku: '1031', bgColor: Color(0xFF7EAEF5)),
+  ShopBanner(id: -4, title: 'Soft, fresh paneer, rich in protein', cta: 'Add paneer', sku: '1005', bgColor: Color(0xFF4A86E0)),
+  ShopBanner(id: -5, title: 'Pin your exact doorstep for perfectly timed delivery', subtitle: 'Drop a pin on the map at checkout', bgColor: Color(0xFF7EAEF5)),
+];

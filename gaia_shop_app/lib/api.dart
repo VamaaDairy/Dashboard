@@ -30,6 +30,12 @@ class Api {
 
   Future<Catalog> catalog() async => Catalog.fromJson(await _send(() => _http.get(_u('/catalog'))));
 
+  /// The home-screen carousel, highest priority first.
+  Future<List<ShopBanner>> banners() async {
+    final j = await _send(() => _http.get(_u('/banners')));
+    return ((j['banners'] as List?) ?? []).map((e) => ShopBanner.fromJson(e as Map<String, dynamic>, base: _base)).toList();
+  }
+
   Future<Order> placeOrder({
     required Customer customer,
     String? notes,

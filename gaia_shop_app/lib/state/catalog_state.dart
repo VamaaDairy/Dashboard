@@ -9,6 +9,7 @@ class CatalogState extends ChangeNotifier {
   final Api _api;
 
   Catalog? catalog;
+  List<ShopBanner> banners = const [];
   bool loading = false;
   String? error;
 
@@ -27,8 +28,11 @@ class CatalogState extends ChangeNotifier {
     loading = true;
     error = null;
     notifyListeners();
+    // banners are extra: a backend without them (or a hiccup) falls back to the built-in set
+    final bannersCall = _api.banners().then<List<ShopBanner>>((b) => b, onError: (_) => defaultBanners);
     try {
       catalog = await _api.catalog();
+      banners = await bannersCall;
     } on ApiException catch (e) {
       error = e.message;
     } catch (_) {

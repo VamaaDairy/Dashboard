@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../banner_carousel.dart';
 import '../config.dart';
 import '../models.dart';
 import '../state/cart_state.dart';
@@ -188,6 +189,8 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
         ),
       ),
+      if (!searching && catalog.banners.isNotEmpty)
+        SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 16), child: BannerCarousel(banners: catalog.banners))),
       if (!searching && catalog.categories.length > 1)
         SliverToBoxAdapter(
           child: Padding(
@@ -253,100 +256,20 @@ class _MenuScreenState extends State<MenuScreen> {
             sliver: SliverGrid.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                mainAxisSpacing: 14,
+                mainAxisSpacing: 18,
                 crossAxisSpacing: 14,
-                // square photo + fixed room for 2 lines of name, size, price and the ADD button
-                mainAxisExtent: (MediaQuery.sizeOf(context).width - 46) / 2 + 140,
+                // square photo (ADD on its corner) + fixed room for size, 2 lines of name and the price
+                mainAxisExtent: (MediaQuery.sizeOf(context).width - 46) / 2 + 96,
               ),
               itemCount: g.value.length,
-              itemBuilder: (_, i) => _ProductCard(product: g.value[i]),
+              itemBuilder: (_, i) => ProductTile(
+                product: g.value[i],
+                onOpen: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: g.value[i]))),
+              ),
             ),
           ),
         ],
       const SliverToBoxAdapter(child: SizedBox(height: 24)),
     ];
-  }
-}
-
-class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.product});
-  final Product product;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = product;
-    final off = p.mrp > p.price ? ((p.mrp - p.price) / p.mrp * 100).round() : 0;
-    void open() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: p)));
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: open,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Brand.line),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 1,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ColoredBox(color: Brand.surface, child: Padding(padding: const EdgeInsets.all(10), child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain))),
-                  if (off > 0)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(color: Brand.gaiaGreen, borderRadius: BorderRadius.circular(6)),
-                        child: Text('$off% OFF', style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
-                      ),
-                    ),
-                  const Positioned(top: 8, right: 8, child: VegDot()),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: 36,
-                    child: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.25)),
-                  ),
-                  const SizedBox(height: 2),
-                  SizedBox(height: 16, child: Text(p.size ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted))),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: 20,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(rupees(p.price), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                        if (off > 0) ...[
-                          const SizedBox(width: 6),
-                          Text(rupees(p.mrp), style: const TextStyle(fontSize: 12, color: Brand.faint, decoration: TextDecoration.lineThrough)),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: AddButton(product: p, width: double.infinity),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
