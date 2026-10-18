@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { one, query } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import { freezeDay } from "@/lib/daily/compute";
+import { DEFAULT_LABOUR_RATES, labourAmount, labourCount, type LabourRates, type LabourShifts } from "@/lib/daily/labour";
+import { meterUnits } from "@/lib/daily/meter";
 import type { Result } from "@/app/tanks/actions";
 
 function amount(raw: string, label: string): number {
@@ -82,6 +84,50 @@ export async function saveElectricityDay(date: string, rawUnits: string): Promis
   }
 }
 
+/** A reading field: blank means not entered. */
+function optional(raw: string, label: string): number | null {
+  return String(raw ?? "").trim() === "" ? null : amount(raw, label);
+}
+
+/**
+ * Saves a morning meter reading, then re-works the units of the day before and
+ * of this day from the readings either side of them.
+ */
+export async function saveMeterReading(
+  date: string,
+  f: { kwh: string; kvarh: string; kva: string; kvah: string; pf: string },
+): Promise<Result> {
+  try {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Pick a date");
+    const scenario = await activeScenarioId();
+    if (String(f.kwh ?? "").trim() === "") throw new Error("Enter the kWh reading");
+    const kwh = amount(f.kwh, "kWh");
+    await query(
+      `insert into electricity_reading (scenario_id, day, kwh, kvarh, kva, kvah, pf) values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (scenario_id, day) do update
+         set kwh = excluded.kwh, kvarh = excluded.kvarh, kva = excluded.kva, kvah = excluded.kvah, pf = excluded.pf`,
+      [scenario, date, kwh, optional(f.kvarh, "kVArh"), optional(f.kva, "kVA"), optional(f.kvah, "kVAh"), optional(f.pf, "PF")],
+    );
+    const pairs = await query<{ day: string; kwh: number; next_kwh: number }>(
+      `select to_char(r.day, 'YYYY-MM-DD') as day, r.kwh, n.kwh as next_kwh
+         from electricity_reading r
+         join electricity_reading n on n.scenario_id = r.scenario_id and n.day = r.day + 1
+        where r.scenario_id = $1 and r.day between ($2::date - 1) and $2::date`,
+      [scenario, date],
+    );
+    for (const p of pairs) {
+      const units = meterUnits(Number(p.kwh), Number(p.next_kwh));
+      const rate = await electricityRateOn(scenario, p.day);
+      if (rate === null) throw new Error(`No electricity price for ${p.day} yet - set one first`);
+      await writeHead(scenario, "electricity", p.day, { qty: units, rate, amount: Math.round(units * rate * 100) / 100 });
+    }
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /**
  * A new price per unit from `effectiveFrom` until the next price. Days before
  * keep their price; days already entered from that date on are re-costed.
@@ -116,20 +162,88 @@ export async function setElectricityRate(effectiveFrom: string, raw: string): Pr
   }
 }
 
-/** A day's labour: how many labourers, and the total paid. Both 0 clears the day. */
-export async function saveLabourDay(date: string, rawWorkers: string, rawAmount: string): Promise<Result> {
+async function labourRatesOn(scenario: string, date: string): Promise<LabourRates> {
+  const r = await one<{ day_regular: string; day_special: string; night: string; contract: string }>(
+    `select day_regular, day_special, night, contract from labour_rate
+      where scenario_id = $1 and effective_from <= $2 order by effective_from desc limit 1`,
+    [scenario, date],
+  );
+  if (!r) return DEFAULT_LABOUR_RATES;
+  return { dayRegular: Number(r.day_regular), daySpecial: Number(r.day_special), night: Number(r.night), contract: Number(r.contract) };
+}
+
+/** Stores a day's split and writes its cost at the rates in force that date. All 0 clears the day. */
+async function writeLabour(scenario: string, date: string, shifts: LabourShifts) {
+  const workers = labourCount(shifts);
+  if (workers === 0) {
+    await writeHead(scenario, "labour", date, null);
+  } else {
+    const total = Math.round(labourAmount(shifts, await labourRatesOn(scenario, date)) * 100) / 100;
+    await writeHead(scenario, "labour", date, { qty: workers, rate: Math.round((total / workers) * 100) / 100, amount: total });
+  }
+  const dayId = (await one<{ id: string }>(`select id from production_day where scenario_id = $1 and day = $2`, [scenario, date]))?.id;
+  if (!dayId) return;
+  if (workers === 0) await query(`delete from labour_day where day_id = $1`, [dayId]);
+  else await query(
+    `insert into labour_day (day_id, day_regular, day_special, night, contract) values ($1, $2, $3, $4, $5)
+     on conflict (day_id) do update set day_regular = excluded.day_regular, day_special = excluded.day_special,
+       night = excluded.night, contract = excluded.contract`,
+    [dayId, shifts.dayRegular, shifts.daySpecial, shifts.night, shifts.contract],
+  );
+}
+
+/** A day's labour by section (day, special day, night, contract), costed at that day's rates. */
+export async function saveLabourDay(date: string, raw: Record<keyof LabourShifts, string>): Promise<Result> {
   try {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Pick a date");
     const scenario = await activeScenarioId();
-    const workers = amount(rawWorkers, "Labourers");
-    const total = amount(rawAmount, "Total amount");
-    if (!Number.isInteger(workers)) throw new Error("Labourers must be a whole number");
-    if (workers === 0 && total === 0) {
-      await writeHead(scenario, "labour", date, null);
-    } else {
-      if (workers === 0) throw new Error("Enter how many labourers worked");
-      if (total === 0) throw new Error("Enter the total amount paid");
-      await writeHead(scenario, "labour", date, { qty: workers, rate: Math.round((total / workers) * 100) / 100, amount: total });
+    const count = (k: keyof LabourShifts, name: string) => {
+      const v = amount(raw[k], name);
+      if (!Number.isInteger(v)) throw new Error(`${name} must be a whole number`);
+      return v;
+    };
+    await writeLabour(scenario, date, {
+      dayRegular: count("dayRegular", "Day"), daySpecial: count("daySpecial", "Special day"),
+      night: count("night", "Night"), contract: count("contract", "Contract"),
+    });
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * New labour rates from `effectiveFrom` until the next change. Days before keep
+ * their rates; days already entered from that date on are re-costed.
+ */
+export async function setLabourRates(effectiveFrom: string, raw: Record<keyof LabourRates, string>): Promise<Result> {
+  try {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) throw new Error("Pick the date the new rates start");
+    const rate = (k: keyof LabourRates, name: string) => {
+      if (String(raw[k] ?? "").trim() === "") throw new Error(`Enter the ${name} rate`);
+      return amount(raw[k], `${name} rate`);
+    };
+    const r = {
+      dayRegular: rate("dayRegular", "day"), daySpecial: rate("daySpecial", "special day"),
+      night: rate("night", "night"), contract: rate("contract", "contract"),
+    };
+    const scenario = await activeScenarioId();
+    await query(
+      `insert into labour_rate (scenario_id, effective_from, day_regular, day_special, night, contract)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (scenario_id, effective_from) do update set day_regular = excluded.day_regular,
+         day_special = excluded.day_special, night = excluded.night, contract = excluded.contract`,
+      [scenario, effectiveFrom, r.dayRegular, r.daySpecial, r.night, r.contract],
+    );
+    const days = await query<{ day: string; day_regular: number; day_special: number; night: number; contract: number }>(
+      `select to_char(d.day, 'YYYY-MM-DD') as day, l.day_regular, l.day_special, l.night, l.contract
+         from labour_day l join production_day d on d.id = l.day_id
+        where d.scenario_id = $1 and d.day >= $2`,
+      [scenario, effectiveFrom],
+    );
+    for (const d of days) {
+      await writeLabour(scenario, d.day, { dayRegular: d.day_regular, daySpecial: d.day_special, night: d.night, contract: d.contract });
     }
     refresh();
     return { ok: true };

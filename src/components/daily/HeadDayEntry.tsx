@@ -3,27 +3,30 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { saveElectricityDay, saveLabourDay, setElectricityRate } from "@/app/daily/head-actions";
+import { saveElectricityDay, saveLabourDay, setElectricityRate, setLabourRates } from "@/app/daily/head-actions";
 import { Empty, Section, THead, Th } from "@/components/tanks/ui";
 import { DateBar } from "@/components/tanks/TankDayBoard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
+import { DEFAULT_LABOUR_RATES, labourAmount, labourCount, labourRatesOn, type LabourRateRow, type LabourRates, type LabourShifts } from "@/lib/daily/labour";
 import type { ElectricityRate, HeadDay } from "@/lib/daily/heads";
+import type { MeterReading } from "@/lib/daily/meter";
+import { MeterSection } from "@/components/daily/MeterSection";
 import { CalendarHeatmap, GAIA, TrendChart } from "@/components/farmers/charts";
 import { Panel, addDays, dayList } from "@/components/dash/Dash";
 
 const FROM_START = "2000-01-01";
-const str = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(Number(n)));
+export const str = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(Number(n)));
 const val = (s: string) => {
   const v = Number(s.replace(/,/g, "").trim());
   return s.trim() === "" || !Number.isFinite(v) ? 0 : v;
 };
 const fromLabel = (d: string) => (d === FROM_START ? "from the start" : `from ${d}`);
-const label = "mb-1 block text-[11px] font-medium text-muted-foreground";
-const big = "h-11 w-full rounded-lg border border-border bg-white px-3 text-right text-[18px] font-semibold focus:border-foreground/40 focus:outline-none";
+export const label = "mb-1 block text-[11px] font-medium text-muted-foreground";
+export const big = "h-11 w-full rounded-lg border border-border bg-white px-3 text-right text-[18px] font-semibold focus:border-foreground/40 focus:outline-none";
 
-function useSave() {
+export function useSave() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -53,7 +56,7 @@ function Stat({ label: l, value, unit, note }: { label: string; value: string; u
   );
 }
 
-function Status({ error, savedAt, dirty, saved }: { error: string | null; savedAt: string | null; dirty: boolean; saved: boolean }) {
+export function Status({ error, savedAt, dirty, saved }: { error: string | null; savedAt: string | null; dirty: boolean; saved: boolean }) {
   return (
     <span className="text-[12px] text-muted-foreground">
       {error ? <span className="font-semibold text-destructive">{error}</span>
@@ -64,13 +67,14 @@ function Status({ error, savedAt, dirty, saved }: { error: string | null; savedA
 
 /** Electricity for one day: units used x the price per unit in force that day. */
 export function ElectricityDay({
-  date, today, entry, rates, history,
+  date, today, entry, rates, history, readings,
 }: {
   date: string;
   today: string;
   entry: HeadDay | null;
   rates: ElectricityRate[];
   history: HeadDay[];
+  readings: MeterReading[];
 }) {
   const [units, setUnits] = useState(str(entry?.qty) || "0");
   const [dirty, setDirty] = useState(false);
@@ -108,6 +112,8 @@ export function ElectricityDay({
           </div>
         </form>
       </Section>
+
+      <MeterSection date={date} readings={readings} history={history} />
 
       <HeadCharts history={history} today={today} kind="electricity" />
 
@@ -181,23 +187,39 @@ function RateCard({ rates, today }: { rates: ElectricityRate[]; today: string })
   );
 }
 
-/** Labour for one day: how many labourers worked and the total paid. */
+/** Labour for one day, in three sections: day, night and contract. */
 export function LabourDay({
-  date, today, entry, history,
+  date, today, entry, history, shifts, rates,
 }: {
   date: string;
   today: string;
   entry: HeadDay | null;
   history: HeadDay[];
+  shifts: Record<string, LabourShifts>;
+  rates: LabourRateRow[];
 }) {
-  const [workers, setWorkers] = useState(str(entry?.qty) || "0");
-  const [total, setTotal] = useState(str(entry?.amount) || "0");
+  const saved = shifts[date];
+  const [f, setF] = useState<Record<keyof LabourShifts, string>>({
+    dayRegular: str(saved?.dayRegular) || "0", daySpecial: str(saved?.daySpecial) || "0",
+    night: str(saved?.night) || "0", contract: str(saved?.contract) || "0",
+  });
   const [dirty, setDirty] = useState(false);
   const s = useSave();
-  const w = val(workers);
-  const t = val(total);
+  const n: LabourShifts = { dayRegular: val(f.dayRegular), daySpecial: val(f.daySpecial), night: val(f.night), contract: val(f.contract) };
+  const w = labourCount(n);
+  const R: LabourRates = labourRatesOn(rates, date) ?? DEFAULT_LABOUR_RATES;
+  const t = labourAmount(n, R);
   const milk = entry?.milk_processed_l ? Number(entry.milk_processed_l) : null;
-  const change = (f: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => { f(e.target.value); setDirty(true); s.clear(); };
+  const change = (k: keyof LabourShifts) => (e: React.ChangeEvent<HTMLInputElement>) => { setF((p) => ({ ...p, [k]: e.target.value })); setDirty(true); s.clear(); };
+  const legacy = !saved && entry?.amount != null;
+
+  const box = (k: keyof LabourShifts, name: string, rate: number, focus = false) => (
+    <label>
+      <span className={label}>{name} · ₹{rate} each</span>
+      <input inputMode="numeric" value={f[k]} autoFocus={focus} onFocus={(e) => e.target.select()} onChange={change(k)} className={big} aria-label={name} />
+      <span className="mt-1 block text-right text-[11px] text-muted-foreground">₹{formatNumber(val(f[k]) * rate, 0)}</span>
+    </label>
+  );
 
   return (
     <>
@@ -205,63 +227,139 @@ export function LabourDay({
         <DateBar date={date} today={today} basePath="/labour" />
       </div>
 
-      <Section title={`Labour · ${date}`} description="Enter how many labourers worked today and the total amount paid to them.">
-        <form className="space-y-4 p-4" onSubmit={(e) => { e.preventDefault(); s.run(() => saveLabourDay(date, workers, total), () => setDirty(false)); }}>
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,14rem)_1fr]">
-            <label>
-              <span className={label}>Labourers today</span>
-              <input inputMode="numeric" value={workers} autoFocus onFocus={(e) => e.target.select()} onChange={change(setWorkers)} className={big} aria-label="Labourers" />
-            </label>
-            <label>
-              <span className={label}>Total amount ₹</span>
-              <input inputMode="decimal" value={total} onFocus={(e) => e.target.select()} onChange={change(setTotal)} className={big} aria-label="Total amount" />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <Stat label="Per labourer" value={w > 0 && t > 0 ? `₹${formatNumber(t / w, 0)}` : "—"} />
-              <Stat label="Per litre of milk" value={t > 0 && milk ? `₹${formatNumber(t / milk, 3)}` : "—"} note={milk ? `${formatNumber(milk, 0)} L processed` : "Milk processed not entered"} />
+      <form onSubmit={(e) => { e.preventDefault(); s.run(() => saveLabourDay(date, f), () => setDirty(false)); }} className="space-y-5">
+        {legacy ? (
+          <p className="rounded-lg bg-muted/60 px-4 py-3 text-[12px] text-muted-foreground">
+            This day was saved before the split: {formatNumber(Number(entry?.qty), 0)} labourers, ₹{formatNumber(Number(entry?.amount), 0)} in all. Saving here replaces it with the figures below.
+          </p>
+        ) : null}
+
+        <div className="grid gap-5 md:grid-cols-3">
+          <Section title="Day" description={`₹${R.dayRegular} each; special day labour ₹${R.daySpecial}.`}>
+            <div className="grid grid-cols-2 gap-3 p-4">
+              {box("dayRegular", "Day", R.dayRegular, true)}
+              {box("daySpecial", "Special", R.daySpecial)}
             </div>
-          </div>
-          <div className="flex items-center justify-end gap-3">
-            <Status error={s.error} savedAt={s.savedAt} dirty={dirty} saved={entry?.amount != null} />
-            <Button type="submit" disabled={s.pending || !dirty} className="bg-foreground text-background hover:bg-foreground/85">
-              {s.pending ? "Saving…" : "Save day"}
-            </Button>
-          </div>
-        </form>
-      </Section>
+          </Section>
+          <Section title="Night" description={`₹${R.night} each.`}>
+            <div className="p-4">{box("night", "Night", R.night)}</div>
+          </Section>
+          <Section title="Contract" description={`₹${R.contract} each.`}>
+            <div className="p-4">{box("contract", "Contract", R.contract)}</div>
+          </Section>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Labourers" value={formatNumber(w, 0)} />
+          <Stat label="Total paid" value={`₹${formatNumber(t, 0)}`} />
+          <Stat label="Per litre of milk" value={t > 0 && milk ? `₹${formatNumber(t / milk, 3)}` : "—"} note={milk ? `${formatNumber(milk, 0)} L processed` : "Milk processed not entered"} />
+        </div>
+        <div className="flex items-center justify-end gap-3">
+          <Status error={s.error} savedAt={s.savedAt} dirty={dirty} saved={entry?.amount != null} />
+          <Button type="submit" disabled={s.pending || !dirty} className="bg-foreground text-background hover:bg-foreground/85">
+            {s.pending ? "Saving…" : "Save day"}
+          </Button>
+        </div>
+      </form>
 
       <HeadCharts history={history} today={today} kind="labour" />
 
-      <div className="max-w-3xl">
+      <LabourRateCard rates={rates} today={today} />
+
+      <div className="max-w-5xl">
         <Section title="Day by day">
           <div className="overflow-x-auto">
             <table className="w-full whitespace-nowrap text-[13px]">
               <THead>
                 <Th align="left">Date</Th>
-                <Th>Labourers</Th>
+                <Th>Day</Th>
+                <Th>Special</Th>
+                <Th>Night</Th>
+                <Th>Contract</Th>
                 <Th>Total ₹</Th>
-                <Th>₹ / labourer</Th>
                 <Th>Milk L</Th>
                 <Th>₹ / L milk</Th>
               </THead>
               <tbody>
-                {history.map((d) => (
-                  <tr key={d.day} className={`border-b border-border/70 hover:bg-muted/60 ${d.day === date ? "bg-muted/60" : ""}`}>
-                    <td className="px-3 py-1.5"><Link href={`/labour?date=${d.day}`} className="font-semibold text-foreground hover:underline">{d.day}</Link></td>
-                    <td className="num px-3 py-1.5 text-right">{d.qty == null ? "—" : formatNumber(Number(d.qty), 0)}</td>
-                    <td className="num px-3 py-1.5 text-right font-semibold text-foreground">{formatNumber(Number(d.amount), 0)}</td>
-                    <td className="num px-3 py-1.5 text-right">{d.qty ? formatNumber(Number(d.amount) / Number(d.qty), 0) : "—"}</td>
-                    <td className="num px-3 py-1.5 text-right text-muted-foreground">{d.milk_processed_l ? formatNumber(Number(d.milk_processed_l), 0) : "—"}</td>
-                    <td className="num px-3 py-1.5 text-right text-muted-foreground">{d.milk_processed_l ? formatNumber(Number(d.amount) / Number(d.milk_processed_l), 3) : "—"}</td>
-                  </tr>
-                ))}
-                {history.length === 0 ? <Empty colSpan={6}>No labour entered yet.</Empty> : null}
+                {history.map((d) => {
+                  const x = shifts[d.day];
+                  const cell = (v: number | undefined) => (x ? formatNumber(v ?? 0, 0) : "—");
+                  return (
+                    <tr key={d.day} className={`border-b border-border/70 hover:bg-muted/60 ${d.day === date ? "bg-muted/60" : ""}`}>
+                      <td className="px-3 py-1.5"><Link href={`/labour?date=${d.day}`} className="font-semibold text-foreground hover:underline">{d.day}</Link></td>
+                      <td className="num px-3 py-1.5 text-right">{cell(x?.dayRegular)}</td>
+                      <td className="num px-3 py-1.5 text-right">{cell(x?.daySpecial)}</td>
+                      <td className="num px-3 py-1.5 text-right">{cell(x?.night)}</td>
+                      <td className="num px-3 py-1.5 text-right">{cell(x?.contract)}</td>
+                      <td className="num px-3 py-1.5 text-right font-semibold text-foreground">{formatNumber(Number(d.amount), 0)}</td>
+                      <td className="num px-3 py-1.5 text-right text-muted-foreground">{d.milk_processed_l ? formatNumber(Number(d.milk_processed_l), 0) : "—"}</td>
+                      <td className="num px-3 py-1.5 text-right text-muted-foreground">{d.milk_processed_l ? formatNumber(Number(d.amount) / Number(d.milk_processed_l), 3) : "—"}</td>
+                    </tr>
+                  );
+                })}
+                {history.length === 0 ? <Empty colSpan={8}>No labour entered yet.</Empty> : null}
               </tbody>
             </table>
           </div>
         </Section>
       </div>
     </>
+  );
+}
+
+/** The labour rate history, and a form to set new rates from a date. */
+function LabourRateCard({ rates, today }: { rates: LabourRateRow[]; today: string }) {
+  const current = rates[0] ?? { ...DEFAULT_LABOUR_RATES };
+  const [from, setFrom] = useState(today);
+  const [f, setF] = useState<Record<keyof LabourRates, string>>({
+    dayRegular: str(current.dayRegular), daySpecial: str(current.daySpecial), night: str(current.night), contract: str(current.contract),
+  });
+  const s = useSave();
+  const field = (k: keyof LabourRates, name: string) => (
+    <label>
+      <span className={label}>{name} ₹</span>
+      <Input inputMode="decimal" value={f[k]} onChange={(e) => setF((p) => ({ ...p, [k]: e.target.value }))} className="h-9 w-24 text-right" />
+    </label>
+  );
+  return (
+    <Section title="Rates" description="Pay per labourer. New rates apply from their date on; earlier days keep the rates they had, and days already entered from that date are re-costed.">
+      <form className="flex flex-wrap items-end gap-3 border-b border-border p-4"
+        onSubmit={(e) => { e.preventDefault(); s.run(() => setLabourRates(from, f)); }}>
+        {field("dayRegular", "Day")}
+        {field("daySpecial", "Special day")}
+        {field("night", "Night")}
+        {field("contract", "Contract")}
+        <label>
+          <span className={label}>From</span>
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-40" />
+        </label>
+        <Button type="submit" disabled={s.pending} variant="outline" className="h-9">{s.pending ? "Saving…" : "Change rates"}</Button>
+        {s.error ? <p className="w-full text-[12px] font-semibold text-destructive">{s.error}</p> : null}
+        {s.savedAt && !s.error ? <p className="w-full text-[12px] text-muted-foreground">Saved at {s.savedAt}</p> : null}
+      </form>
+      <div className="overflow-x-auto">
+        <table className="w-full whitespace-nowrap text-[13px]">
+          <THead>
+            <Th align="left">Applies</Th>
+            <Th>Day</Th>
+            <Th>Special</Th>
+            <Th>Night</Th>
+            <Th>Contract</Th>
+          </THead>
+          <tbody>
+            {rates.map((r, i) => (
+              <tr key={r.id} className="border-b border-border/70">
+                <td className="px-3 py-1.5 text-muted-foreground">{fromLabel(r.effective_from)}{i === 0 ? " · current" : ""}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold text-foreground">₹{formatNumber(r.dayRegular, 0)}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold text-foreground">₹{formatNumber(r.daySpecial, 0)}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold text-foreground">₹{formatNumber(r.night, 0)}</td>
+                <td className="num px-3 py-1.5 text-right font-semibold text-foreground">₹{formatNumber(r.contract, 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 

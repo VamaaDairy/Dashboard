@@ -1,6 +1,7 @@
 import "server-only";
 import { query } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
+import type { Basis } from "@/lib/production/packing";
 
 /** One SKU's line on a day: the SKU, and what was packed into it that day. */
 export interface SkuDayRow {
@@ -160,6 +161,8 @@ export interface PackingListLine {
   unit: "kg" | "pcs";
   qty: number;           // per piece or per case, in the item's unit
   per: "pc" | "case";
+  basis: Basis;          // how qty is worked out ...
+  factor: number | null; // ... and the number it is worked out from (null for a plain quantity)
   rate: number | null;
 }
 
@@ -168,7 +171,7 @@ export async function getSkuPackingLists(): Promise<Record<string, PackingListLi
   const rows = await query<PackingListLine & { sku_id: string }>(
     `select i.sku_id, i.packaging_id, o.name,
             case when coalesce(u.value_text, u.computed_text) = 'kg' then 'kg' else 'pcs' end as unit,
-            i.qty, i.per, r.value_num as rate
+            i.qty, i.per, i.basis, i.factor, r.value_num as rate
        from sku_packing_item i
        join sku s on s.id = i.sku_id
        join cost_object o on o.id = i.packaging_id
@@ -181,6 +184,33 @@ export async function getSkuPackingLists(): Promise<Record<string, PackingListLi
     [await activeScenarioId()],
   );
   const out: Record<string, PackingListLine[]> = {};
-  for (const { sku_id, ...l } of rows) (out[sku_id] ??= []).push({ ...l, qty: Number(l.qty), rate: l.rate === null ? null : Number(l.rate) });
+  for (const { sku_id, ...l } of rows) (out[sku_id] ??= []).push({ ...l, qty: Number(l.qty), factor: l.factor === null ? null : Number(l.factor), rate: l.rate === null ? null : Number(l.rate) });
   return out;
+}
+
+/** A packing list saved against a bulk product, to be loaded onto a SKU. */
+export interface PackTemplate {
+  id: string;
+  name: string;
+  note: string | null;
+  bulk_product_id: string | null;
+  lines: { packaging_id: string; qty: number; per: "pc" | "case"; basis: Basis; factor: number | null }[];
+}
+
+export async function getPackTemplates(): Promise<PackTemplate[]> {
+  const scenario = await activeScenarioId();
+  const [templates, items] = await Promise.all([
+    query<Omit<PackTemplate, "lines">>(
+      `select id, name, note, bulk_product_id from pack_template where scenario_id = $1 order by sort_order, name`, [scenario]),
+    query<PackTemplate["lines"][number] & { template_id: string }>(
+      `select i.template_id, i.packaging_id, i.qty, i.per, i.basis, i.factor
+         from pack_template_item i join pack_template t on t.id = i.template_id
+        where t.scenario_id = $1 order by i.template_id, i.sort_order`, [scenario]),
+  ]);
+  return templates.map((t) => ({
+    ...t,
+    lines: items.filter((i) => i.template_id === t.id).map((l) => ({
+      packaging_id: l.packaging_id, per: l.per, basis: l.basis, qty: Number(l.qty), factor: l.factor === null ? null : Number(l.factor),
+    })),
+  }));
 }

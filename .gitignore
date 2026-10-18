@@ -40,3 +40,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# https / logs
+/certs/
+/logs/
+
+# local scratch: cookie jar (live session token), logs, page dumps, spreadsheets, third-party spec
+cj.txt
+*.log
+p.html
+*.xlsx
+src/app/md.md

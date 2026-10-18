@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession } from "@/lib/auth";
+import { userFromToken } from "@/lib/access-server";
+import { atLeast, firstAllowedPath, levelFor, matchPath } from "@/lib/access";
+
+function toLogin(req: NextRequest, hadToken: boolean) {
+  const res = NextResponse.redirect(new URL("/login", req.url));
+  if (hadToken) res.cookies.set("session", "", { maxAge: 0, path: "/" });
+  return res;
+}
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -14,19 +21,34 @@ export async function proxy(req: NextRequest) {
   }
 
   const token = req.cookies.get("session")?.value;
-  const session = token ? await verifySession(token) : null;
+  let user: Awaited<ReturnType<typeof userFromToken>>;
+  try {
+    // read from the database every time, so removing someone or changing their access bites immediately
+    user = await userFromToken(token);
+  } catch (e) {
+    console.error("proxy: access lookup failed", e);
+    return new NextResponse("Cannot reach the database right now.", { status: 503 });
+  }
 
   if (pathname.startsWith("/login")) {
-    return session ? NextResponse.redirect(new URL("/", req.url)) : NextResponse.next();
+    return user ? NextResponse.redirect(new URL(firstAllowedPath(user), req.url)) : NextResponse.next();
   }
+  if (!user) return toLogin(req, !!token);
 
-  if (!session) {
-    const res = NextResponse.redirect(new URL("/login", req.url));
-    if (token) res.cookies.set("session", "", { maxAge: 0, path: "/" });
-    return res;
-  }
+  const match = matchPath(pathname);
+  if (match.kind === "open") return NextResponse.next();
 
-  return NextResponse.next();
+  // Reading needs "view"; anything else (server actions are POSTs to the page) needs "edit".
+  const reading = req.method === "GET" || req.method === "HEAD";
+  const allowed =
+    match.kind === "owner"
+      ? user.role === "owner"
+      : atLeast(levelFor(user, match.key), reading ? "view" : "edit");
+  if (allowed) return NextResponse.next();
+
+  if (!reading) return new NextResponse("You do not have permission to change this.", { status: 403 });
+  const home = firstAllowedPath(user);
+  return NextResponse.redirect(new URL(home === pathname ? "/no-access" : home, req.url));
 }
 
 export const config = {

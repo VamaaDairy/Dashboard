@@ -145,7 +145,7 @@ export async function deleteMovement(id: string, tankId: string): Promise<Result
         for (const t of p.tanks) await recomputeTank(client, t);
         return;
       }
-      if (m.rows[0]?.source === "production") throw new Error("This milk went into production - change it on the Production page");
+      if (m.rows[0]?.source === "production" || m.rows[0]?.source === "production_return") throw new Error("This milk went into production - change it on the Production page");
       if (m.rows[0]?.source) throw new Error("This came from Milk in - change its tank on the Milk in page");
       await client.query(`delete from tank_movement where id = $1`, [id]);
       await recomputeTank(client, tankId);

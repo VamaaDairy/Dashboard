@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
 import { kgOfSolid } from "@/lib/units";
 import { batchComplete } from "@/lib/production/complete";
-import { headColor, tint } from "@/lib/costing/colors";
 import type { Batch, BatchMilk, BulkProduct, IngredientOption, ProductionDaySummary } from "@/lib/production/data";
 import type { TankDay } from "@/lib/tanks/data";
 
@@ -23,7 +22,7 @@ type Line = { ingredient_id: string | null; name: string; qty: string; unit: str
 type Draw = { tank_id: string; litres: string };
 type Row = {
   output_qty: string; labour_workers: string; labour_hours: string; labour_cost: string;
-  milk: Draw[]; ingredients: Line[];
+  milk: Draw[]; returns: Draw[]; ingredients: Line[];
 };
 type Blend = { fat: number | null; snf: number | null; rate: number | null };
 const LABOUR = ["labour_workers", "labour_hours", "labour_cost"] as const;
@@ -36,8 +35,13 @@ const val = (s: string) => {
 };
 const num = (n: number | null | undefined) => (n === null || n === undefined ? null : Number(n));
 
+/** Litres in a list of tank lines (those with a tank and a quantity). */
+function returned(lines: Draw[]): number {
+  return lines.reduce((s, d) => s + (d.tank_id ? Math.max(val(d.litres) ?? 0, 0) : 0), 0);
+}
+
 function blankRow(): Row {
-  return { output_qty: "0", labour_workers: "0", labour_hours: "0", labour_cost: "0", milk: [], ingredients: [] };
+  return { output_qty: "0", labour_workers: "0", labour_hours: "0", labour_cost: "0", milk: [], returns: [], ingredients: [] };
 }
 
 const cell = "w-16 rounded-md border border-border bg-white px-1.5 py-1 text-right text-[13px] focus:border-foreground/40 focus:outline-none";
@@ -55,8 +59,12 @@ function blendOf(tankId: string, tanks: TankDay[], saved: BatchMilk[]): Blend {
   return { fat: num(t?.close_fat_pct), snf: num(t?.close_snf_pct), rate: num(t?.close_cost_per_litre) };
 }
 
-/** A product's milk: total litres, weighted fat and SNF, kg of each, and cost. */
-function milkOf(draws: Draw[], tanks: TankDay[], saved: BatchMilk[], kgPerLitre: number) {
+/**
+ * A product's milk: total litres, weighted fat and SNF, kg of each, and cost.
+ * Milk returned to a tank goes back at the draws' blend, so it comes off the
+ * litres, kg and cost in proportion and leaves fat % and SNF % as they were.
+ */
+function milkOf(draws: Draw[], returns: Draw[], tanks: TankDay[], saved: BatchMilk[], kgPerLitre: number) {
   let litres = 0, kgFat = 0, kgSnf = 0, cost = 0, kgMilk = 0;
   for (const d of draws) {
     const l = val(d.litres) ?? 0;
@@ -68,18 +76,18 @@ function milkOf(draws: Draw[], tanks: TankDay[], saved: BatchMilk[], kgPerLitre:
     kgSnf += kgOfSolid(l, b.snf, kgPerLitre) ?? 0;
     cost += l * (b.rate ?? 0);
   }
+  const back = Math.min(returned(returns), litres);
+  const keep = litres > 0 ? 1 - back / litres : 1;
   return {
-    litres, kgFat, kgSnf, cost,
+    litres: litres - back, kgFat: kgFat * keep, kgSnf: kgSnf * keep, cost: cost * keep,
     fat: kgMilk > 0 ? (kgFat / kgMilk) * 100 : null,
     snf: kgMilk > 0 ? (kgSnf / kgMilk) * 100 : null,
   };
 }
 
 export function BulkProductionDay({
-  date, today, products, batches, ingredients, kgPerLitre, history, tanks, shared,
+  date, today, products, batches, ingredients, kgPerLitre, history, tanks,
 }: {
-  /** the day's shared costs (all overheads but delivery), head by head, and the litres they are divided over */
-  shared: { amount: number; litres: number; rate: number | null; heads: { code: string; label: string; amount: number; rate: number }[] };
   date: string;
   today: string;
   products: BulkProduct[];
@@ -100,6 +108,7 @@ export function BulkProductionDay({
         output_qty: str(b.output_qty), labour_workers: str(b.labour_workers), labour_hours: str(b.labour_hours),
         labour_cost: str(b.labour_cost),
         milk: b.milk.map((m) => ({ tank_id: m.tank_id, litres: String(Number(m.litres)) })),
+        returns: b.returns.map((m) => ({ tank_id: m.tank_id, litres: String(Number(m.litres)) })),
         ingredients: b.ingredients.map((i) => ({ ingredient_id: i.ingredient_id, name: i.name, qty: String(Number(i.qty)), unit: i.unit })),
       }];
     })),
@@ -117,7 +126,7 @@ export function BulkProductionDay({
     setSavedAt(null);
   };
 
-  const milk = (id: string) => milkOf(rows[id].milk, tanks, savedMilk(id), kgPerLitre);
+  const milk = (id: string) => milkOf(rows[id].milk, rows[id].returns, tanks, savedMilk(id), kgPerLitre);
   const isUsed = (id: string) => {
     const r = rows[id];
     return milk(id).litres > 0 || (val(r.output_qty) ?? 0) > 0 || r.ingredients.length > 0
@@ -148,7 +157,8 @@ export function BulkProductionDay({
   // draws already saved today (the save replaces them), less what the table now asks for
   const available = (tankId: string, except?: { product: string; index: number }) => {
     const t = tanks.find((x) => x.tank_id === tankId);
-    const savedToday = batches.reduce((s, b) => s + b.milk.filter((m) => m.tank_id === tankId).reduce((a, m) => a + Number(m.litres), 0), 0);
+    const savedToday = batches.reduce((s, b) => s + b.milk.filter((m) => m.tank_id === tankId).reduce((a, m) => a + Number(m.litres), 0), 0)
+      - batches.reduce((s, b) => s + b.returns.filter((m) => m.tank_id === tankId).reduce((a, m) => a + Number(m.litres), 0), 0);
     let asked = 0;
     for (const [pid, r] of Object.entries(rows)) {
       r.milk.forEach((d, i) => {
@@ -168,6 +178,7 @@ export function BulkProductionDay({
         output_qty: val(r.output_qty), labour_workers: val(r.labour_workers), labour_hours: val(r.labour_hours),
         labour_cost: val(r.labour_cost), notes: null,
         milk: r.milk.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => ({ tank_id: d.tank_id, litres: val(d.litres) ?? 0 })),
+        returns: r.returns.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => ({ tank_id: d.tank_id, litres: val(d.litres) ?? 0 })),
         ingredients: r.ingredients.map((l) => ({ ingredient_id: l.ingredient_id, name: l.name, qty: Number(l.qty), unit: l.unit })),
       };
     });
@@ -241,17 +252,6 @@ export function BulkProductionDay({
               <Th>Kg fat</Th>
               <Th>Kg SNF</Th>
               <Th>Milk ₹</Th>
-              {shared.heads.map((h) => (
-                <th key={h.code} className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-tertiary-foreground" style={{ background: tint(headColor(h.code), 0.12), borderTop: `3px solid ${headColor(h.code)}` }} title={`₹${formatNumber(h.rate, 3)} per litre of milk`}>
-                  {h.label} ₹
-                  <div className="num mt-0.5 font-semibold normal-case tracking-normal text-foreground">₹{formatNumber(h.amount, 0)} ÷ {formatNumber(shared.litres, 0)} L</div>
-                  <div className="num font-normal normal-case tracking-normal">= ₹{formatNumber(h.rate, 3)} / L</div>
-                </th>
-              ))}
-              <th className="bg-muted px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-tertiary-foreground">
-                Shared ₹
-                {shared.rate !== null ? <div className="num mt-0.5 font-semibold normal-case tracking-normal text-foreground">= ₹{formatNumber(shared.rate, 2)} / L</div> : null}
-              </th>
               <Th align="left">Ingredients</Th>
               <Th>Yield</Th>
               <Th>Per 100 L milk</Th>
@@ -267,6 +267,7 @@ export function BulkProductionDay({
                 const used = isUsed(p.id);
                 const complete = isComplete(p);
                 const draws = r.milk.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0);
+                const back = Math.min(returned(r.returns), returned(r.milk));
                 const tankName = (id: string) => tanks.find((t) => t.tank_id === id)?.name ?? "Tank";
                 const entered = r.ingredients.filter((l) => Number(l.qty) > 0);
                 const missing = p.ingredients.filter((i) => !entered.some((l) => l.ingredient_id === i.ingredient_id));
@@ -296,11 +297,12 @@ export function BulkProductionDay({
                     <td className="max-w-56 px-3 py-1.5">
                       <button onClick={() => setDrawing(p.id)}
                         className="inline-flex max-w-full items-center gap-1.5 truncate rounded-md border border-border px-2 py-1 text-left text-[12px] hover:bg-muted"
-                        title={draws.map((d) => `${tankName(d.tank_id)}: ${d.litres} L`).join("\n") || "Take milk from a tank"}>
+                        title={[...draws.map((d) => `${tankName(d.tank_id)}: ${d.litres} L`), ...r.returns.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => `Returned to ${tankName(d.tank_id)}: ${d.litres} L`)].join("\n") || "Take milk from a tank"}>
                         <Milk className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         {draws.length
                           ? <span className="truncate font-semibold text-foreground">
                               {formatNumber(m.litres, 0)} L · {draws.map((d) => tankName(d.tank_id)).join(", ")}
+                              {back > 0 ? <span className="font-normal text-muted-foreground"> · {formatNumber(back, 0)} L returned</span> : null}
                             </span>
                           : <span className="text-muted-foreground">Take from tank</span>}
                       </button>
@@ -310,14 +312,6 @@ export function BulkProductionDay({
                     <td className="num px-3 py-1.5 text-right">{formatNumber(m.kgFat, 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{formatNumber(m.kgSnf, 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{m.litres > 0 ? formatNumber(m.cost, 0) : "—"}</td>
-                    {shared.heads.map((h) => (
-                      <td key={h.code} className="num px-3 py-1.5 text-right text-muted-foreground" style={{ background: tint(headColor(h.code), 0.06) }} title={`${formatNumber(m.litres, 0)} L × ₹${formatNumber(h.rate, 3)}`}>
-                        {m.litres > 0 ? formatNumber(m.litres * h.rate, 0) : "—"}
-                      </td>
-                    ))}
-                    <td className="num bg-muted/60 px-3 py-1.5 text-right font-semibold text-foreground" title={shared.rate === null ? "Shared costs appear once the day has electricity, fuel, labour or transport entered" : `${formatNumber(m.litres, 0)} L × ₹${formatNumber(shared.rate, 2)} per litre`}>
-                      {m.litres > 0 && shared.rate !== null ? formatNumber(m.litres * shared.rate, 0) : "—"}
-                    </td>
                     <td className="max-w-56 px-3 py-1.5">
                       <button onClick={() => setEditing(p.id)}
                         className="block max-w-full truncate rounded-md border border-border px-2 py-1 text-left text-[12px] hover:bg-muted"
@@ -348,7 +342,7 @@ export function BulkProductionDay({
                   </tr>
                 );
               })}
-              {active.length === 0 ? <Empty colSpan={15 + shared.heads.length}>No products yet - add them below.</Empty> : null}
+              {active.length === 0 ? <Empty colSpan={14}>No products yet - add them below.</Empty> : null}
             </tbody>
             {active.length ? (
               <tfoot>
@@ -360,8 +354,6 @@ export function BulkProductionDay({
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgFat, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgSnf, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.milkCost, 0)}</td>
-                  {shared.heads.map((h) => <td key={h.code} className="num px-3 py-2 text-right" style={{ background: tint(headColor(h.code), 0.06) }}>{formatNumber(totals.milk * h.rate, 0)}</td>)}
-                  <td className="num bg-muted/60 px-3 py-2 text-right">{shared.rate !== null ? formatNumber(totals.milk * shared.rate, 0) : "—"}</td>
                   <td colSpan={4} />
                   <td className="num px-3 py-2 text-right text-muted-foreground">{formatNumber(totals.workerHours, 1)} h</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.labour, 0)}</td>
@@ -371,14 +363,6 @@ export function BulkProductionDay({
           </table>
         </div>
       </Section>
-
-      <p className="-mt-2 text-[12px] text-muted-foreground">
-        <span className="font-semibold text-foreground">Shared costs</span> (tinted columns) = each batch&apos;s litres × each head&apos;s ₹ per litre
-        {shared.rate !== null
-          ? <> - today {shared.heads.map((h) => `${h.label} ₹${formatNumber(h.amount, 0)}`).join(", ")} ÷ {formatNumber(shared.litres, 0)} L = <span className="num font-semibold text-foreground">₹{formatNumber(shared.rate, 2)} per litre</span> in all.</>
-          : <> - nothing entered for this day yet (Electricity, Labour, Fuel, Transport).</>}{" "}
-        <Link href={`/daily/dashboard?from=${date}&to=${date}`} className="font-semibold text-foreground underline">How it&apos;s worked out →</Link>
-      </p>
 
       <IngredientsDialog
         product={editingProduct}
@@ -396,12 +380,13 @@ export function BulkProductionDay({
               product={drawingProduct}
               date={date}
               draws={rows[drawingProduct.id].milk}
+              returns={rows[drawingProduct.id].returns}
               tanks={tanks}
               saved={savedMilk(drawingProduct.id)}
               kgPerLitre={kgPerLitre}
               available={(tankId) => available(tankId, { product: drawingProduct.id, index: -1 }) + rows[drawingProduct.id].milk
                 .filter((d) => d.tank_id === tankId).reduce((s, d) => s + (val(d.litres) ?? 0), 0)}
-              onSave={(draws) => { set(drawingProduct.id, { milk: draws }); setDrawing(null); }}
+              onSave={(draws, returns) => { set(drawingProduct.id, { milk: draws, returns }); setDrawing(null); }}
               onClose={() => setDrawing(null)}
             />
           ) : null}
@@ -451,36 +436,43 @@ export function BulkProductionDay({
  * can feed the same product - each is its own card.
  */
 function MilkBody({
-  product, date, draws, tanks, saved, kgPerLitre, available, onSave, onClose,
+  product, date, draws, returns, tanks, saved, kgPerLitre, available, onSave, onClose,
 }: {
   product: BulkProduct;
   date: string;
   draws: Draw[];
+  returns: Draw[];
   tanks: TankDay[];
   saved: BatchMilk[];
   kgPerLitre: number;
   /** litres a tank can give this product (what the other products are taking already excluded) */
   available: (tankId: string) => number;
-  onSave: (draws: Draw[]) => void;
+  onSave: (draws: Draw[], returns: Draw[]) => void;
   onClose: () => void;
 }) {
+  const [back, setBack] = useState<Draw[]>(() => returns);
   const [lines, setLines] = useState<Draw[]>(() => (draws.length ? draws : [{ tank_id: "", litres: "" }]));
   const update = (i: number, patch: Partial<Draw>) => setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
   const choosable = tanks.filter((t) => t.is_active || Number(t.close_litre) > 0 || saved.some((s) => s.tank_id === t.tank_id));
   // litres this dialog asks of a tank, other than line i
   const askedElsewhere = (tankId: string, i: number) =>
     lines.reduce((s, l, k) => (k !== i && l.tank_id === tankId ? s + (val(l.litres) ?? 0) : s), 0);
-  const total = milkOf(lines, tanks, saved, kgPerLitre);
+  const total = milkOf(lines, [], tanks, saved, kgPerLitre);
+  const net = milkOf(lines, back, tanks, saved, kgPerLitre);
+  const backLitres = returned(back);
+  const tooMuchBack = backLitres > total.litres + 0.05;
+  const updateBack = (i: number, patch: Partial<Draw>) => setBack((bs) => bs.map((b, k) => (k === i ? { ...b, ...patch } : b)));
+  const returnTanks = tanks.filter((t) => t.is_active || back.some((b) => b.tank_id === t.tank_id));
   const over = lines.some((l, i) => l.tank_id && (val(l.litres) ?? 0) > available(l.tank_id) - askedElsewhere(l.tank_id, i) + 0.05);
   const dash = (v: number | null | undefined, d = 2) => (v === null || v === undefined ? "—" : formatNumber(v, d));
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSave(lines.filter((l) => l.tank_id && (val(l.litres) ?? 0) > 0)); }}>
+    <form onSubmit={(e) => { e.preventDefault(); onSave(lines.filter((l) => l.tank_id && (val(l.litres) ?? 0) > 0), back.filter((b) => b.tank_id && (val(b.litres) ?? 0) > 0)); }}>
       <DialogHeader>
         <DialogTitle>{product.name} · milk from tanks</DialogTitle>
         <DialogDescription>
           Pick the tank and how many litres went into today&apos;s {product.name}. Fat, SNF and cost come from the tank;
-          Save day takes the milk out of it.
+          Save day takes the milk out of it. Milk you didn&apos;t use can be returned to a tank below.
         </DialogDescription>
       </DialogHeader>
 
@@ -563,19 +555,71 @@ function MilkBody({
         </button>
 
         {total.litres > 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-4">
+            <div className="text-[12px] font-semibold text-foreground">Return unused milk to a tank</div>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Milk taken but not used (say 900 L of 10,000 L) goes back as raw milk at the fat, SNF and cost it was drawn at.
+              Only the milk actually used is counted for {product.name}.
+            </p>
+            {back.map((b, i) => {
+              const room = total.litres - (backLitres - (val(b.litres) ?? 0));
+              return (
+                <div key={i} className="mt-2 flex flex-wrap items-end gap-3">
+                  <label className="min-w-48 flex-1">
+                    <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Return to tank</span>
+                    <select value={b.tank_id} onChange={(e) => updateBack(i, { tank_id: e.target.value })}
+                      className="h-9 w-full rounded-lg border border-border bg-white px-2.5 text-[13px]" aria-label="Return to tank">
+                      <option value="">Choose tank</option>
+                      {returnTanks.map((t) => <option key={t.tank_id} value={t.tank_id}>{t.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="w-36">
+                    <span className="mb-1 flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+                      Litres
+                      {room > 0 ? (
+                        <button type="button" onClick={() => updateBack(i, { litres: String(Math.round(room * 10) / 10) })}
+                          className="font-semibold hover:text-foreground" title="Return everything not yet returned">All</button>
+                      ) : null}
+                    </span>
+                    <input inputMode="decimal" value={b.litres} onFocus={(e) => e.target.select()}
+                      onChange={(e) => updateBack(i, { litres: e.target.value })}
+                      className={`h-9 w-full rounded-lg border bg-white px-2.5 text-right text-[14px] font-semibold focus:outline-none ${tooMuchBack ? "border-destructive" : "border-border focus:border-foreground/40"}`}
+                      aria-label="Litres returned" />
+                  </label>
+                  <button type="button" onClick={() => setBack((bs) => bs.filter((_, k) => k !== i))}
+                    className="mb-0.5 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground" title="Remove this return">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })}
+            {tooMuchBack ? (
+              <p className="mt-1.5 text-[11px] font-semibold text-destructive">
+                {formatNumber(backLitres, 1)} L returned is more than the {formatNumber(total.litres, 1)} L taken.
+              </p>
+            ) : null}
+            <button type="button" onClick={() => setBack((bs) => [...bs, { tank_id: "", litres: "" }])}
+              className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-muted-foreground hover:text-foreground">
+              <Plus className="h-3.5 w-3.5" /> {back.length ? "Another tank" : "Return milk to a tank"}
+            </button>
+          </div>
+        ) : null}
+
+        {total.litres > 0 ? (
           <div className="rounded-lg border border-foreground/15 bg-muted/40 p-4">
             <div className="text-[11px] font-semibold text-muted-foreground">
-              Total for {product.name}{lines.filter((l) => l.tank_id).length > 1 ? " · weighted average" : ""}
+              {backLitres > 0 ? `Used in ${product.name} (after ${formatNumber(Math.min(backLitres, total.litres), 1)} L returned)` : `Total for ${product.name}`}
+              {lines.filter((l) => l.tank_id).length > 1 ? " · weighted average" : ""}
             </div>
             <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-3 sm:grid-cols-7">
               {[
-                { label: "Litres", value: formatNumber(total.litres, 1) },
-                { label: "Fat %", value: dash(total.fat) },
-                { label: "SNF %", value: dash(total.snf) },
-                { label: "Kg fat", value: formatNumber(total.kgFat, 1) },
-                { label: "Kg SNF", value: formatNumber(total.kgSnf, 1) },
+                { label: "Litres", value: formatNumber(net.litres, 1) },
+                { label: "Fat %", value: dash(net.fat) },
+                { label: "SNF %", value: dash(net.snf) },
+                { label: "Kg fat", value: formatNumber(net.kgFat, 1) },
+                { label: "Kg SNF", value: formatNumber(net.kgSnf, 1) },
                 { label: "Rate ₹ / L", value: formatNumber(total.cost / total.litres, 2) },
-                { label: "Cost ₹", value: formatNumber(total.cost, 0) },
+                { label: "Cost ₹", value: formatNumber(net.cost, 0) },
               ].map((s) => (
                 <div key={s.label}>
                   <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{s.label}</div>
@@ -589,7 +633,7 @@ function MilkBody({
 
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={over} className="bg-foreground text-background hover:bg-foreground/85">Done</Button>
+        <Button type="submit" disabled={over || tooMuchBack} className="bg-foreground text-background hover:bg-foreground/85">Done</Button>
       </DialogFooter>
     </form>
   );

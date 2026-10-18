@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Beaker, Boxes, CalendarDays, ChevronRight, Contact, Cylinder, Droplets, FileClock, Fuel, Home, LogOut,
-  MessageCircle, Package, RefreshCw, Settings2, SlidersHorizontal, Truck, Users, Zap,
+  Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Database, Droplets, FileClock, Fuel, Home, LogOut,
+  MapPinned, MessageCircle, Package, Store, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
+import ordersSidebar from "@/lib/orders/sidebar.json";
 
 const CLASS_ICONS: Record<string, React.ElementType> = {
   milk_batch: Droplets,
@@ -27,66 +28,112 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
  * The two things done every day, and nothing else at this level. Everything
  * that is set up once and then left alone lives further down.
  */
-const DAILY = [
-  { href: "/", label: "Today", icon: Home, exact: true },
+interface NavLeaf { href: string; key: string; label: string; exact?: boolean }
+interface NavItem {
+  href: string; key: string; label: string; icon: React.ElementType; exact?: boolean;
+  children?: NavLeaf[];
+}
+/** Orders: one sidebar section per group of src/lib/orders/sidebar.json, in its order. */
+const ORDERS_ICONS: Record<string, React.ElementType> = {
+  Masters: Database, Insights: BarChart3, "AI Order Suggestion": Sparkles, "AI Intelligence": Sparkles, Employees: Users, Customers: Contact,
+  "Product Management": Package, Purchase: ShoppingBag, Primary: Truck, Secondary: ShoppingBag, "Field Force Management": MapPinned,
+  Promoters: Users, "KPI TARGET": Target, "Van Sales Management": Truck, "Master Configuration": Settings2, "Integration Dashboard": RefreshCw,
+};
+const ORDERS_SECTIONS: NavItem[] = (() => {
+  const seen = new Set<string>();
+  const leaf = (i: { label: string; route: string; url: string }): NavLeaf =>
+    i.route === "homeDashboard"
+      ? { href: "/orders/companyDashboard", key: "fp.companyDashboard", label: i.label }
+      : { href: `/orders${i.url}`, key: `fp.${i.route}`, label: i.label };
+  const out: NavItem[] = [];
+  for (const g of (ordersSidebar as { groups: Array<{ group: string; items: Array<{ label: string; route: string; url: string }> }> }).groups) {
+    const items = g.items.map(leaf).filter((i) => (seen.has(i.key) ? false : (seen.add(i.key), true)));
+    if (!items.length) continue;
+    if (g.group === "(top)") out.push({ ...items[0], icon: Home });
+    else out.push({ href: items[0].href, key: `orders.${g.group}`, label: g.group, icon: ORDERS_ICONS[g.group] ?? Boxes, children: items });
+  }
+  return out;
+})();
+
+const DAILY: NavItem[] = [
+  ...ORDERS_SECTIONS,
+  { href: "/", key: "today", label: "Today", icon: Home, exact: true },
   {
-    href: "/procurement", label: "Milk in", icon: Droplets,
+    href: "/procurement", key: "procurement", label: "Milk in", icon: Droplets,
     children: [
-      { href: "/procurement/vamaa", label: "Collections" },
-      { href: "/procurement/rate-chart", label: "Rate chart" },
-      { href: "/procurement/dashboard", label: "Dashboard" },
+      { href: "/procurement/vamaa", key: "procurement.collections", label: "Collections" },
+      { href: "/procurement/rate-chart", key: "procurement.rates", label: "Rate chart" },
+      { href: "/procurement/dashboard", key: "procurement.dashboard", label: "Dashboard" },
     ],
   },
-  { href: "/farmers", label: "Farmers", icon: Contact },
+  { href: "/farmers", key: "farmers", label: "Farmers", icon: Contact },
   {
-    href: "/tanks", label: "Tanks", icon: Cylinder,
+    href: "/tanks", key: "tanks", label: "Tanks", icon: Cylinder,
     children: [
-      { href: "/tanks", label: "Daily", exact: true },
-      { href: "/tanks/dashboard", label: "Dashboard" },
+      { href: "/tanks", key: "tanks", label: "Daily", exact: true },
+      { href: "/tanks/dashboard", key: "tanks.dashboard", label: "Dashboard" },
     ],
   },
   {
-    href: "/daily", label: "Production", icon: CalendarDays,
+    href: "/daily", key: "production", label: "Production", icon: CalendarDays,
     children: [
-      { href: "/daily", label: "Daily batches", exact: true },
-      { href: "/daily/sku", label: "SKU packing" },
-      { href: "/daily/products", label: "Products & ingredients" },
-      { href: "/daily/dashboard", label: "Dashboard" },
+      { href: "/daily", key: "production", label: "Daily batches", exact: true },
+      { href: "/daily/sku", key: "production.sku", label: "SKU packing" },
+      { href: "/daily/products", key: "production.products", label: "Products & ingredients" },
+      { href: "/daily/dashboard", key: "production.dashboard", label: "Dashboard" },
     ],
   },
   {
-    href: "/fuel", label: "Fuel", icon: Fuel,
+    href: "/fuel", key: "fuel", label: "Fuel", icon: Fuel,
     children: [
-      { href: "/fuel/milk-to-plant", label: "Milk to plant" },
-      { href: "/fuel/delivery", label: "Delivery outside plant" },
-      { href: "/fuel/production", label: "Production in plant" },
-      { href: "/fuel/dashboard", label: "Dashboard" },
+      { href: "/fuel/milk-to-plant", key: "fuel.milk", label: "Milk to plant" },
+      { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery outside plant" },
+      { href: "/fuel/production", key: "fuel.production", label: "Production in plant" },
+      { href: "/fuel/dashboard", key: "fuel.dashboard", label: "Dashboard" },
     ],
   },
   {
-    href: "/transport", label: "Transport", icon: Truck,
+    href: "/transport", key: "transport", label: "Transport", icon: Truck,
     children: [
-      { href: "/transport/milk-to-plant", label: "Milk to plant" },
-      { href: "/transport/delivery", label: "Delivery outside plant" },
+      { href: "/transport/milk-to-plant", key: "transport.milk", label: "Milk to plant" },
+      { href: "/transport/delivery", key: "transport.delivery", label: "Delivery outside plant" },
     ],
   },
   {
-    href: "/whatsapp", label: "WhatsApp shop", icon: MessageCircle,
+    href: "/whatsapp", key: "whatsapp", label: "WhatsApp shop", icon: MessageCircle,
     children: [
-      { href: "/whatsapp/chats", label: "Chats" },
-      { href: "/whatsapp/orders", label: "Orders" },
-      { href: "/whatsapp/products", label: "Catalog & setup" },
-      { href: "/whatsapp/reviews", label: "Reviews" },
+      { href: "/whatsapp/chats", key: "whatsapp", label: "Chats" },
+      { href: "/whatsapp/orders", key: "whatsapp", label: "Orders" },
+      { href: "/whatsapp/products", key: "whatsapp", label: "Catalog & setup" },
+      { href: "/whatsapp/reviews", key: "whatsapp", label: "Reviews" },
     ],
   },
-  { href: "/labour", label: "Labour", icon: Users },
-  { href: "/electricity", label: "Electricity", icon: Zap },
+  { href: "/shop-orders", key: "shop", label: "Shop orders", icon: Store },
+  { href: "/labour", key: "labour", label: "Labour", icon: Users },
+  { href: "/electricity", key: "electricity", label: "Electricity", icon: Zap },
+  {
+    href: "/credit-note", key: "creditnote", label: "Credit notes", icon: ReceiptText,
+    children: [
+      { href: "/credit-note", key: "creditnote", label: "All credit notes", exact: true },
+      { href: "/credit-note/dashboard", key: "creditnote.dashboard", label: "Dashboard" },
+    ],
+  },
+  {
+    href: "/cn", key: "cn", label: "CN Management", icon: ClipboardCheck,
+    children: [
+      { href: "/cn", key: "cn", label: "All complaints", exact: true },
+      { href: "/cn/approvals", key: "cn.approve", label: "Approvals" },
+      { href: "/cn/finance", key: "cn.finance", label: "Finance posting" },
+      { href: "/cn/dashboard", key: "cn.dashboard", label: "Dashboard" },
+    ],
+  },
+  { href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale },
 ];
 
 /** Opened when the model itself changes - rarely, and never during a normal day. */
 const SETUP = [
-  { href: "/schema", label: "Columns & classes", icon: Settings2 },
-  { href: "/audit", label: "Change log", icon: FileClock },
+  { href: "/audit", key: "audit", label: "Change log", icon: FileClock },
+  { href: "/users", key: "", label: "Users", icon: UserPlus, ownerOnly: true },
 ];
 
 export interface SidebarClass {
@@ -103,7 +150,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; role: string; levels: Record<string, string> } | null>(null);
   const [recalcing, setRecalcing] = useState(false);
   // Setup opens itself when you are already in it, otherwise stays shut.
   const [setupOpen, setSetupOpen] = useState(() =>
@@ -113,7 +160,7 @@ export function AppSidebar({
   // Which sections with sub-items are expanded. The one you're in opens by
   // itself; the rest remember how you left them (per browser, best effort).
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(DAILY.filter((i) => "children" in i).map((i) => [i.href, pathname.startsWith(i.href)])),
+    Object.fromEntries(DAILY.filter((i) => i.children).map((i) => [i.href, i.children!.some((c) => pathname.startsWith(c.href)) || pathname.startsWith(i.href)])),
   );
   useEffect(() => {
     try {
@@ -123,7 +170,7 @@ export function AppSidebar({
     } catch { /* storage unavailable - keep the defaults */ }
   }, []);
   useEffect(() => {
-    const here = DAILY.find((i) => "children" in i && pathname.startsWith(i.href));
+    const here = DAILY.find((i) => i.children && (i.children.some((c) => pathname.startsWith(c.href)) || pathname.startsWith(i.href)));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- open the section you've just navigated into
     if (here) setOpenSections((s) => (s[here.href] ? s : { ...s, [here.href]: true }));
   }, [pathname]);
@@ -137,9 +184,23 @@ export function AppSidebar({
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => { if (d.success) setUser({ name: d.name ?? d.email, role: d.role ?? "" }); })
+      .then((d) => { if (d.success) setUser({ name: d.name ?? d.email, role: d.role ?? "", levels: d.levels ?? {} }); })
       .catch(() => {});
   }, []);
+
+  // Until we know who is signed in, show nothing that needs access.
+  const can = (key: string) => user?.role === "owner" || (!!user && (user.levels[key] ?? "none") !== "none");
+  const visibleDaily = DAILY.flatMap((item) => {
+    if (!("children" in item) || !item.children) return can(item.key) ? [item] : [];
+    const children = item.children.filter((c) => can(c.key));
+    if (!children.length) return [];
+    // the section's own page may be off-limits while a child is allowed - link to that child instead
+    return [{ ...item, href: can(item.key) ? item.href : children[0].href, children }];
+  });
+  const visibleSetup = SETUP.filter((item) => ("ownerOnly" in item ? user?.role === "owner" : can(item.key)));
+  const canRecalc = user?.role === "owner";
+  const showSetup = visibleSetup.length > 0 || canRecalc;
+  const showMasters = can("masters");
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -159,7 +220,7 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {DAILY.map((item) => (
+              {visibleDaily.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
@@ -186,7 +247,7 @@ export function AppSidebar({
                       {item.children.map((sub) => (
                         <SidebarMenuSubItem key={sub.href}>
                           <SidebarMenuSubButton
-                            isActive={"exact" in sub && sub.exact ? pathname === sub.href : pathname.startsWith(sub.href)}
+                            isActive={sub.exact ? pathname === sub.href : pathname.startsWith(sub.href)}
                             render={<Link href={sub.href}>{sub.label}</Link>}
                           />
                         </SidebarMenuSubItem>
@@ -200,11 +261,12 @@ export function AppSidebar({
         </SidebarGroup>
 
         {/* ---------------- standing rates, changed now and then ---------------- */}
+        {showMasters ? (
         <SidebarGroup>
           <SidebarGroupLabel>Rates &amp; masters</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {classes.map((c) => {
+              {(showMasters ? classes : []).map((c) => {
                 const Icon = CLASS_ICONS[c.code] ?? Package;
                 const href = `/c/${c.code}`;
                 return (
@@ -223,23 +285,13 @@ export function AppSidebar({
                   </SidebarMenuItem>
                 );
               })}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname.startsWith("/parameters")}
-                  tooltip="Parameters"
-                  render={
-                    <Link href="/parameters">
-                      <SlidersHorizontal />
-                      <span>Parameters</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        ) : null}
 
         {/* ---------------- setup: shut unless you go looking ---------------- */}
+        {showSetup ? (
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -253,7 +305,7 @@ export function AppSidebar({
                     >
                       <ChevronRight className={`w-4 h-4 transition-transform ${setupOpen ? "rotate-90" : ""}`} />
                       <span className="flex-1 text-left">Setup</span>
-                      {calc?.error_count ? (
+                      {calc?.error_count && user?.role === "owner" ? (
                         <span className="num rounded-full bg-destructive/15 px-1.5 text-[10px] font-bold text-destructive">
                           {calc.error_count}
                         </span>
@@ -265,7 +317,7 @@ export function AppSidebar({
 
               {setupOpen ? (
                 <>
-                  {SETUP.map((item) => (
+                  {visibleSetup.map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
                         isActive={pathname.startsWith(item.href)}
@@ -279,6 +331,7 @@ export function AppSidebar({
                       />
                     </SidebarMenuItem>
                   ))}
+                  {canRecalc ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       tooltip="Recalculate"
@@ -294,22 +347,21 @@ export function AppSidebar({
                       }
                     />
                   </SidebarMenuItem>
+                  ) : null}
                 </>
               ) : null}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        ) : null}
       </SidebarContent>
 
       <SidebarFooter className="px-2 pb-4 space-y-1">
         {/* Only worth saying when something is actually wrong. */}
-        {calc?.error_count ? (
-          <Link
-            href="/schema"
-            className="block rounded-lg bg-destructive/10 px-3 py-2 text-[11px] font-semibold text-destructive group-data-[collapsible=icon]:hidden"
-          >
+        {calc?.error_count && user?.role === "owner" ? (
+          <div className="block rounded-lg bg-destructive/10 px-3 py-2 text-[11px] font-semibold text-destructive group-data-[collapsible=icon]:hidden">
             {calc.error_count} formula error(s)
-          </Link>
+          </div>
         ) : null}
 
         <div className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:hidden">

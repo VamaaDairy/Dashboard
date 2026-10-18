@@ -73,48 +73,6 @@ export async function resetCell(objectId: string, fieldId: string): Promise<Acti
   }
 }
 
-// ---------------------------------------------------------------- parameters
-export async function setParameter(id: string, raw: string): Promise<ActionResult> {
-  try {
-    const v = readInput(raw);
-    await query(`update parameter set formula = $2, value_num = $3 where id = $1`,
-      [id, v.formula, v.value_num]);
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-export async function addParameter(form: FormData): Promise<ActionResult> {
-  try {
-    const key = String(form.get("key") ?? "").trim();
-    const label = String(form.get("label") ?? "").trim() || key;
-    const group = String(form.get("group_name") ?? "").trim() || "General";
-    if (!SLUG.test(key)) return fail("Key must be lower_snake_case, starting with a letter");
-    const v = readInput(String(form.get("value") ?? ""));
-    await query(
-      `insert into parameter (scenario_id, key, label, group_name, formula, value_num, sort_order)
-       values ($1,$2,$3,$4,$5,$6,(select coalesce(max(sort_order),0)+1 from parameter where scenario_id = $1))`,
-      [await activeScenarioId(), key, label, group, v.formula, v.value_num],
-    );
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-export async function deleteParameter(id: string): Promise<ActionResult> {
-  try {
-    await query(`delete from parameter where id = $1 and not is_locked`, [id]);
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
 // ---------------------------------------------------------------- objects
 export async function addObject(form: FormData): Promise<ActionResult> {
   try {
@@ -160,90 +118,6 @@ export async function deleteObject(id: string): Promise<ActionResult> {
       return fail(`Still used as a component by: ${used.map((u) => u.code).join(", ")}`);
     }
     await query(`delete from cost_object where id = $1`, [id]);
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-// ---------------------------------------------------------------- fields (columns)
-export async function addField(form: FormData): Promise<ActionResult> {
-  try {
-    const classId = String(form.get("class_id") ?? "");
-    const key = String(form.get("key") ?? "").trim();
-    const label = String(form.get("label") ?? "").trim() || key;
-    if (!SLUG.test(key)) return fail("Key must be lower_snake_case, starting with a letter");
-    const raw = String(form.get("default") ?? "").trim();
-    const v = readInput(raw);
-    const rollupTag = String(form.get("rollup_tag") ?? "").trim();
-
-    const sid = await activeScenarioId();
-    const group = await query<{ id: string }>(
-      `insert into field_group (scenario_id, class_id, code, label, sort_order)
-       values ($1, $2, 'added', 'Added columns',
-               (select coalesce(max(sort_order),0)+1 from field_group where class_id = $2))
-       on conflict (class_id, code) do update set label = excluded.label
-       returning id`,
-      [sid, classId],
-    );
-    const rows = await query<{ id: string }>(
-      `insert into field_def (scenario_id, class_id, key, label, default_formula, default_value,
-                              group_id, sort_order)
-       values ($1,$2,$3,$4,$5,$6,$7,
-               (select coalesce(max(sort_order),0)+1 from field_def where class_id = $2))
-       returning id`,
-      [sid, classId, key, label, v.formula, v.value_num, group[0].id],
-    );
-    if (rollupTag) {
-      await query(`insert into field_rollup_tag (field_def_id, tag) values ($1,$2)`,
-        [rows[0].id, rollupTag]);
-    }
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-export async function updateField(
-  id: string,
-  patch: { label?: string; default_formula?: string | null; decimals?: number; is_active?: boolean },
-): Promise<ActionResult> {
-  try {
-    if (patch.default_formula) parse(patch.default_formula);
-    await query(
-      `update field_def
-          set label = coalesce($2, label),
-              default_formula = case when $3::text is null then default_formula
-                                     when $3 = '' then null else $3 end,
-              decimals = coalesce($4, decimals),
-              is_active = coalesce($5, is_active)
-        where id = $1`,
-      [id, patch.label ?? null, patch.default_formula ?? null, patch.decimals ?? null, patch.is_active ?? null],
-    );
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-export async function deleteField(id: string): Promise<ActionResult> {
-  try {
-    const field = await query<{ key: string; is_locked: boolean; class_id: string }>(
-      `select key, is_locked, class_id from field_def where id = $1`, [id],
-    );
-    if (!field.length) return fail("Field not found");
-    const referencing = await query<{ ref: string }>(
-      `select dst_ref as ref from dependency_edge
-        where scenario_id = $1 and src_ref like $2 limit 5`,
-      [await activeScenarioId(), `%.${field[0].key}`],
-    );
-    if (referencing.length) {
-      return fail(`Other formulas read this column: ${referencing.map((r) => r.ref).join(", ")}`);
-    }
-    await query(`delete from field_def where id = $1`, [id]);
     await refresh();
     return ok;
   } catch (e) {
@@ -311,59 +185,6 @@ export async function deleteBomLine(id: string): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------- classes
-export async function addClass(form: FormData): Promise<ActionResult> {
-  try {
-    const code = String(form.get("code") ?? "").trim();
-    const name = String(form.get("name") ?? "").trim() || code;
-    const plural = String(form.get("plural_name") ?? "").trim() || name;
-    if (!SLUG.test(code)) return fail("Code must be lower_snake_case, starting with a letter");
-    const sid = await activeScenarioId();
-    const cls = await query<{ id: string }>(
-      `insert into object_class (scenario_id, code, name, plural_name, sort_order)
-       values ($1,$2,$3,$4,(select coalesce(max(sort_order),0)+1 from object_class where scenario_id = $1))
-       returning id`,
-      [sid, code, name, plural],
-    );
-    await query(
-      `insert into field_group (scenario_id, class_id, code, label) values ($1,$2,'general','General')`,
-      [sid, cls[0].id],
-    );
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-export async function updateClass(id: string, patch: { name?: string; cost_field?: string }): Promise<ActionResult> {
-  try {
-    await query(
-      `update object_class set name = coalesce($2, name), cost_field = coalesce($3, cost_field)
-        where id = $1`,
-      [id, patch.name ?? null, patch.cost_field ?? null],
-    );
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-export async function deleteClass(id: string): Promise<ActionResult> {
-  try {
-    const objects = await query<{ n: number }>(
-      `select count(*)::int as n from cost_object where class_id = $1`, [id],
-    );
-    if (objects[0].n > 0) return fail(`Delete its ${objects[0].n} row(s) first`);
-    await query(`delete from object_class where id = $1`, [id]);
-    await refresh();
-    return ok;
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : String(e));
-  }
-}
-
-// ---------------------------------------------------------------- misc
 export async function recalculate(): Promise<ActionResult> {
   try {
     await refresh();

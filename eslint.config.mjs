@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // the Flutter mobile app lives here; it is not part of the web project
+    "gaia_shop_app/**",
   ]),
 ]);
 

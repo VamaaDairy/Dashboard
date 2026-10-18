@@ -96,6 +96,8 @@ export interface DayRow {
   output_qty: number | null;
   /** milk taken out of the tanks for it: which tank, how many litres */
   milk: { tank_id: string; litres: number }[];
+  /** milk not used, put back into a tank at the blend it was drawn at */
+  returns: { tank_id: string; litres: number }[];
   labour_workers: number | null;
   labour_hours: number | null;
   labour_cost: number | null;
@@ -117,6 +119,8 @@ function check(v: number | null, label: string) {
  * had, as 'out' movements on the batch date, and every tank touched is
  * replayed - so a draw a tank can't cover rolls the whole save back. The
  * fat, SNF and ₹/L come from each tank's blend, never from the page.
+ * Milk not used can be returned: an 'in' on the tank of the user's choice
+ * at the draws' weighted blend, and the batch's milk is the net of the two.
  */
 export async function saveProductionDay(date: string, rows: DayRow[]): Promise<Result> {
   return guard(async () => {
@@ -152,18 +156,45 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
           if (tanks.rowCount !== draws.size) throw new Error(`${name}: a tank picked no longer exists - reload the page`);
         }
 
-        // whatever this product drew before is put back first
-        const before = await client.query<{ tank_id: string }>(
-          `select distinct m.tank_id from tank_movement m join bulk_batch b on b.id = m.bulk_batch_id
-            where b.scenario_id = $1 and b.batch_date = $2 and b.bulk_product_id = $3`,
+        // milk put back: one return per tank, never more than the batch drew
+        const returns = new Map<string, number>();
+        for (const m of r.returns ?? []) {
+          check(m.litres, `${name}: returned milk`);
+          if (!m.tank_id || !(m.litres > 0)) continue;
+          returns.set(m.tank_id, (returns.get(m.tank_id) ?? 0) + m.litres);
+        }
+        if (returns.size) {
+          const drawn = [...draws.values()].reduce((s, l) => s + l, 0);
+          const back = [...returns.values()].reduce((s, l) => s + l, 0);
+          if (back > drawn + 0.005) {
+            throw new Error(`${name}: ${back} L returned is more than the ${drawn} L taken from the tanks`);
+          }
+          const tanks = await client.query(`select id from tank where id = any($1) and scenario_id = $2`, [[...returns.keys()], scenario]);
+          if (tanks.rowCount !== returns.size) throw new Error(`${name}: a tank picked for the returned milk no longer exists - reload the page`);
+        }
+
+        // what this product drew and returned before; if the milk is unchanged
+        // (e.g. only the yield was edited) the tank ledger is left alone, so a
+        // back-dated edit can never fail on tank balances.
+        const before = await client.query<{ tank_id: string; direction: string; litres: string }>(
+          `select m.tank_id, m.direction, sum(m.qty_litre) as litres
+             from tank_movement m join bulk_batch b on b.id = m.bulk_batch_id
+            where b.scenario_id = $1 and b.batch_date = $2 and b.bulk_product_id = $3
+            group by m.tank_id, m.direction`,
           [scenario, date, r.bulk_product_id],
         );
-        before.rows.forEach((t) => touched.add(t.tank_id));
+        const sameMap = (rowsFor: string, want: Map<string, number>) => {
+          const have = before.rows.filter((x) => x.direction === rowsFor);
+          return have.length === want.size
+            && have.every((x) => Math.abs(Number(x.litres) - (want.get(x.tank_id) ?? -1)) < 0.0005);
+        };
+        const milkUnchanged = sameMap("out", draws) && sameMap("in", returns);
+        if (!milkUnchanged) before.rows.forEach((t) => touched.add(t.tank_id));
 
         const empty = [r.output_qty, r.labour_workers, r.labour_hours, r.labour_cost].every((v) => !v)
           && lines.length === 0 && draws.size === 0;
         if (empty) {
-          // its draws go with it (on delete cascade)
+          // its draws and returns go with it (on delete cascade)
           await client.query(
             `delete from bulk_batch where scenario_id = $1 and batch_date = $2 and bulk_product_id = $3`,
             [scenario, date, r.bulk_product_id],
@@ -194,12 +225,24 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
           );
         }
 
+        if (milkUnchanged) continue;
+
         await client.query(`delete from tank_movement where bulk_batch_id = $1`, [batchId]);
         for (const [tankId, litres] of draws) {
           await client.query(
             `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, bulk_batch_id)
              values ($1, $2, $3, 'out', $4, $5, 'production', $6)`,
             [scenario, tankId, date, litres, `Production · ${name}`, batchId],
+          );
+          touched.add(tankId);
+        }
+
+        // clock_timestamp so the return replays after the draws; the engine sets its blend
+        for (const [tankId, litres] of returns) {
+          await client.query(
+            `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, bulk_batch_id, created_at)
+             values ($1, $2, $3, 'in', $4, $5, 'production_return', $6, clock_timestamp())`,
+            [scenario, tankId, date, litres, `Returned from production · ${name}`, batchId],
           );
           touched.add(tankId);
         }
