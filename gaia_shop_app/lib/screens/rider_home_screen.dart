@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,7 +11,8 @@ import '../state/rider_state.dart';
 import '../theme.dart';
 import 'rider_order_screen.dart';
 
-/// What a signed-in delivery partner sees: the orders given to them. Their location is shared while this is open.
+/// The rider's day: where they are and every drop on one big map, a one-line summary, and
+/// a card per delivery (customer, area, how far, cash to collect). Tap a card to work on it.
 class RiderHomeScreen extends StatefulWidget {
   const RiderHomeScreen({super.key});
 
@@ -44,136 +46,249 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     super.dispose();
   }
 
+  Future<void> _signOut(RiderState rider) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('You will stop sharing your location and receiving deliveries on this phone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sign out')),
+        ],
+      ),
+    );
+    if (ok == true) await rider.logout();
+  }
+
   @override
   Widget build(BuildContext context) {
     final rider = context.watch<RiderState>();
     final orders = rider.orders;
+    final here = rider.here;
+    final toPick = orders.where((o) => o.status != 'out_for_delivery').length;
+    final onWay = orders.length - toPick;
+    final cash = orders.fold<double>(0, (s, o) => s + o.total);
+    final sharing = rider.locationProblem == null;
+    final first = (rider.profile?.name ?? 'rider').split(' ').first;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Hi, ${rider.profile?.name.split(' ').first ?? 'rider'}', style: const TextStyle(fontWeight: FontWeight.w800)),
-        actions: [
-          IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (c) => AlertDialog(
-                  title: const Text('Sign out?'),
-                  content: const Text('You will stop sharing your location and receiving deliveries on this phone.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                    TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sign out')),
-                  ],
-                ),
-              );
-              if (ok == true) await rider.logout();
-            },
-          ),
-        ],
-      ),
+      backgroundColor: Brand.surface,
       body: RefreshIndicator(
         color: Brand.accent,
         onRefresh: rider.refresh,
-        child: ListView(
+        child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          children: [
-            _status(rider),
-            const SizedBox(height: 14),
-            // everything on today's round at a glance: you (blue) and each drop (green = still to pick up, orange = on the way)
-            GaiaMap(
-              height: 300,
-              markers: [
-                for (final o in orders)
-                  if (o.hasPin) MapMarker(GeoPoint(o.lat!, o.lng!), o.status == 'out_for_delivery' ? const Color(0xFFF08C00) : Brand.gaiaGreen, radius: 10),
-                if (rider.here != null) MapMarker(rider.here!, Brand.accent, radius: 11),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (rider.error != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(rider.error!, style: const TextStyle(color: Brand.danger))),
-            if (orders.isEmpty && !rider.loading)
-              const Padding(
-                padding: EdgeInsets.only(top: 80),
-                child: Column(children: [
-                  Icon(Icons.two_wheeler, size: 56, color: Brand.faint),
-                  SizedBox(height: 12),
-                  Text('No deliveries right now', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                  SizedBox(height: 4),
-                  Text('New orders appear here as soon as they are given to you.', textAlign: TextAlign.center, style: TextStyle(color: Brand.muted)),
-                ]),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Stack(
+                children: [
+                  // map with the summary card resting on its bottom edge (inside the stack,
+                  // so the native map view can never paint over it)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 44),
+                    child: GaiaMap(
+                    height: MediaQuery.sizeOf(context).height * 0.46,
+                    radius: 0,
+                    padding: const EdgeInsets.fromLTRB(60, 140, 60, 70),
+                    markers: [
+                      for (final o in orders)
+                        if (o.hasPin) MapMarker.home(GeoPoint(o.lat!, o.lng!), color: o.status == 'out_for_delivery' ? const Color(0xFFE8590C) : const Color(0xFF2E8B3D)),
+                      if (here != null) MapMarker.rider(here, heading: rider.heading),
+                    ],
+                  ),
+                  ),
+                  // today's numbers
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 0,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 3,
+                      shadowColor: Colors.black26,
+                      borderRadius: BorderRadius.circular(18),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Row(
+                          children: [
+                            _stat('$toPick', 'To pick up', const Color(0xFF2E8B3D)),
+                            _divider(),
+                            _stat('$onWay', 'On the way', const Color(0xFFE8590C)),
+                            _divider(),
+                            _stat(rupees(cash), 'Cash to collect', Brand.accent),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // header floating on the map
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    top: MediaQuery.paddingOf(context).top + 8,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 3,
+                      shadowColor: Colors.black26,
+                      borderRadius: BorderRadius.circular(18),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Hi, $first', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 2),
+                                  Row(children: [
+                                    Container(width: 8, height: 8, decoration: BoxDecoration(color: sharing ? Brand.veg : const Color(0xFFE8590C), shape: BoxShape.circle)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(sharing ? 'On duty · location on' : 'Location off',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: sharing ? Brand.veg : const Color(0xFFE8590C))),
+                                    ),
+                                  ]),
+                                ],
+                              ),
+                            ),
+                            if (!sharing) TextButton(onPressed: rider.startSharing, child: const Text('Turn on')),
+                            IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: () => _signOut(rider)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            if (orders.isEmpty && rider.loading) const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: CircularProgressIndicator(color: Brand.accent))),
-            for (final o in orders) _OrderCard(order: o),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            if (rider.locationProblem != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Text(rider.locationProblem!, style: const TextStyle(color: Color(0xFF8A5A00), fontWeight: FontWeight.w600)),
+                ),
+              ),
+            if (rider.error != null)
+              SliverToBoxAdapter(
+                child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: Text(rider.error!, style: const TextStyle(color: Brand.danger))),
+              ),
+            if (orders.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(32, 8, 32, 40),
+                  child: rider.loading
+                      ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Brand.accent)))
+                      : const Column(children: [
+                          Icon(Icons.inventory_2_outlined, size: 52, color: Brand.faint),
+                          SizedBox(height: 12),
+                          Text('No deliveries right now', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                          SizedBox(height: 4),
+                          Text('New orders show up here as soon as they are given to you.', textAlign: TextAlign.center, style: TextStyle(color: Brand.muted)),
+                        ]),
+                ),
+              )
+            else ...[
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+                  child: Text('Your deliveries', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                sliver: SliverList.separated(
+                  itemCount: orders.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, i) => _OrderCard(order: orders[i], here: here),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _status(RiderState rider) {
-    final sharing = rider.locationProblem == null;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(color: sharing ? const Color(0xFFE8F5EA) : const Color(0xFFFFF4E5), borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: [
-          Icon(sharing ? Icons.my_location : Icons.location_off, size: 20, color: sharing ? Brand.veg : const Color(0xFF8A5A00)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              sharing ? 'Sharing your location with customers while you deliver' : rider.locationProblem!,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: sharing ? Brand.veg : const Color(0xFF8A5A00)),
-            ),
-          ),
-          if (!sharing) TextButton(onPressed: rider.startSharing, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
+  Widget _stat(String value, String label, Color color) => Expanded(
+        child: Column(children: [
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
+        ]),
+      );
+
+  Widget _divider() => Container(width: 1, height: 34, color: Brand.line);
+}
+
+/// Straight-line distance, good enough to say "2.4 km away" on a card.
+String? awayText(GeoPoint? from, Order o) {
+  if (from == null || !o.hasPin) return null;
+  const r = 6371000.0;
+  double rad(double d) => d * math.pi / 180;
+  final dLat = rad(o.lat! - from.lat), dLng = rad(o.lng! - from.lng);
+  final a = math.pow(math.sin(dLat / 2), 2) + math.cos(rad(from.lat)) * math.cos(rad(o.lat!)) * math.pow(math.sin(dLng / 2), 2);
+  final m = 2 * r * math.asin(math.sqrt(a));
+  return m < 1000 ? '${m.round()} m away' : '${(m / 1000).toStringAsFixed(1)} km away';
 }
 
 class _OrderCard extends StatelessWidget {
-  const _OrderCard({required this.order});
+  const _OrderCard({required this.order, required this.here});
   final Order order;
+  final GeoPoint? here;
 
   @override
   Widget build(BuildContext context) {
     final o = order;
     final out = o.status == 'out_for_delivery';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    final tone = out ? const Color(0xFFE8590C) : const Color(0xFF2E8B3D);
+    final away = awayText(here, o);
+    // the first part of the address is the useful bit at a glance (house / street)
+    final area = o.address.split(',').take(2).join(',').trim();
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RiderOrderScreen(orderNo: o.orderNo))),
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Text(o.orderNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                  const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: out ? const Color(0xFFE8F5EA) : Brand.accentTint, borderRadius: BorderRadius.circular(20)),
-                    child: Text(out ? 'On the way' : 'Ready to pick up', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: out ? Brand.veg : Brand.accent)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: tone.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(out ? Icons.two_wheeler : Icons.storefront_outlined, size: 15, color: tone),
+                      const SizedBox(width: 5),
+                      Text(out ? 'On the way' : 'Pick up', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: tone)),
+                    ]),
                   ),
+                  const Spacer(),
+                  if (away != null) Text(away, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Brand.muted)),
                 ],
               ),
-              const SizedBox(height: 10),
-              Text(o.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
-              Text(o.address, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Brand.muted, height: 1.3)),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
+              Text(o.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              Text(area.isEmpty ? o.address : area, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, color: Brand.muted, height: 1.3)),
+              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Brand.line)),
               Row(
                 children: [
-                  Text('${o.itemCount} ${o.itemCount == 1 ? 'item' : 'items'}', style: const TextStyle(color: Brand.muted, fontSize: 13)),
+                  const Icon(Icons.payments_outlined, size: 20, color: Brand.accent),
+                  const SizedBox(width: 8),
+                  Text('Collect ${rupees(o.total)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const SizedBox(width: 8),
+                  Text('· ${o.itemCount} ${o.itemCount == 1 ? 'item' : 'items'}', style: const TextStyle(color: Brand.muted)),
                   const Spacer(),
-                  Text('Collect ${rupees(o.total)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const Icon(Icons.chevron_right, color: Brand.faint),
                 ],
               ),
             ],

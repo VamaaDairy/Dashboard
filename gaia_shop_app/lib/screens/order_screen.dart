@@ -196,8 +196,8 @@ class _OrderScreenState extends State<OrderScreen> {
     final r = o.rider;
     final out = o.status == 'out_for_delivery';
     final markers = <MapMarker>[
-      if (o.hasPin) MapMarker(GeoPoint(o.lat!, o.lng!), Brand.gaiaGreen, radius: 10),
-      if (out && r != null && r.hasPosition) MapMarker(GeoPoint(r.lat!, r.lng!), Brand.accent, radius: 11),
+      if (o.hasPin) MapMarker.home(GeoPoint(o.lat!, o.lng!)),
+      if (out && r != null && r.hasPosition) MapMarker.rider(GeoPoint(r.lat!, r.lng!)),
     ];
     final eta = _route?.eta ?? '';
     return [

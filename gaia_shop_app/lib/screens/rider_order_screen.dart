@@ -35,7 +35,11 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
     if (!o.hasPin || here == null) return;
     // only re-ask for the route once the rider has moved a fair way
     final last = _routedFrom;
-    if (last != null && (last.lat - here.lat).abs() < 0.0008 && (last.lng - here.lng).abs() < 0.0008) return;
+    if (last != null &&
+        (last.lat - here.lat).abs() < 0.0008 &&
+        (last.lng - here.lng).abs() < 0.0008) {
+      return;
+    }
     _routedFrom = here;
     try {
       final r = await context.read<Api>().route(here, GeoPoint(o.lat!, o.lng!));
@@ -45,7 +49,8 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
     }
   }
 
-  void _toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void _toast(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   Future<void> _pickup(Order o) async {
     setState(() => _busy = true);
@@ -84,135 +89,400 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
   }
 
   /// Turn-by-turn on Ola Maps inside the app.
-  Future<void> _navigate(Order o) => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RiderNavigationScreen(order: o)));
+  Future<void> _navigate(Order o) => Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => RiderNavigationScreen(order: o)));
 
   @override
   Widget build(BuildContext context) {
     final rider = context.watch<RiderState>();
     final o = _find(rider);
     if (o == null) {
-      return Scaffold(appBar: AppBar(), body: const Center(child: Text('This delivery is no longer on your list.')));
+      return Scaffold(
+          appBar: AppBar(),
+          body: const Center(
+              child: Text('This delivery is no longer on your list.')));
     }
     final here = rider.here;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadRoute(o, here));
     final out = o.status == 'out_for_delivery';
+    final r = _route;
+    final top = MediaQuery.paddingOf(context).top;
 
     return Scaffold(
-      appBar: AppBar(title: Text(o.orderNo)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        children: [
-          if (o.hasPin) ...[
-            GaiaMap(
-              height: 340,
-              route: _route?.points ?? const [],
-              markers: [
-                MapMarker(GeoPoint(o.lat!, o.lng!), Brand.gaiaGreen, radius: 10),
-                if (here != null) MapMarker(here, Brand.accent, radius: 11),
+      backgroundColor: Brand.surface,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Stack(
+              children: [
+                if (o.hasPin)
+                  GaiaMap(
+                    height: MediaQuery.sizeOf(context).height * 0.5,
+                    radius: 0,
+                    padding: const EdgeInsets.fromLTRB(60, 110, 60, 80),
+                    route: r?.points ?? const [],
+                    markers: [
+                      MapMarker.home(GeoPoint(o.lat!, o.lng!),
+                          color: out
+                              ? const Color(0xFFE8590C)
+                              : const Color(0xFF2E8B3D)),
+                      if (here != null)
+                        MapMarker.rider(here, heading: rider.heading),
+                    ],
+                  )
+                else
+                  Container(
+                    height: top + 150,
+                    color: const Color(0xFFFFF4E5),
+                    alignment: Alignment.bottomLeft,
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                    child: const Text(
+                        'No map pin for this order - use the address and call the customer.',
+                        style: TextStyle(
+                            color: Color(0xFF8A5A00),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15)),
+                  ),
+                // back + order number, floating on the map
+                Positioned(
+                  left: 12,
+                  top: top + 8,
+                  child: Material(
+                    color: Colors.white,
+                    elevation: 3,
+                    shadowColor: Colors.black26,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          tooltip: 'Back',
+                          onPressed: () => Navigator.of(context).maybePop()),
+                      Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: Text(o.orderNo,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800))),
+                    ]),
+                  ),
+                ),
+                // time and distance on the road, bottom of the map
+                if (r != null && r.eta.isNotEmpty)
+                  Positioned(
+                    left: 16,
+                    bottom: 40,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 3,
+                      shadowColor: Colors.black26,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.schedule,
+                              size: 18, color: Brand.veg),
+                          const SizedBox(width: 6),
+                          Text(r.eta,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  color: Brand.veg)),
+                          Text('  ·  ${r.distance}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Brand.muted)),
+                        ]),
+                      ),
+                    ),
+                  ),
+                // rounded top of the white panel, drawn inside the map's stack so the
+                // native map view can't paint over it
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: -1,
+                  child: Container(
+                    height: 24,
+                    decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                  ),
+                ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Row(children: [
-                if (_route != null && _route!.eta.isNotEmpty) ...[
-                  const Icon(Icons.timelapse, size: 18, color: Brand.accent),
-                  const SizedBox(width: 6),
-                  Text('${_route!.eta} · ${_route!.distance}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                ],
-                const Spacer(),
-                FilledButton.icon(
-                  onPressed: () => _navigate(o),
-                  style: FilledButton.styleFrom(minimumSize: const Size(150, 44)),
-                  icon: const Icon(Icons.navigation, size: 18),
-                  label: const Text('Start navigation'),
-                ),
-              ]),
-            ),
-            if (_route != null && _route!.steps.isNotEmpty)
-              Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: Text('Directions (${_route!.steps.length} steps)', style: const TextStyle(fontWeight: FontWeight.w800)),
+          ),
+          SliverToBoxAdapter(
+            child: Transform.translate(
+              offset: Offset.zero,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                color: Colors.white,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final t in _route!.steps)
-                      ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(maneuverIcon(t.maneuver), color: Brand.accent),
-                        title: Text(t.text),
-                        trailing: Text(t.distance, style: const TextStyle(color: Brand.muted)),
+                    _Steps(out: out),
+                    const SizedBox(height: 20),
+                    // who and where
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(o.name,
+                                  style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Text(
+                                  '${o.address}${o.pincode != null ? ' - ${o.pincode}' : ''}',
+                                  style: const TextStyle(
+                                      fontSize: 14.5,
+                                      color: Brand.muted,
+                                      height: 1.4)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        _RoundAction(
+                            icon: Icons.call,
+                            label: 'Call',
+                            color: Brand.veg,
+                            onTap: () =>
+                                launchUrl(Uri(scheme: 'tel', path: o.phone))),
+                      ],
+                    ),
+                    if (o.notes != null && o.notes!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFFFF8E1),
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.sticky_note_2_outlined,
+                                  size: 20, color: Color(0xFF8A5A00)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                  child: Text(o.notes!,
+                                      style: const TextStyle(
+                                          color: Color(0xFF5C4300),
+                                          height: 1.35))),
+                            ]),
                       ),
+                    ],
+                    const SizedBox(height: 16),
+                    // the money, big
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                          color: Brand.accentTint,
+                          borderRadius: BorderRadius.circular(16)),
+                      child: Row(children: [
+                        const Icon(Icons.payments_outlined,
+                            color: Brand.accent, size: 26),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                            child: Text('Collect in cash',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15))),
+                        Text(rupees(o.total),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 24,
+                                color: Brand.accent)),
+                      ]),
+                    ),
+                    const SizedBox(height: 6),
+                    // what to hand over - folded, it's checked once at pick-up
+                    Theme(
+                      data: Theme.of(context)
+                          .copyWith(dividerColor: Colors.transparent),
+                      // its own surface: the tile's ripple must not be hidden by the white panel behind it
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          initiallyExpanded: !out,
+                          title: Text(
+                              '${o.itemCount} ${o.itemCount == 1 ? 'item' : 'items'} to hand over',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 16)),
+                          children: [
+                            for (final i in o.items)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 6),
+                                child: Row(children: [
+                                  ProductImage(
+                                      url: i.image, size: 44, radius: 10),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                      child: Text(i.name,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600))),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                        color: Brand.surface,
+                                        borderRadius: BorderRadius.circular(8)),
+                                    child: Text('× ${i.qty}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900)),
+                                  ),
+                                ]),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-          ] else
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: const Color(0xFFFFF4E5), borderRadius: BorderRadius.circular(12)),
-              child: const Text('The customer did not set a map pin. Use the address below and call them if needed.', style: TextStyle(color: Color(0xFF8A5A00), fontWeight: FontWeight.w600)),
             ),
-          const SizedBox(height: 16),
-          _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text(o.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17))),
-              IconButton.filled(onPressed: () => launchUrl(Uri(scheme: 'tel', path: o.phone)), icon: const Icon(Icons.call), tooltip: 'Call customer'),
-            ]),
-            Text('${o.address}${o.pincode != null ? ' - ${o.pincode}' : ''}', style: const TextStyle(color: Brand.muted, height: 1.35)),
-            if (o.notes != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Note: ${o.notes}', style: const TextStyle(fontStyle: FontStyle.italic, color: Brand.muted))),
-          ])),
-          const SizedBox(height: 12),
-          _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Items', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-            const SizedBox(height: 6),
-            for (final i in o.items)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(children: [
-                  ProductImage(url: i.image, size: 40, radius: 8),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(i.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                  Text('× ${i.qty}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                ]),
-              ),
-          ])),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Brand.accentTint, borderRadius: BorderRadius.circular(16)),
-            child: Row(children: [
-              const Icon(Icons.payments_outlined, color: Brand.accent),
-              const SizedBox(width: 12),
-              const Expanded(child: Text('Collect cash from customer', style: TextStyle(fontWeight: FontWeight.w700))),
-              Text(rupees(o.total), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Brand.accent)),
-            ]),
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: Brand.line))),
-          child: FilledButton(
-            onPressed: _busy ? null : () => out ? _deliver(o) : _pickup(o),
-            style: out ? FilledButton.styleFrom(backgroundColor: Brand.veg) : null,
-            child: _busy
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                : Text(out ? 'Mark as delivered' : 'Picked up - start delivery'),
-          ),
-        ),
+      bottomNavigationBar: Container(
+        padding: EdgeInsets.fromLTRB(
+            16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
+        decoration: const BoxDecoration(color: Colors.white, boxShadow: [
+          BoxShadow(
+              color: Color(0x14000000), blurRadius: 12, offset: Offset(0, -2))
+        ]),
+        child: _busy
+            ? const SizedBox(
+                height: 56,
+                child: Center(
+                    child: CircularProgressIndicator(color: Brand.accent)))
+            : !out
+                ? FilledButton.icon(
+                    onPressed: () => _pickup(o),
+                    style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(56)),
+                    icon: const Icon(Icons.inventory_2_outlined),
+                    label: const Text('Picked up · start delivery'),
+                  )
+                : Row(children: [
+                    if (o.hasPin) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _navigate(o),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Brand.accent,
+                            minimumSize: const Size.fromHeight(56),
+                            side: const BorderSide(
+                                color: Brand.accent, width: 1.5),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('Navigate', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _deliver(o),
+                        style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(56),
+                            backgroundColor: Brand.veg),
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('Delivered'),
+                      ),
+                    ),
+                  ]),
       ),
     );
   }
-
-  Widget _card(Widget child) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
-        child: child,
-      );
 }
 
+/// Pick up -> On the way -> Delivered, with where this order is now.
+class _Steps extends StatelessWidget {
+  const _Steps({required this.out});
+  final bool out;
+
+  @override
+  Widget build(BuildContext context) {
+    final at = out ? 1 : 0;
+    Widget dot(int i, IconData icon, String label) {
+      final done = i < at, now = i == at;
+      final c = done || now ? Brand.accent : Brand.faint;
+      return Expanded(
+        child: Column(children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+                color: done
+                    ? Brand.accent
+                    : (now ? Brand.accentTint : Brand.surface),
+                shape: BoxShape.circle,
+                border: Border.all(color: c, width: now ? 2 : 1)),
+            child: Icon(done ? Icons.check : icon,
+                size: 18, color: done ? Colors.white : c),
+          ),
+          const SizedBox(height: 6),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: now ? FontWeight.w800 : FontWeight.w600,
+                  color: now ? Brand.ink : Brand.muted)),
+        ]),
+      );
+    }
+
+    Widget line(int i) => Expanded(
+        child: Container(
+            height: 2,
+            margin: const EdgeInsets.only(bottom: 22),
+            color: i < at ? Brand.accent : Brand.line));
+
+    return Row(children: [
+      dot(0, Icons.storefront_outlined, 'Pick up'),
+      line(0),
+      dot(1, Icons.two_wheeler, 'On the way'),
+      line(1),
+      dot(2, Icons.home_outlined, 'Delivered'),
+    ]);
+  }
+}
+
+class _RoundAction extends StatelessWidget {
+  const _RoundAction(
+      {required this.icon,
+      required this.label,
+      required this.color,
+      required this.onTap});
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Material(
+          color: color,
+          shape: const CircleBorder(),
+          child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onTap,
+              child: SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: Icon(icon, color: Colors.white))),
+        ),
+        const SizedBox(height: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+      ]);
+}
 
 /// The customer reads out their 4-digit code; the order is only completed with it.
 class _OtpSheet extends StatefulWidget {
@@ -235,14 +505,18 @@ class _OtpSheetState extends State<_OtpSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 0, 24, MediaQuery.viewInsetsOf(context).bottom + 24),
+      padding: EdgeInsets.fromLTRB(
+          24, 0, 24, MediaQuery.viewInsetsOf(context).bottom + 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Delivery code', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const Text('Delivery code',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text('Collect ${rupees(widget.amount)} in cash, then ask the customer for the 4-digit code on their order screen.', style: const TextStyle(color: Brand.muted, height: 1.35)),
+          Text(
+              'Collect ${rupees(widget.amount)} in cash, then ask the customer for the 4-digit code on their order screen.',
+              style: const TextStyle(color: Brand.muted, height: 1.35)),
           const SizedBox(height: 18),
           TextField(
             controller: _otp,
@@ -250,13 +524,16 @@ class _OtpSheetState extends State<_OtpSheet> {
             keyboardType: TextInputType.number,
             maxLength: 4,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 10),
+            style: const TextStyle(
+                fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 10),
             decoration: const InputDecoration(counterText: ''),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: _otp.text.trim().length == 4 ? () => Navigator.pop(context, _otp.text.trim()) : null,
+            onPressed: _otp.text.trim().length == 4
+                ? () => Navigator.pop(context, _otp.text.trim())
+                : null,
             child: const Text('Confirm delivery'),
           ),
         ],

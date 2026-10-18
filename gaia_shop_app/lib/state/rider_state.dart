@@ -38,6 +38,13 @@ class RiderState extends ChangeNotifier {
   bool get signedIn => _token != null && profile != null;
   GeoPoint? get here => position == null ? null : GeoPoint(position!.latitude, position!.longitude);
 
+  /// Which way the rider is going (degrees from north), once they are moving; null when standing still.
+  double? get heading {
+    final p = position;
+    if (p == null || p.speed < 1 || p.heading < 0) return null;
+    return p.heading;
+  }
+
   Future<void> login(String phone, String pin) async {
     final r = await _api.riderLogin(phone, pin);
     _token = r.token;

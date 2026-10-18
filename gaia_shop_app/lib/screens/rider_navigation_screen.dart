@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../gaia_map.dart';
@@ -96,9 +97,10 @@ class _RiderNavigationScreenState extends State<RiderNavigationScreen> {
             radius: 0,
             route: r?.points ?? const [],
             follow: _follow ? here : null,
+            padding: EdgeInsets.fromLTRB(60, pad.top + 200, 60, pad.bottom + 140),
             markers: [
-              MapMarker(_dest, Brand.gaiaGreen, radius: 11),
-              if (here != null) MapMarker(here, Brand.accent, radius: 12),
+              MapMarker.home(_dest, color: const Color(0xFFE8590C)),
+              if (here != null) MapMarker.rider(here, heading: rider.heading),
             ],
           ),
           // next turn
@@ -191,9 +193,16 @@ class _RiderNavigationScreenState extends State<RiderNavigationScreen> {
                       ],
                     ),
                   ),
+                  IconButton.filled(
+                    onPressed: () => launchUrl(Uri(scheme: 'tel', path: widget.order.phone)),
+                    style: IconButton.styleFrom(backgroundColor: Brand.veg, minimumSize: const Size(52, 52)),
+                    icon: const Icon(Icons.call, color: Colors.white),
+                    tooltip: 'Call customer',
+                  ),
+                  const SizedBox(width: 10),
                   FilledButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    style: FilledButton.styleFrom(minimumSize: const Size(120, 48), backgroundColor: Brand.danger),
+                    style: FilledButton.styleFrom(minimumSize: const Size(100, 52), backgroundColor: Brand.danger),
                     child: const Text('Exit'),
                   ),
                 ],
