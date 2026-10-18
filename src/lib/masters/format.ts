@@ -22,9 +22,9 @@ export function cellText(kind: Kind | undefined, v: unknown): string {
     case "datetime":
       return dayTime(v);
     case "money":
-      return Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return Number.isFinite(Number(v)) ? Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(v).trim();
     case "num":
-      return Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+      return Number.isFinite(Number(v)) ? Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : String(v).trim();
     default:
       return String(v).trim();
   }

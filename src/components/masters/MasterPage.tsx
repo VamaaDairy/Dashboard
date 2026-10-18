@@ -178,7 +178,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
               {data.rows.length === 0 ? (
                 <tr>
                   <td colSpan={def.cols.length + (canEdit ? 1 : 0)} className="px-3 py-10 text-center text-muted-foreground">
-                    {filtered ? "Nothing matches these filters." : def.emptyNote ?? "No data yet - load the exports with npm run db:import:masters."}
+                    {filtered ? "Nothing matches these filters." : def.emptyNote ?? (def.dateRange ? "Nothing in this period." : "No data yet - load the exports with npm run db:import:masters.")}
                   </td>
                 </tr>
               ) : null}

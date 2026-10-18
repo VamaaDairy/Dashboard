@@ -49,6 +49,7 @@ export const RESOURCES: Resource[] = [
   { key: "cn.dashboard", label: "Dashboard", group: "CN Management", path: "/cn/dashboard" },
   { key: "orders", label: "Orders - overview", group: "Orders", path: "/orders" },
   { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
+  { key: "shop", label: "Online shop orders", group: "Everyday", path: "/shop-orders" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
   // every Orders screen is its own resource
   ...(ordersResources as Array<{ key: string; label: string; group: string; slug: string }>).map((r) => ({

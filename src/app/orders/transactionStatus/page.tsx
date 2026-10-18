@@ -1,3 +1,7 @@
-export default function Page() {
-  return <h1 className="p-6 text-lg font-semibold">{"Transaction Status"}</h1>;
+import { MasterPage } from "@/components/masters/MasterPage";
+
+export const dynamic = "force-dynamic";
+
+export default function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  return <MasterPage slug="transactionStatus" searchParams={searchParams} />;
 }

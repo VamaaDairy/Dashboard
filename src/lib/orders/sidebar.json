@@ -208,23 +208,6 @@
    ]
   },
   {
-   "group": "AI Order Suggestion",
-   "items": [
-    {
-     "label": "AI Based Order Suggestion New Retailer",
-     "route": "ordersuggestionNew",
-     "url": "/ordersuggestionNew",
-     "visible": "`this.aibasedOrderSuggestionEnabled"
-    },
-    {
-     "label": "AI Based Order Suggestion Existing Retailer",
-     "route": "ordersuggestionExisting",
-     "url": "/ordersuggestionExisting",
-     "visible": "`this.aibasedOrderSuggestionEnabled"
-    }
-   ]
-  },
-  {
    "group": "Employees",
    "items": [
     {
@@ -309,29 +292,6 @@
      "route": "customerTarget",
      "url": "/customerTarget",
      "visible": "`this.hasPermission(\"customerTarget\")"
-    }
-   ]
-  },
-  {
-   "group": "AI Intelligence",
-   "items": [
-    {
-     "label": "AI Dealer Deduplication",
-     "route": "aiDealerDedup",
-     "url": "/aiDealerDedup",
-     "visible": "`this.aiDealerDuplicationEnabled"
-    },
-    {
-     "label": "Planogram AI",
-     "route": "planogramAi",
-     "url": "/planogramAi",
-     "visible": "`this.planogramAiEnabled"
-    },
-    {
-     "label": "AI Planogram",
-     "route": "shelfWatch",
-     "url": "/shelfWatch",
-     "visible": "`this.planogramAiEnabled"
     }
    ]
   },
@@ -665,12 +625,6 @@
      "route": "configChannel",
      "url": "/configChannel",
      "visible": "`this.user.misAdmin"
-    },
-    {
-     "label": "AI Configurations",
-     "route": "aiConfigs",
-     "url": "/aiConfigs",
-     "visible": "`this.hasPermission(\"masters\")"
     },
     {
      "label": "CRM",

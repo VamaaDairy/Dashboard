@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Database, Droplets, FileClock, Fuel, Home, LogOut,
-  MapPinned, MessageCircle, Package, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
+  MapPinned, MessageCircle, Package, Store, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -108,6 +108,7 @@ const DAILY: NavItem[] = [
       { href: "/whatsapp/reviews", key: "whatsapp", label: "Reviews" },
     ],
   },
+  { href: "/shop-orders", key: "shop", label: "Shop orders", icon: Store },
   { href: "/labour", key: "labour", label: "Labour", icon: Users },
   { href: "/electricity", key: "electricity", label: "Electricity", icon: Zap },
   {
