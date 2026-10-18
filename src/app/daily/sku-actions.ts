@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query, tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 import type { Result } from "@/app/tanks/actions";
-import { BASIS_LABEL, qtyFromBasis, standardMaterial, type Basis } from "@/lib/production/packing";
-import { rateMaterial, standardMaterial } from "@/lib/production/packing";
+import { BASIS_LABEL, qtyFromBasis, rateMaterial, standardMaterial, type Basis } from "@/lib/production/packing";
 
 function amount(raw: string | number | null | undefined, label: string): number {
   const t = String(raw ?? "").replace(/,/g, "").trim();

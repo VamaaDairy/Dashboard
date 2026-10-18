@@ -63,6 +63,20 @@ class Api {
     return ((j['orders'] as List?) ?? []).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  // ---- customer sign-in (mobile number + 5-digit PIN) ----
+
+  /// Signs in; a number with no account yet is registered with this PIN (the name is used then).
+  Future<({String token, String name, String phone})> customerLogin(String phone, String pin, {String name = ''}) async {
+    final j = await _send(() => _http.post(_u('/customer/login'), headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'name': name})));
+    final c = j['customer'] as Map<String, dynamic>;
+    return (token: j['token'] as String, name: c['name'] as String, phone: c['phone'] as String);
+  }
+
+  Future<List<Order>> customerOrders(String token) async {
+    final j = await _send(() => _http.get(_u('/customer/orders'), headers: {'authorization': 'Bearer $token'}));
+    return ((j['orders'] as List?) ?? []).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   // ---- maps (the backend talks to Ola Maps; the key never reaches the phone) ----
 
   Future<MapConfig> mapConfig() async {

@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, Package, Plus, Search, Settings2, Trash2 } from "lucide-react";
 import { saveSku, saveSkuDay, saveSkuPacking, type MaterialLine } from "@/app/daily/sku-actions";
-import { BASIS_LABEL, qtyFromBasis, standardMaterial, type Basis } from "@/lib/production/packing";
-import { rateMaterial, standardMaterial } from "@/lib/production/packing";
+import { BASIS_LABEL, qtyFromBasis, rateMaterial, standardMaterial, type Basis } from "@/lib/production/packing";
 import { Empty, Section, THead, Th } from "@/components/tanks/ui";
 import { DateBar } from "@/components/tanks/TankDayBoard";
 import {

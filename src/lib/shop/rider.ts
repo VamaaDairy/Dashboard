@@ -10,7 +10,7 @@ export function hashPin(pin: string): string {
   return `${salt.toString("hex")}:${scryptSync(pin, salt, 32).toString("hex")}`;
 }
 
-function pinMatches(pin: string, stored: string): boolean {
+export function pinMatches(pin: string, stored: string): boolean {
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;
   const got = scryptSync(pin, Buffer.from(salt, "hex"), 32);
