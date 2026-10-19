@@ -198,6 +198,8 @@ class _GaiaMapState extends State<GaiaMap> {
                 styleString: map.styleUrl,
                 initialCameraPosition: CameraPosition(target: LatLng(first.lat, first.lng), zoom: 14),
                 compassEnabled: false,
+                // the attribution (i) sits above whatever card rests on the map's bottom edge
+                attributionButtonMargins: const math.Point(12, 72),
                 rotateGesturesEnabled: false,
                 tiltGesturesEnabled: false,
                 onMapCreated: (c) => _c = c,
