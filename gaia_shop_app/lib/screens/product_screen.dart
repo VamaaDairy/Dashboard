@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../product_info.dart';
-import '../state/cart_state.dart';
-import '../state/catalog_state.dart';
+import '../store/cart.dart';
+import '../store/catalog.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cart_screen.dart';
 
 /// One product: big swipeable photos, price, highlights, details, nutrition,
 /// storage, then more from the same range and other things to try.
-class ProductScreen extends StatelessWidget {
+class ProductScreen extends ConsumerWidget {
   const ProductScreen({super.key, required this.product});
   final Product product;
 
@@ -19,10 +19,10 @@ class ProductScreen extends StatelessWidget {
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: p)));
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = product;
     final info = infoFor(p);
-    final all = context.select<CatalogState, List<Product>>((c) => c.products);
+    final all = ref.watch(catalogProvider.select((c) => c.products));
     final sameRange = [for (final o in all) if (o.sku != p.sku && o.category == p.category) o];
     // one or two from each other category, so the row shows the range rather than six ghees
     final seen = <String, int>{};
@@ -41,38 +41,7 @@ class ProductScreen extends StatelessWidget {
           SliverToBoxAdapter(child: _Gallery(product: p)),
           SliverToBoxAdapter(child: _Header(product: p)),
           SliverToBoxAdapter(child: _Highlights(items: info.highlights)),
-          SliverToBoxAdapter(
-            child: _Section(
-              title: 'Product details',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Row('Brand', 'Gaia'),
-                  _Row('Category', p.category),
-                  if (p.size != null && p.size!.isNotEmpty) _Row('Pack size', p.size!),
-                  const _Row('Diet', 'Vegetarian'),
-                  const SizedBox(height: 12),
-                  const Text('About', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Text(info.about, style: const TextStyle(fontSize: 14, color: Brand.muted, height: 1.5)),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: _Section(title: 'Nutrition information', child: _Nutrition(info: info))),
-          SliverToBoxAdapter(
-            child: _Section(
-              title: 'Storage & usage',
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.kitchen_outlined, color: Brand.accent, size: 22),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(info.storage, style: const TextStyle(fontSize: 14, color: Brand.muted, height: 1.5))),
-                ],
-              ),
-            ),
-          ),
+          SliverToBoxAdapter(child: _Details(info: info)),
           if (sameRange.isNotEmpty) SliverToBoxAdapter(child: _Rail(title: 'More in ${p.category}', products: sameRange, onOpen: (o) => _open(context, o))),
           if (others.isNotEmpty) SliverToBoxAdapter(child: _Rail(title: 'You may also like', products: others, onOpen: (o) => _open(context, o))),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -111,22 +80,22 @@ class ProductScreen extends StatelessWidget {
   }
 }
 
-class _Gallery extends StatefulWidget {
+class _Gallery extends ConsumerStatefulWidget {
   const _Gallery({required this.product});
   final Product product;
 
   @override
-  State<_Gallery> createState() => _GalleryState();
+  ConsumerState<_Gallery> createState() => _GalleryState();
 }
 
-class _GalleryState extends State<_Gallery> {
+class _GalleryState extends ConsumerState<_Gallery> {
   int _page = 0;
 
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
     final photos = p.gallery;
-    final count = context.select<CartState, int>((c) => c.count);
+    final count = ref.watch(cartProvider.select((c) => c.count));
     final top = MediaQuery.paddingOf(context).top;
     Widget round(IconData icon, String tip, VoidCallback onTap, {int badge = 0}) => Material(
           color: Colors.white,
@@ -210,8 +179,6 @@ class _Header extends StatelessWidget {
         children: [
           Row(
             children: [
-              const VegDot(),
-              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(color: Brand.accentTint, borderRadius: BorderRadius.circular(6)),
@@ -282,45 +249,71 @@ class _Highlights extends StatelessWidget {
   }
 }
 
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child});
-  final String title;
-  final Widget child;
+/// About, nutrition and storage in one small card: three lines of about (tap for more),
+/// nutrition folded away, storage on one line.
+class _Details extends StatefulWidget {
+  const _Details({required this.info});
+  final ProductInfo info;
+
+  @override
+  State<_Details> createState() => _DetailsState();
+}
+
+class _DetailsState extends State<_Details> {
+  bool _more = false;
 
   @override
   Widget build(BuildContext context) {
+    final info = widget.info;
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Brand.ink)),
-          const SizedBox(height: 12),
-          child,
+          GestureDetector(
+            onTap: () => setState(() => _more = !_more),
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: info.about),
+              ]),
+              maxLines: _more ? null : 3,
+              overflow: _more ? TextOverflow.visible : TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, color: Brand.muted, height: 1.45),
+            ),
+          ),
+          if (!_more)
+            GestureDetector(
+              onTap: () => setState(() => _more = true),
+              child: const Padding(padding: EdgeInsets.only(top: 2), child: Text('Read more', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w700, fontSize: 13))),
+            ),
+          const SizedBox(height: 6),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                leading: const Icon(Icons.eco_outlined, color: Brand.accent, size: 20),
+                title: Text('Nutrition (per ${info.per})', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                children: [_Nutrition(info: info)],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.kitchen_outlined, color: Brand.accent, size: 20),
+              const SizedBox(width: 16),
+              Expanded(child: Text(info.storage, style: const TextStyle(fontSize: 13, color: Brand.muted, height: 1.4))),
+            ]),
+          ),
         ],
       ),
     );
   }
-}
-
-class _Row extends StatelessWidget {
-  const _Row(this.label, this.value);
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 96, child: Text(label, style: const TextStyle(fontSize: 13.5, color: Brand.muted))),
-            Expanded(child: Text(value, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Brand.ink))),
-          ],
-        ),
-      );
 }
 
 class _Nutrition extends StatelessWidget {
@@ -387,7 +380,7 @@ class _Rail extends StatelessWidget {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Brand.ink))),
           const SizedBox(height: 12),
           SizedBox(
-            height: _w + 100,
+            height: _w + 112,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),

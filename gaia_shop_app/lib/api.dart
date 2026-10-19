@@ -30,6 +30,25 @@ class Api {
 
   Future<Catalog> catalog() async => Catalog.fromJson(await _send(() => _http.get(_u('/catalog'))));
 
+  /// GET a shop endpoint, skipping the download when what the phone has is still current:
+  /// with [etag] the server answers 304 (no body) if nothing changed.
+  Future<({String? raw, String? etag, bool unchanged})> fetchFresh(String path, {String? etag}) async {
+    final http.Response r;
+    try {
+      r = await _http.get(_u(path), headers: {if (etag != null) 'if-none-match': etag}).timeout(_timeout);
+    } on TimeoutException {
+      throw ApiException('The server is taking too long. Please try again.');
+    } catch (_) {
+      throw ApiException('Could not reach the server. Check your internet connection.');
+    }
+    if (r.statusCode == 304) return (raw: null, etag: etag, unchanged: true);
+    if (r.statusCode < 200 || r.statusCode >= 300) throw ApiException('Something went wrong (${r.statusCode}). Please try again.');
+    return (raw: utf8.decode(r.bodyBytes), etag: r.headers['etag'], unchanged: false);
+  }
+
+  List<ShopBanner> parseBanners(Map<String, dynamic> j) =>
+      ((j['banners'] as List?) ?? []).map((e) => ShopBanner.fromJson(e as Map<String, dynamic>, base: _base)).toList();
+
   /// The home-screen carousel, highest priority first.
   Future<List<ShopBanner>> banners() async {
     final j = await _send(() => _http.get(_u('/banners')));
@@ -73,6 +92,13 @@ class Api {
     final j = await _send(() => _http.post(_u('/customer/login'),
         headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'name': name, 'mode': signUp ? 'signup' : 'signin'})));
     return (token: j['token'] as String, customer: Customer.fromJson(j['customer'] as Map<String, dynamic>));
+  }
+
+  /// Ends this phone's session (other phones stay signed in). Best effort.
+  Future<void> customerLogout(String token) async {
+    try {
+      await _http.post(_u('/customer/logout'), headers: {'authorization': 'Bearer $token'}).timeout(const Duration(seconds: 8));
+    } catch (_) {}
   }
 
   /// The signed-in account, with the address it last ordered to.

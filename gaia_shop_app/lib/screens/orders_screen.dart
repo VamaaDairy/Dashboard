@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../state/orders_state.dart';
+import '../store/account.dart';
 import '../theme.dart';
 import 'order_screen.dart';
 
 /// "My orders": everything this phone has ordered, newest first.
-class OrdersScreen extends StatelessWidget {
+class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final s = context.watch<OrdersState>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(accountProvider);
 
     Widget body;
     if (s.loading && s.orders.isEmpty) {
@@ -70,7 +70,7 @@ class OrdersScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text('My orders', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800))),
-          Expanded(child: RefreshIndicator(color: Brand.accent, onRefresh: s.refresh, child: body)),
+          Expanded(child: RefreshIndicator(color: Brand.accent, onRefresh: ref.read(accountProvider.notifier).refresh, child: body)),
         ],
       ),
     );

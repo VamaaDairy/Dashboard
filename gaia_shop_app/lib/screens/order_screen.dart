@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../gaia_map.dart';
 import '../models.dart';
-import '../state/map_state.dart';
-import '../state/orders_state.dart';
+import '../store/account.dart';
+import '../store/core.dart';
+import '../store/map.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
@@ -22,16 +23,16 @@ String _when(DateTime d) {
 }
 
 /// One order: where it is now, what is in it, what it costs. Pull down to refresh the status.
-class OrderScreen extends StatefulWidget {
+class OrderScreen extends ConsumerStatefulWidget {
   const OrderScreen({super.key, required this.order, this.justPlaced = false});
   final Order order;
   final bool justPlaced;
 
   @override
-  State<OrderScreen> createState() => _OrderScreenState();
+  ConsumerState<OrderScreen> createState() => _OrderScreenState();
 }
 
-class _OrderScreenState extends State<OrderScreen> {
+class _OrderScreenState extends ConsumerState<OrderScreen> {
   late Order _order = widget.order;
   String? _error;
   RoutePath? _route;
@@ -40,7 +41,7 @@ class _OrderScreenState extends State<OrderScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<MapState>().load();
+    ref.read(mapProvider.notifier).load();
     _loadRoute();
     // while the order is on its way, the status, the rider and the route stay current by themselves
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -62,7 +63,7 @@ class _OrderScreenState extends State<OrderScreen> {
       return;
     }
     try {
-      final route = await context.read<Api>().route(GeoPoint(r.lat!, r.lng!), GeoPoint(o.lat!, o.lng!));
+      final route = await ref.read(apiProvider).route(GeoPoint(r.lat!, r.lng!), GeoPoint(o.lat!, o.lng!));
       if (mounted) setState(() => _route = route);
     } catch (_) {
       // the map still shows both dots; the line is a bonus
@@ -73,7 +74,7 @@ class _OrderScreenState extends State<OrderScreen> {
 
   Future<void> _refresh() async {
     try {
-      final fresh = await context.read<OrdersState>().reload(_order);
+      final fresh = await ref.read(accountProvider.notifier).reload(_order);
       if (!mounted) return;
       setState(() {
         _order = fresh;

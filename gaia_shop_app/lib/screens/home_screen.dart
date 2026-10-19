@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../banner_carousel.dart';
 import '../config.dart';
 import '../models.dart';
-import '../state/cart_state.dart';
-import '../state/catalog_state.dart';
-import '../state/orders_state.dart';
+import '../store/account.dart';
+import '../store/cart.dart';
+import '../store/catalog.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'account_screen.dart';
@@ -15,34 +15,49 @@ import 'orders_screen.dart';
 import 'product_screen.dart';
 
 /// The app's frame: the menu and "My orders", with the cart bar floating above the tabs.
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // the saved menu is already on screen; this only refreshes it if it is stale
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
-    final catalog = context.read<CatalogState>();
-    final cart = context.read<CartState>();
-    await catalog.load();
-    cart.setRule(catalog.rule);
-    cart.syncWith(catalog.products);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
+
+  /// Back in the app after a while: refresh the menu if it has gone stale (prices, stock).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.resumed) _load();
+  }
+
+  Future<void> _load({bool force = false}) => ref.read(catalogProvider.notifier).load(force: force);
 
   @override
   Widget build(BuildContext context) {
+    // whenever the menu changes, the cart follows: current prices, delivery rule, nothing that's gone
+    ref.listen(catalogProvider, (prev, next) {
+      if (identical(prev?.catalog, next.catalog) || next.catalog == null) return;
+      final cart = ref.read(cartProvider.notifier);
+      cart.setRule(next.rule);
+      cart.syncWith(next.products);
+    });
     return Scaffold(
-      body: IndexedStack(index: _tab, children: [MenuScreen(onRetry: _load), const OrdersScreen(), const AccountScreen()]),
+      body: IndexedStack(index: _tab, children: [MenuScreen(onRetry: () => _load(force: true)), const OrdersScreen(), const AccountScreen()]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -53,7 +68,7 @@ class _HomeShellState extends State<HomeShell> {
             indicatorColor: Brand.accentTint,
             onDestinationSelected: (i) {
               setState(() => _tab = i);
-              if (i == 1) context.read<OrdersState>().refresh();
+              if (i == 1) ref.read(accountProvider.notifier).refresh();
             },
             destinations: const [
               NavigationDestination(icon: Icon(Icons.restaurant_menu_outlined), selectedIcon: Icon(Icons.restaurant_menu, color: Brand.accent), label: 'Order'),
@@ -67,15 +82,15 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class MenuScreen extends StatefulWidget {
+class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key, required this.onRetry});
   final Future<void> Function() onRetry;
 
   @override
-  State<MenuScreen> createState() => _MenuScreenState();
+  ConsumerState<MenuScreen> createState() => _MenuScreenState();
 }
 
-class _MenuScreenState extends State<MenuScreen> {
+class _MenuScreenState extends ConsumerState<MenuScreen> {
   final _search = TextEditingController();
   String? _category;
 
@@ -87,8 +102,8 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final catalog = context.watch<CatalogState>();
-    final count = context.select<CartState, int>((c) => c.count);
+    final catalog = ref.watch(catalogProvider);
+    final count = ref.watch(cartProvider.select((c) => c.count));
 
     return SafeArea(
       bottom: false,
@@ -131,7 +146,7 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  List<Widget> _body(CatalogState catalog) {
+  List<Widget> _body(CatalogData catalog) {
     if (catalog.catalog == null) {
       if (catalog.loading) return [const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator(color: Brand.accent)))];
       return [
@@ -259,7 +274,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 mainAxisSpacing: 18,
                 crossAxisSpacing: 14,
                 // square photo (ADD on its corner) + fixed room for size, 2 lines of name and the price
-                mainAxisExtent: (MediaQuery.sizeOf(context).width - 46) / 2 + 96,
+                mainAxisExtent: (MediaQuery.sizeOf(context).width - 46) / 2 + 112,
               ),
               itemCount: g.value.length,
               itemBuilder: (_, i) => ProductTile(

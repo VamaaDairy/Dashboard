@@ -1,35 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
 import 'screens/cart_screen.dart';
-import 'state/cart_state.dart';
+import 'store/cart.dart';
 import 'theme.dart';
-
-/// The green "vegetarian" mark. Everything Gaia sells is.
-class VegDot extends StatelessWidget {
-  const VegDot({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        border: Border.all(color: Brand.veg, width: 1.5),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Center(
-        child: Container(
-          width: 8,
-          height: 8,
-          decoration: const BoxDecoration(color: Brand.veg, shape: BoxShape.circle),
-        ),
-      ),
-    );
-  }
-}
 
 /// A product photo, or a soft placeholder when there isn't one (or it can't load).
 class ProductImage extends StatelessWidget {
@@ -53,12 +29,20 @@ class ProductImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget img = url == null || url!.isEmpty
         ? _placeholder()
-        : CachedNetworkImage(
-            imageUrl: url!,
-            fit: fit,
-            placeholder: (_, __) => Container(color: Brand.surface),
-            errorWidget: (_, __, ___) => _placeholder(),
-          );
+        : LayoutBuilder(builder: (context, box) {
+            // decode at the size it is shown (rounded up to steps of 200 px so the same photo in a
+            // tile and a rail shares one decoded copy) instead of the full-resolution original
+            final w = (box.maxWidth.isFinite ? box.maxWidth : (size ?? 400)) * MediaQuery.devicePixelRatioOf(context);
+            final px = ((w / 200).ceil() * 200).clamp(200, 1600);
+            return CachedNetworkImage(
+              imageUrl: url!,
+              fit: fit,
+              memCacheWidth: px,
+              fadeInDuration: const Duration(milliseconds: 150),
+              placeholder: (_, __) => Container(color: Brand.surface),
+              errorWidget: (_, __, ___) => _placeholder(),
+            );
+          });
     final sized = SizedBox(width: size, height: size, child: img);
     return circle ? ClipOval(child: sized) : ClipRRect(borderRadius: BorderRadius.circular(radius), child: sized);
   }
@@ -66,7 +50,7 @@ class ProductImage extends StatelessWidget {
 
 /// ADD, which becomes a  -  1  +  stepper once the item is in the cart.
 /// [large] is the product page's solid "Add to cart".
-class AddButton extends StatelessWidget {
+class AddButton extends ConsumerWidget {
   const AddButton({super.key, required this.product, this.large = false, this.width});
 
   final Product product;
@@ -74,9 +58,10 @@ class AddButton extends StatelessWidget {
   final double? width;
 
   @override
-  Widget build(BuildContext context) {
-    final cart = context.watch<CartState>();
-    final qty = cart.qtyOf(product.sku);
+  Widget build(BuildContext context, WidgetRef ref) {
+    // only this product's quantity: the button rebuilds when it changes, not for every cart change
+    final qty = ref.watch(cartProvider.select((c) => c.qtyOf(product.sku)));
+    final cart = ref.read(cartProvider.notifier);
     final w = width ?? (large ? 160.0 : 76.0);
     final h = large ? 50.0 : 34.0;
     final r = BorderRadius.circular(large ? 14 : 9);
@@ -158,12 +143,20 @@ class PriceTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = product;
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.end,
-      spacing: 6,
+    // one line always: the struck-out MRP gives way before the price ever wraps
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
       children: [
         Text(rupees(p.price), style: TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Brand.ink, height: 1.1)),
-        if (p.offPercent > 0) Text(rupees(p.mrp), style: TextStyle(fontSize: size * 0.72, color: Brand.faint, decoration: TextDecoration.lineThrough, height: 1.3)),
+        if (p.offPercent > 0) ...[
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(rupees(p.mrp),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: size * 0.72, color: Brand.faint, decoration: TextDecoration.lineThrough, height: 1.3)),
+          ),
+        ],
       ],
     );
   }
@@ -211,7 +204,6 @@ class ProductTile extends StatelessWidget {
                   ),
                 ),
                 if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent)),
-                const Positioned(top: 8, right: 8, child: VegDot()),
                 // ADD sits on the photo's corner so it is always in the same place
                 Positioned(right: 6, bottom: -14, child: AddButton(product: p)),
               ],
@@ -238,12 +230,12 @@ class ProductTile extends StatelessWidget {
 }
 
 /// The red bar at the bottom once something is in the cart.
-class CartBar extends StatelessWidget {
+class CartBar extends ConsumerWidget {
   const CartBar({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final cart = context.watch<CartState>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(cartProvider);
     if (cart.count == 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -282,12 +274,12 @@ class CartBar extends StatelessWidget {
 }
 
 /// "Bill details" box, shared by the cart and checkout.
-class BillDetails extends StatelessWidget {
+class BillDetails extends ConsumerWidget {
   const BillDetails({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final cart = context.watch<CartState>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(cartProvider);
     Widget row(String l, Widget r) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l, style: const TextStyle(color: Brand.muted)), r]),

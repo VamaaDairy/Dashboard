@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
 import '../models.dart';
-import '../state/cart_state.dart';
-import '../state/map_state.dart';
-import '../state/orders_state.dart';
+import '../store/account.dart';
+import '../store/cart.dart';
+import '../store/map.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'address_picker_screen.dart';
 import 'customer_login_screen.dart';
 import 'order_screen.dart';
 
-class CheckoutScreen extends StatefulWidget {
+class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
 
   @override
-  State<CheckoutScreen> createState() => _CheckoutScreenState();
+  ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
-class _CheckoutScreenState extends State<CheckoutScreen> {
+class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _form = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _phone;
@@ -37,14 +37,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    final c = context.read<OrdersState>().customer; // remembered from the last order
+    final c = ref.read(accountProvider).customer; // remembered from the last order
     _name = TextEditingController(text: c.name);
     _phone = TextEditingController(text: c.phone);
     _address = TextEditingController(text: c.address);
     _pincode = TextEditingController(text: c.pincode);
     _lat = c.lat;
     _lng = c.lng;
-    context.read<MapState>().load();
+    ref.read(mapProvider.notifier).load();
   }
 
   Future<void> _pickOnMap() async {
@@ -77,19 +77,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _error = null;
       _serverFields = {};
     });
-    final needPin = context.read<MapState>().enabled && _lat == null;
+    final needPin = ref.read(mapProvider).enabled && _lat == null;
     setState(() => _pinMissing = needPin);
     if (!_form.currentState!.validate() || needPin) return;
 
-    final cart = context.read<CartState>();
-    final orders = context.read<OrdersState>();
+    final cart = ref.read(cartProvider.notifier);
+    final lines = ref.read(cartProvider).lines;
+    final orders = ref.read(accountProvider.notifier);
     final nav = Navigator.of(context);
     setState(() => _placing = true);
     try {
       final order = await orders.place(
         who: Customer(name: _name.text.trim(), phone: _phone.text.trim(), address: _address.text.trim(), pincode: _pincode.text.trim(), lat: _lat, lng: _lng),
         notes: _notes.text,
-        lines: cart.lines,
+        lines: lines,
       );
       cart.clear();
       // back to the menu, with the order on top
@@ -118,7 +119,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final total = context.select<CartState, double>((c) => c.total);
+    final total = ref.watch(cartProvider.select((c) => c.total));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Delivery details')),

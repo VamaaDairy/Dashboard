@@ -4,10 +4,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
-import 'state/map_state.dart';
+import 'store/map.dart';
 import 'theme.dart';
 
 /// What a marker shows: the rider on their scooter, the customer's door, or a plain dot.
@@ -35,7 +35,7 @@ class MapMarker {
 String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
 /// The Ola map with icon markers and an optional route line. Shows a quiet note instead when maps are not switched on.
-class GaiaMap extends StatefulWidget {
+class GaiaMap extends ConsumerStatefulWidget {
   const GaiaMap({super.key, required this.markers, this.route = const [], this.height = 220, this.radius = 16, this.follow, this.padding = const EdgeInsets.all(56)});
 
   final List<MapMarker> markers;
@@ -51,10 +51,10 @@ class GaiaMap extends StatefulWidget {
   final EdgeInsets padding;
 
   @override
-  State<GaiaMap> createState() => _GaiaMapState();
+  ConsumerState<GaiaMap> createState() => _GaiaMapState();
 }
 
-class _GaiaMapState extends State<GaiaMap> {
+class _GaiaMapState extends ConsumerState<GaiaMap> {
   MapLibreMapController? _c;
   bool _styleReady = false;
   bool _fitted = false;
@@ -180,7 +180,7 @@ class _GaiaMapState extends State<GaiaMap> {
 
   @override
   Widget build(BuildContext context) {
-    final map = context.watch<MapState>();
+    final map = ref.watch(mapProvider);
     final first = widget.follow ?? (widget.markers.isNotEmpty ? widget.markers.first.point : const GeoPoint(21.25, 81.63));
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.radius),

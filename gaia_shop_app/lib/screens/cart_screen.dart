@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
-import '../state/cart_state.dart';
-import '../state/catalog_state.dart';
+import '../store/cart.dart';
+import '../store/catalog.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'checkout_screen.dart';
 import 'customer_login_screen.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends ConsumerWidget {
   const CartScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final cart = context.watch<CartState>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(cartProvider);
 
     if (cart.isEmpty) {
       return Scaffold(
@@ -39,7 +39,7 @@ class CartScreen extends StatelessWidget {
       );
     }
 
-    final menu = context.read<CatalogState>();
+    final menu = ref.read(catalogProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Your cart')),
       body: ListView(
@@ -62,8 +62,6 @@ class CartScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const VegDot(),
-                              const SizedBox(height: 4),
                               Text(l.name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1.25)),
                               if (l.size != null) Text(l.size!, style: const TextStyle(fontSize: 12, color: Brand.muted)),
                             ],

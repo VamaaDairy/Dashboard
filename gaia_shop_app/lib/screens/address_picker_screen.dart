@@ -3,23 +3,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api.dart';
 import '../models.dart';
-import '../state/map_state.dart';
+import '../store/core.dart';
+import '../store/map.dart';
 import '../theme.dart';
 
 /// Choose where the order goes: search an address, use the current location, or move the map under the pin.
-class AddressPickerScreen extends StatefulWidget {
+class AddressPickerScreen extends ConsumerStatefulWidget {
   const AddressPickerScreen({super.key, this.initial});
   final PickedLocation? initial;
 
   @override
-  State<AddressPickerScreen> createState() => _AddressPickerScreenState();
+  ConsumerState<AddressPickerScreen> createState() => _AddressPickerScreenState();
 }
 
-class _AddressPickerScreenState extends State<AddressPickerScreen> {
+class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
   static const _start = LatLng(12.9716, 77.5946); // until we know better
 
   final _search = TextEditingController();
@@ -35,7 +35,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
   void initState() {
     super.initState();
     _picked = widget.initial;
-    context.read<MapState>().load();
+    ref.read(mapProvider.notifier).load();
     if (widget.initial == null) WidgetsBinding.instance.addPostFrameCallback((_) => _useCurrent(silent: true));
   }
 
@@ -76,7 +76,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
     setState(() => _resolving = true);
     PickedLocation? r;
     try {
-      r = await context.read<Api>().reverse(lat, lng);
+      r = await ref.read(apiProvider).reverse(lat, lng);
     } catch (_) {
       r = null;
     }
@@ -106,7 +106,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
       List<PlaceSuggestion> r = [];
       try {
         final t = _map?.cameraPosition?.target;
-        r = await context.read<Api>().searchPlaces(q.trim(), near: t == null ? null : GeoPoint(t.latitude, t.longitude));
+        r = await ref.read(apiProvider).searchPlaces(q.trim(), near: t == null ? null : GeoPoint(t.latitude, t.longitude));
       } catch (_) {}
       if (!mounted) return;
       setState(() {
@@ -127,7 +127,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final map = context.watch<MapState>();
+    final map = ref.watch(mapProvider);
     final start = widget.initial == null ? _start : LatLng(widget.initial!.lat, widget.initial!.lng);
 
     return Scaffold(

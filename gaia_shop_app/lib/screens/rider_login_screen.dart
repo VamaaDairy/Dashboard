@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
-import '../state/rider_state.dart';
+import '../store/rider.dart';
 import '../theme.dart';
 
 /// Delivery partners sign in with the mobile number and PIN the shop gave them.
-class RiderLoginScreen extends StatefulWidget {
+class RiderLoginScreen extends ConsumerStatefulWidget {
   const RiderLoginScreen({super.key});
 
   @override
-  State<RiderLoginScreen> createState() => _RiderLoginScreenState();
+  ConsumerState<RiderLoginScreen> createState() => _RiderLoginScreenState();
 }
 
-class _RiderLoginScreenState extends State<RiderLoginScreen> {
+class _RiderLoginScreenState extends ConsumerState<RiderLoginScreen> {
   final _phone = TextEditingController();
   final _pin = TextEditingController();
   bool _busy = false;
@@ -28,7 +28,7 @@ class _RiderLoginScreenState extends State<RiderLoginScreen> {
 
   Future<void> _login() async {
     final nav = Navigator.of(context);
-    final rider = context.read<RiderState>();
+    final rider = ref.read(riderProvider.notifier);
     setState(() {
       _busy = true;
       _error = null;

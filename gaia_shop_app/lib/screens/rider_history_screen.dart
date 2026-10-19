@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
-import '../state/rider_state.dart';
+import '../store/rider.dart';
 import '../theme.dart';
 
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -76,28 +76,28 @@ class DeliveryDayTile extends StatelessWidget {
 }
 
 /// Every day the rider delivered in the last 60 days; open a day to see its orders.
-class RiderHistoryScreen extends StatefulWidget {
+class RiderHistoryScreen extends ConsumerStatefulWidget {
   const RiderHistoryScreen({super.key, this.open});
 
   /// Day to show opened.
   final DateTime? open;
 
   @override
-  State<RiderHistoryScreen> createState() => _RiderHistoryScreenState();
+  ConsumerState<RiderHistoryScreen> createState() => _RiderHistoryScreenState();
 }
 
-class _RiderHistoryScreenState extends State<RiderHistoryScreen> {
+class _RiderHistoryScreenState extends ConsumerState<RiderHistoryScreen> {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<RiderState>().loadHistory();
+      if (mounted) ref.read(riderProvider.notifier).loadHistory();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final days = context.watch<RiderState>().history;
+    final days = ref.watch(riderProvider.select((r) => r.history));
     final total = days.fold<int>(0, (s, d) => s + d.count);
     final cash = days.fold<double>(0, (s, d) => s + d.cash);
 
@@ -106,7 +106,7 @@ class _RiderHistoryScreenState extends State<RiderHistoryScreen> {
       appBar: AppBar(title: const Text('Previous deliveries', style: TextStyle(fontWeight: FontWeight.w800)), backgroundColor: Brand.surface),
       body: RefreshIndicator(
         color: Brand.accent,
-        onRefresh: context.read<RiderState>().loadHistory,
+        onRefresh: ref.read(riderProvider.notifier).loadHistory,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

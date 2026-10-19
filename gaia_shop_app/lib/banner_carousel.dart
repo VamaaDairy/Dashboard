@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
 import 'screens/product_screen.dart';
-import 'state/catalog_state.dart';
+import 'store/catalog.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -101,14 +101,14 @@ class _BannerCarouselState extends State<BannerCarousel> {
   }
 }
 
-class _Slide extends StatelessWidget {
+class _Slide extends ConsumerWidget {
   const _Slide({required this.banner});
   final ShopBanner banner;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final b = banner;
-    final product = b.sku == null ? null : context.select<CatalogState, Product?>((c) => c.bySku(b.sku!));
+    final product = b.sku == null ? null : ref.watch(catalogProvider.select((c) => c.bySku(b.sku!)));
     void open() {
       if (product != null) Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: product)));
     }

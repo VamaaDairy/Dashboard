@@ -2,38 +2,38 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../gaia_map.dart';
 import '../models.dart';
-import '../state/map_state.dart';
-import '../state/rider_state.dart';
+import '../store/map.dart';
+import '../store/rider.dart';
 import '../theme.dart';
 import 'rider_history_screen.dart';
 import 'rider_order_screen.dart';
 
 /// The rider's day: where they are and every drop on one big map, a one-line summary, and
 /// a card per delivery (customer, area, how far, cash to collect). Tap a card to work on it.
-class RiderHomeScreen extends StatefulWidget {
+class RiderHomeScreen extends ConsumerStatefulWidget {
   const RiderHomeScreen({super.key});
 
   @override
-  State<RiderHomeScreen> createState() => _RiderHomeScreenState();
+  ConsumerState<RiderHomeScreen> createState() => _RiderHomeScreenState();
 }
 
-class _RiderHomeScreenState extends State<RiderHomeScreen> {
+class _RiderHomeScreenState extends ConsumerState<RiderHomeScreen> {
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    final rider = context.read<RiderState>();
+    final rider = ref.read(riderProvider.notifier);
     // after the first frame: right after sign-in this screen is built inside the rebuild that
     // login() triggered, and loading notifies listeners - doing that mid-build lost the update
     // in release builds and left the spinner up forever
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<MapState>().load();
+      ref.read(mapProvider.notifier).load();
       rider.refresh();
       rider.loadHistory();
       rider.startSharing();
@@ -48,7 +48,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     super.dispose();
   }
 
-  Future<void> _signOut(RiderState rider) async {
+  Future<void> _signOut(RiderStore rider) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -65,7 +65,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rider = context.watch<RiderState>();
+    final rider = ref.watch(riderProvider);
+    final actions = ref.read(riderProvider.notifier);
     final orders = rider.orders;
     final here = rider.here;
     final toPick = orders.where((o) => o.status != 'out_for_delivery').length;
@@ -124,11 +125,11 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         ],
                       ),
                     ),
-                    if (!sharing) TextButton(onPressed: rider.startSharing, child: const Text('Turn on')),
+                    if (!sharing) TextButton(onPressed: actions.startSharing, child: const Text('Turn on')),
                     rider.loading
                         ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Brand.accent)))
-                        : IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: rider.refresh),
-                    IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: () => _signOut(rider)),
+                        : IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: actions.refresh),
+                    IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: () => _signOut(actions)),
                   ],
                 ),
               ),

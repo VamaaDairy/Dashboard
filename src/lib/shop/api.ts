@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import type { ShopOrder } from "./orders";
 import { STATUS_LABEL } from "./pricing";
@@ -67,4 +68,16 @@ export async function readJson(req: NextRequest, maxBytes = 20_000): Promise<unk
   } catch {
     return null;
   }
+}
+
+/**
+ * JSON with an ETag: when the app already has exactly this (If-None-Match), answer 304 with no
+ * body - the phone keeps what it has and nothing is downloaded again.
+ */
+export function jsonWithEtag(req: NextRequest, body: unknown, maxAge = 60): NextResponse {
+  const text = JSON.stringify(body);
+  const etag = `"${createHash("sha1").update(text).digest("base64url")}"`;
+  const headers = { ETag: etag, "Cache-Control": `public, max-age=${maxAge}` };
+  if (req.headers.get("if-none-match") === etag) return new NextResponse(null, { status: 304, headers });
+  return new NextResponse(text, { headers: { ...headers, "Content-Type": "application/json" } });
 }

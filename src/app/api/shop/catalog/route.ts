@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { jsonWithEtag } from "@/lib/shop/api";
 import { listProducts } from "@/lib/shop/catalog";
 import { deliveryRule } from "@/lib/shop/orders";
 import { shop } from "@/lib/whatsapp/config";
@@ -6,7 +7,7 @@ import { shop } from "@/lib/whatsapp/config";
 export const dynamic = "force-dynamic";
 
 /** Everything the app needs to draw the menu: shop details, delivery rule, categories and products. */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const products = await listProducts();
 
   const cats = new Map<string, { name: string; image: string | null; count: number }>();
@@ -17,12 +18,13 @@ export async function GET() {
     cats.set(p.category, c);
   }
 
-  return NextResponse.json(
+  // ETag: an app that already has this exact menu gets a 304 and downloads nothing
+  return jsonWithEtag(
+    req,
     {
       shop: { name: shop.name || "Gaia", deliveryFee: deliveryRule.fee, freeDeliveryAbove: deliveryRule.freeAbove, currency: "INR", paymentMethods: ["cod"] },
       categories: [...cats.values()],
       products,
     },
-    { headers: { "Cache-Control": "public, max-age=60" } },
   );
 }

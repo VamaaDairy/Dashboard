@@ -1,26 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../gaia_map.dart';
 import '../models.dart';
-import '../state/rider_state.dart';
+import '../store/core.dart';
+import '../store/rider.dart';
 import '../theme.dart';
 
 /// Turn-by-turn to the customer on Ola Maps, inside the app: full-screen map that follows the rider,
 /// the next turn on top, time and distance left at the bottom. The route is asked again as the rider moves.
-class RiderNavigationScreen extends StatefulWidget {
+class RiderNavigationScreen extends ConsumerStatefulWidget {
   const RiderNavigationScreen({super.key, required this.order});
   final Order order;
 
   @override
-  State<RiderNavigationScreen> createState() => _RiderNavigationScreenState();
+  ConsumerState<RiderNavigationScreen> createState() => _RiderNavigationScreenState();
 }
 
-class _RiderNavigationScreenState extends State<RiderNavigationScreen> {
+class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
   RoutePath? _route;
   GeoPoint? _routedFrom;
   DateTime _routedAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -36,7 +37,7 @@ class _RiderNavigationScreenState extends State<RiderNavigationScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<RiderState>().startSharing();
+      ref.read(riderProvider.notifier).startSharing();
       _reroute(force: true);
     });
     // even standing still, refresh now and then so the time left stays honest
@@ -51,14 +52,14 @@ class _RiderNavigationScreenState extends State<RiderNavigationScreen> {
 
   /// Asks Ola for the route from where the rider is now; skipped until they have moved ~40 m.
   Future<void> _reroute({bool force = false}) async {
-    final here = context.read<RiderState>().here;
+    final here = ref.read(riderProvider).here;
     if (here == null || _asking) return;
     final last = _routedFrom;
     final moved = last == null || (last.lat - here.lat).abs() > 0.0004 || (last.lng - here.lng).abs() > 0.0004;
     if (!moved && !(force && DateTime.now().difference(_routedAt).inSeconds >= 25)) return;
     _asking = true;
     try {
-      final r = await context.read<Api>().route(here, _dest);
+      final r = await ref.read(apiProvider).route(here, _dest);
       _routedFrom = here;
       _routedAt = DateTime.now();
       if (mounted) {
@@ -77,7 +78,7 @@ class _RiderNavigationScreenState extends State<RiderNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rider = context.watch<RiderState>();
+    final rider = ref.watch(riderProvider);
     final here = rider.here;
     // a new GPS fix may need a fresh route
     WidgetsBinding.instance.addPostFrameCallback((_) {

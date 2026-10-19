@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
-import '../state/orders_state.dart';
+import '../store/account.dart';
 import '../theme.dart';
 
 /// Sign in or create an account - both on one screen. Ordering needs one; the cart does not.
 /// Pops with `true` once signed in, so the caller (e.g. "Proceed to checkout") can carry on.
-class CustomerLoginScreen extends StatefulWidget {
+class CustomerLoginScreen extends ConsumerStatefulWidget {
   const CustomerLoginScreen({super.key, this.reason, this.startWithSignUp = false});
 
   /// Why we are asking, shown under the title (e.g. "Sign in to place your order").
@@ -16,16 +16,16 @@ class CustomerLoginScreen extends StatefulWidget {
 
   /// Shows the screen if the customer is not signed in yet; true when they are (already, or now).
   static Future<bool> ensure(BuildContext context, {String? reason}) async {
-    if (context.read<OrdersState>().signedIn) return true;
+    if (ProviderScope.containerOf(context, listen: false).read(accountProvider).signedIn) return true;
     final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => CustomerLoginScreen(reason: reason)));
     return ok == true;
   }
 
   @override
-  State<CustomerLoginScreen> createState() => _CustomerLoginScreenState();
+  ConsumerState<CustomerLoginScreen> createState() => _CustomerLoginScreenState();
 }
 
-class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
+class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
   final _phone = TextEditingController();
   final _pin = TextEditingController();
   final _pin2 = TextEditingController();
@@ -56,7 +56,7 @@ class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
     final problem = _check();
     if (problem != null) return setState(() => _error = problem);
     final nav = Navigator.of(context);
-    final orders = context.read<OrdersState>();
+    final orders = ref.read(accountProvider.notifier);
     setState(() {
       _busy = true;
       _error = null;

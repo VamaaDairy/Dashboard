@@ -1,30 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../gaia_map.dart';
 import '../models.dart';
-import '../state/rider_state.dart';
+import '../store/core.dart';
+import '../store/rider.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'rider_navigation_screen.dart';
 
 /// One delivery: the map to the customer, who they are, what to hand over, and the two steps - picked up, delivered.
-class RiderOrderScreen extends StatefulWidget {
+class RiderOrderScreen extends ConsumerStatefulWidget {
   const RiderOrderScreen({super.key, required this.orderNo});
   final String orderNo;
 
   @override
-  State<RiderOrderScreen> createState() => _RiderOrderScreenState();
+  ConsumerState<RiderOrderScreen> createState() => _RiderOrderScreenState();
 }
 
-class _RiderOrderScreenState extends State<RiderOrderScreen> {
+class _RiderOrderScreenState extends ConsumerState<RiderOrderScreen> {
   RoutePath? _route;
   GeoPoint? _routedFrom;
   bool _busy = false;
 
-  Order? _find(RiderState s) {
+  Order? _find(RiderData s) {
     for (final o in s.orders) {
       if (o.orderNo == widget.orderNo) return o;
     }
@@ -42,7 +43,7 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
     }
     _routedFrom = here;
     try {
-      final r = await context.read<Api>().route(here, GeoPoint(o.lat!, o.lng!));
+      final r = await ref.read(apiProvider).route(here, GeoPoint(o.lat!, o.lng!));
       if (mounted) setState(() => _route = r);
     } catch (_) {
       // the dots are still on the map
@@ -55,7 +56,7 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
   Future<void> _pickup(Order o) async {
     setState(() => _busy = true);
     try {
-      await context.read<RiderState>().pickup(o);
+      await ref.read(riderProvider.notifier).pickup(o);
     } on ApiException catch (e) {
       _toast(e.message);
     } catch (_) {
@@ -72,7 +73,7 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
       builder: (_) => _OtpSheet(amount: o.total),
     );
     if (otp == null || !mounted) return;
-    final rider = context.read<RiderState>();
+    final rider = ref.read(riderProvider.notifier);
     final nav = Navigator.of(context);
     setState(() => _busy = true);
     try {
@@ -94,7 +95,7 @@ class _RiderOrderScreenState extends State<RiderOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rider = context.watch<RiderState>();
+    final rider = ref.watch(riderProvider);
     final o = _find(rider);
     if (o == null) {
       return Scaffold(appBar: AppBar(), body: const Center(child: Text('This delivery is no longer on your list.')));

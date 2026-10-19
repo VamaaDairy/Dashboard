@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gaia_shop/api.dart';
 import 'package:gaia_shop/main.dart';
 import 'package:gaia_shop/models.dart';
-import 'package:gaia_shop/state/cart_state.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gaia_shop/store/cart.dart';
+import 'package:gaia_shop/store/core.dart';
 import 'package:gaia_shop/theme.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -41,49 +43,55 @@ void main() {
     });
   });
 
-  group('CartState', () {
+  group('CartStore', () {
     late SharedPreferences prefs;
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       prefs = await SharedPreferences.getInstance();
     });
+    ProviderContainer box() => ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs)]);
 
     test('adds, counts, totals and applies the delivery rule', () {
-      final cart = CartState(prefs)..setRule(const DeliveryRule(fee: 20, freeAbove: 200));
+      final c = box();
+      final cart = c.read(cartProvider.notifier)..setRule(const DeliveryRule(fee: 20, freeAbove: 200));
       cart.add(_p('a', 30));
       cart.add(_p('a', 30));
       cart.add(_p('b', 100));
-      expect(cart.count, 3);
-      expect(cart.subtotal, 160);
-      expect(cart.delivery, 20);
-      expect(cart.total, 180);
-      expect(cart.toFreeDelivery, 40);
+      var s = c.read(cartProvider);
+      expect(s.count, 3);
+      expect(s.subtotal, 160);
+      expect(s.delivery, 20);
+      expect(s.total, 180);
+      expect(s.toFreeDelivery, 40);
       cart.add(_p('b', 100));
-      expect(cart.delivery, 0); // 260 is over the free-delivery line
-      expect(cart.toFreeDelivery, 0);
+      s = c.read(cartProvider);
+      expect(s.delivery, 0); // 260 is over the free-delivery line
+      expect(s.toFreeDelivery, 0);
     });
 
     test('quantity can go down to zero, which removes the line, and is capped', () {
-      final cart = CartState(prefs)..add(_p('a', 10));
+      final c = box();
+      final cart = c.read(cartProvider.notifier)..add(_p('a', 10));
       cart.setQty('a', 0);
-      expect(cart.isEmpty, true);
+      expect(c.read(cartProvider).isEmpty, true);
       cart.add(_p('a', 10));
       cart.setQty('a', 999);
-      expect(cart.qtyOf('a'), CartState.maxPerItem);
+      expect(c.read(cartProvider).qtyOf('a'), CartStore.maxPerItem);
     });
 
     test('survives closing the app', () {
-      CartState(prefs).add(_p('a', 10));
-      expect(CartState(prefs).qtyOf('a'), 1);
+      box().read(cartProvider.notifier).add(_p('a', 10));
+      expect(box().read(cartProvider).qtyOf('a'), 1);
     });
 
     test('syncWith drops items no longer sold and refreshes prices', () {
-      final cart = CartState(prefs)
+      final c = box();
+      c.read(cartProvider.notifier)
         ..add(_p('a', 10))
-        ..add(_p('gone', 5));
-      cart.syncWith([_p('a', 12)]);
-      expect(cart.qtyOf('gone'), 0);
-      expect(cart.subtotal, 12);
+        ..add(_p('gone', 5))
+        ..syncWith([_p('a', 12)]);
+      expect(c.read(cartProvider).qtyOf('gone'), 0);
+      expect(c.read(cartProvider).subtotal, 12);
     });
   });
 
@@ -96,6 +104,8 @@ void main() {
       final server = MockClient((req) async {
         final path = req.url.path;
         if (path == '/api/shop/catalog') return http.Response(jsonEncode(_catalog), 200, headers: {'content-type': 'application/json'});
+        if (path == '/api/shop/geo/config') return http.Response(jsonEncode({'enabled': false}), 200, headers: {'content-type': 'application/json'});
+        if (path == '/api/shop/banners') return http.Response(jsonEncode({'banners': []}), 200, headers: {'content-type': 'application/json'});
         if (path == '/api/shop/orders' && req.method == 'POST') {
           sentBody = jsonDecode(req.body) as Map<String, dynamic>;
           return http.Response(
@@ -128,7 +138,7 @@ void main() {
       });
 
       _tallPhone(tester);
-      await tester.pumpWidget(GaiaApp(prefs: prefs, api: Api(client: server, base: 'http://test')));
+      await tester.pumpWidget(GaiaApp(prefs: prefs, vault: TokenVault.memory({TokenVault.customer: 'c' * 64}), api: Api(client: server, base: 'http://test')));
       await tester.pumpAndSettle();
 
       // the menu is there
@@ -175,7 +185,7 @@ void main() {
       // confirmation, and the cart is empty again
       expect(find.text('Order placed!'), findsOneWidget);
       expect(find.text('GS-000042'), findsOneWidget);
-      expect(CartState(prefs).isEmpty, true);
+      expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs)]).read(cartProvider).isEmpty, true); // what is saved on the phone
     });
 
     testWidgets('a server error is shown, and the order is kept in the cart', (tester) async {
@@ -183,11 +193,12 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final server = MockClient((req) async {
         if (req.url.path == '/api/shop/catalog') return http.Response(jsonEncode(_catalog), 200);
+        if (req.url.path == '/api/shop/geo/config') return http.Response(jsonEncode({'enabled': false}), 200);
         return http.Response(jsonEncode({'error': 'Some items in your cart are no longer available. Please review your cart.'}), 409);
       });
 
       _tallPhone(tester);
-      await tester.pumpWidget(GaiaApp(prefs: prefs, api: Api(client: server, base: 'http://test')));
+      await tester.pumpWidget(GaiaApp(prefs: prefs, vault: TokenVault.memory({TokenVault.customer: 'c' * 64}), api: Api(client: server, base: 'http://test')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ADD').first);
       await tester.pump();
@@ -202,7 +213,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('no longer available'), findsOneWidget);
-      expect(CartState(prefs).count, 1);
+      expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs)]).read(cartProvider).count, 1);
     });
 
     testWidgets('no connection shows a retry instead of a blank screen', (tester) async {
@@ -210,7 +221,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final server = MockClient((req) async => throw http.ClientException('offline'));
 
-      await tester.pumpWidget(GaiaApp(prefs: prefs, api: Api(client: server, base: 'http://test')));
+      await tester.pumpWidget(GaiaApp(prefs: prefs, vault: TokenVault.memory({TokenVault.customer: 'c' * 64}), api: Api(client: server, base: 'http://test')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Could not reach the server'), findsOneWidget);
       expect(find.text('Try again'), findsOneWidget);

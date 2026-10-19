@@ -96,9 +96,11 @@ class CartLine {
   final double price;
   final String? image;
   final String? size;
-  int qty;
+  final int qty;
 
   double get total => price * qty;
+
+  CartLine withQty(int q) => CartLine(sku: sku, name: name, price: price, image: image, size: size, qty: q);
 
   Map<String, dynamic> toJson() => {'sku': sku, 'name': name, 'price': price, 'image': image, 'size': size, 'qty': qty};
 

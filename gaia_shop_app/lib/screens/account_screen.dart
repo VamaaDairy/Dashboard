@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config.dart';
-import '../state/orders_state.dart';
+import '../store/account.dart';
 import '../theme.dart';
 import 'customer_login_screen.dart';
 import 'rider_login_screen.dart';
 
 /// A quiet page: who we are, and the way in for delivery partners.
-class AccountScreen extends StatelessWidget {
+class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final orders = context.watch<OrdersState>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orders = ref.watch(accountProvider);
     return SafeArea(
       bottom: false,
       child: ListView(
@@ -31,7 +31,7 @@ class AccountScreen extends StatelessWidget {
                     leading: const CircleAvatar(backgroundColor: Brand.accentTint, child: Icon(Icons.person, color: Brand.accent)),
                     title: Text(orders.customer.name.isEmpty ? 'Signed in' : orders.customer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
                     subtitle: Text(orders.customer.phone),
-                    trailing: TextButton(onPressed: orders.signOut, child: const Text('Sign out')),
+                    trailing: TextButton(onPressed: ref.read(accountProvider.notifier).signOut, child: const Text('Sign out')),
                   )
                 : ListTile(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
