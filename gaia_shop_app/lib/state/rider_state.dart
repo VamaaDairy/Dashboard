@@ -27,6 +27,9 @@ class RiderState extends ChangeNotifier {
 
   RiderProfile? profile;
   List<Order> orders = [];
+
+  /// Finished deliveries by day; empty until [loadHistory] (or on an older backend).
+  List<DeliveryDay> history = [];
   bool loading = false;
   String? error;
   Position? position;
@@ -60,6 +63,7 @@ class RiderState extends ChangeNotifier {
     _token = null;
     profile = null;
     orders = [];
+    history = [];
     await _prefs.remove(_tokenKey);
     await _prefs.remove(_nameKey);
     await _prefs.remove(_phoneKey);
@@ -92,6 +96,17 @@ class RiderState extends ChangeNotifier {
   Future<void> deliver(Order o, String otp) async {
     await _api.riderDeliver(_token!, o.id!, otp);
     await refresh();
+    await loadHistory();
+  }
+
+  /// The rider's past days. Quiet on failure: the current deliveries matter more.
+  Future<void> loadHistory() async {
+    final t = _token;
+    if (t == null) return;
+    try {
+      history = await _api.riderHistory(t);
+      notifyListeners();
+    } catch (_) {}
   }
 
   /// Starts reporting this phone's position (at most every 6 s) so customers see the rider move.

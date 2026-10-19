@@ -192,9 +192,12 @@ class _GaiaMapState extends State<GaiaMap> {
                 color: Brand.surface,
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(16),
-                child: const Text('Live map is not available right now.', textAlign: TextAlign.center, style: TextStyle(color: Brand.muted)),
+                child: map.pending
+                    ? const _Loading()
+                    : const Text('Live map is not available right now.', textAlign: TextAlign.center, style: TextStyle(color: Brand.muted)),
               )
-            : MapLibreMap(
+            : Stack(children: [
+                Positioned.fill(child: MapLibreMap(
                 styleString: map.styleUrl,
                 initialCameraPosition: CameraPosition(target: LatLng(first.lat, first.lng), zoom: 14),
                 compassEnabled: false,
@@ -215,12 +218,27 @@ class _GaiaMapState extends State<GaiaMap> {
                   _marks.clear();
                   _fitted = false;
                   _styleReady = true;
+                  if (mounted) setState(() {});
                   await _draw();
                 },
-              ),
+              )),
+                // the native map view is black until its style arrives (slow on mobile data)
+                if (!_styleReady) const Positioned.fill(child: ColoredBox(color: Brand.surface, child: Center(child: _Loading()))),
+              ]),
       ),
     );
   }
+}
+
+class _Loading extends StatelessWidget {
+  const _Loading();
+
+  @override
+  Widget build(BuildContext context) => const Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 2.5, color: Brand.accent)),
+        SizedBox(height: 10),
+        Text('Loading map…', style: TextStyle(color: Brand.muted, fontWeight: FontWeight.w600)),
+      ]);
 }
 
 // ---- marker pictures ----

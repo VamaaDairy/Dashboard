@@ -9,6 +9,7 @@ import '../models.dart';
 import '../state/map_state.dart';
 import '../state/rider_state.dart';
 import '../theme.dart';
+import 'rider_history_screen.dart';
 import 'rider_order_screen.dart';
 
 /// The rider's day: where they are and every drop on one big map, a one-line summary, and
@@ -34,6 +35,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       if (!mounted) return;
       context.read<MapState>().load();
       rider.refresh();
+      rider.loadHistory();
       rider.startSharing();
     });
     // new assignments show up without pulling down
@@ -71,144 +73,194 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     final cash = orders.fold<double>(0, (s, o) => s + o.total);
     final sharing = rider.locationProblem == null;
     final first = (rider.profile?.name ?? 'rider').split(' ').first;
+    final size = MediaQuery.sizeOf(context);
+    final top = MediaQuery.paddingOf(context).top;
 
     return Scaffold(
-      backgroundColor: Brand.surface,
-      body: RefreshIndicator(
-        color: Brand.accent,
-        onRefresh: rider.refresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Stack(
-                children: [
-                  // map with the summary card resting on its bottom edge (inside the stack,
-                  // so the native map view can never paint over it)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 44),
-                    child: GaiaMap(
-                    height: MediaQuery.sizeOf(context).height * 0.46,
-                    radius: 0,
-                    padding: const EdgeInsets.fromLTRB(60, 140, 60, 70),
-                    markers: [
-                      for (final o in orders)
-                        if (o.hasPin) MapMarker.home(GeoPoint(o.lat!, o.lng!), color: o.status == 'out_for_delivery' ? const Color(0xFFE8590C) : const Color(0xFF2E8B3D)),
-                      if (here != null) MapMarker.rider(here, heading: rider.heading),
-                    ],
-                  ),
-                  ),
-                  // today's numbers
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 0,
-                    child: Material(
-                      color: Colors.white,
-                      elevation: 3,
-                      shadowColor: Colors.black26,
-                      borderRadius: BorderRadius.circular(18),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        child: Row(
-                          children: [
-                            _stat('$toPick', 'To pick up', const Color(0xFF2E8B3D)),
-                            _divider(),
-                            _stat('$onWay', 'On the way', const Color(0xFFE8590C)),
-                            _divider(),
-                            _stat(rupees(cash), 'Cash to collect', Brand.accent),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // header floating on the map
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    top: MediaQuery.paddingOf(context).top + 8,
-                    child: Material(
-                      color: Colors.white,
-                      elevation: 3,
-                      shadowColor: Colors.black26,
-                      borderRadius: BorderRadius.circular(18),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
-                        child: Row(
-                          children: [
+      body: Stack(
+        children: [
+          // the whole screen is the map; the list slides over it
+          Positioned.fill(
+            child: GaiaMap(
+              height: size.height,
+              radius: 0,
+              padding: EdgeInsets.fromLTRB(60, top + 120, 60, size.height * 0.45 + 30),
+              markers: [
+                for (final o in orders)
+                  if (o.hasPin) MapMarker.home(GeoPoint(o.lat!, o.lng!), color: o.status == 'out_for_delivery' ? const Color(0xFFE8590C) : const Color(0xFF2E8B3D)),
+                if (here != null) MapMarker.rider(here, heading: rider.heading),
+              ],
+            ),
+          ),
+          // header floating on the map
+          Positioned(
+            left: 12,
+            right: 12,
+            top: top + 8,
+            child: Material(
+              color: Colors.white,
+              elevation: 3,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(18),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 4, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Hi, $first', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: sharing ? Brand.veg : const Color(0xFFE8590C), shape: BoxShape.circle)),
+                            const SizedBox(width: 6),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Hi, $first', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-                                  const SizedBox(height: 2),
-                                  Row(children: [
-                                    Container(width: 8, height: 8, decoration: BoxDecoration(color: sharing ? Brand.veg : const Color(0xFFE8590C), shape: BoxShape.circle)),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(sharing ? 'On duty · location on' : 'Location off',
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: sharing ? Brand.veg : const Color(0xFFE8590C))),
-                                    ),
-                                  ]),
-                                ],
-                              ),
+                              child: Text(sharing ? 'On duty · location on' : 'Location off',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: sharing ? Brand.veg : const Color(0xFFE8590C))),
                             ),
-                            if (!sharing) TextButton(onPressed: rider.startSharing, child: const Text('Turn on')),
-                            IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: () => _signOut(rider)),
-                          ],
-                        ),
+                          ]),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    if (!sharing) TextButton(onPressed: rider.startSharing, child: const Text('Turn on')),
+                    rider.loading
+                        ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Brand.accent)))
+                        : IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: rider.refresh),
+                    IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: () => _signOut(rider)),
+                  ],
+                ),
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
-            if (rider.locationProblem != null)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Text(rider.locationProblem!, style: const TextStyle(color: Color(0xFF8A5A00), fontWeight: FontWeight.w600)),
+          ),
+          // the day's list: drag up for more, down to see more map
+          DraggableScrollableSheet(
+            initialChildSize: 0.45,
+            minChildSize: 0.18,
+            maxChildSize: 0.92,
+            snap: true,
+            snapSizes: const [0.45],
+            builder: (context, scroll) => Container(
+              decoration: const BoxDecoration(
+                color: Brand.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [BoxShadow(color: Color(0x26000000), blurRadius: 16, offset: Offset(0, -4))],
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                child: CustomScrollView(
+                  controller: scroll,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 10, bottom: 12),
+                          width: 44,
+                          height: 5,
+                          decoration: BoxDecoration(color: Brand.faint.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(3)),
+                        ),
+                      ),
+                    ),
+                    // today's numbers
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Material(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: Row(
+                              children: [
+                                _stat('$toPick', 'To pick up', const Color(0xFF2E8B3D)),
+                                _divider(),
+                                _stat('$onWay', 'On the way', const Color(0xFFE8590C)),
+                                _divider(),
+                                _stat(rupees(cash), 'Cash to collect', Brand.accent),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (rider.locationProblem != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                          child: Text(rider.locationProblem!, style: const TextStyle(color: Color(0xFF8A5A00), fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    if (rider.error != null)
+                      SliverToBoxAdapter(
+                        child: Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), child: Text(rider.error!, style: const TextStyle(color: Brand.danger))),
+                      ),
+                    if (orders.isEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(32, 8, 32, 40),
+                          child: rider.loading
+                              ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Brand.accent)))
+                              : const Column(children: [
+                                  Icon(Icons.inventory_2_outlined, size: 52, color: Brand.faint),
+                                  SizedBox(height: 12),
+                                  Text('No deliveries right now', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                                  SizedBox(height: 4),
+                                  Text('New orders show up here as soon as they are given to you.', textAlign: TextAlign.center, style: TextStyle(color: Brand.muted)),
+                                ]),
+                        ),
+                      )
+                    else ...[
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+                          child: Text('Your deliveries', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
+                        sliver: SliverList.separated(
+                          itemCount: orders.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (_, i) => _OrderCard(order: orders[i], here: here),
+                        ),
+                      ),
+                    ],
+                    // finished work, day by day
+                    if (rider.history.isNotEmpty) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(20, orders.isEmpty ? 0 : 8, 8, 6),
+                          child: Row(children: [
+                            const Expanded(child: Text('Previous deliveries', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RiderHistoryScreen())),
+                              child: const Text('See all'),
+                            ),
+                          ]),
+                        ),
+                      ),
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
+                        sliver: SliverList.separated(
+                          itemCount: rider.history.length.clamp(0, 5),
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (_, i) {
+                            final d = rider.history[i];
+                            return DeliveryDayTile(
+                              day: d,
+                              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RiderHistoryScreen(open: d.day))),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            if (rider.error != null)
-              SliverToBoxAdapter(
-                child: Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: Text(rider.error!, style: const TextStyle(color: Brand.danger))),
-              ),
-            if (orders.isEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 8, 32, 40),
-                  child: rider.loading
-                      ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Brand.accent)))
-                      : const Column(children: [
-                          Icon(Icons.inventory_2_outlined, size: 52, color: Brand.faint),
-                          SizedBox(height: 12),
-                          Text('No deliveries right now', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-                          SizedBox(height: 4),
-                          Text('New orders show up here as soon as they are given to you.', textAlign: TextAlign.center, style: TextStyle(color: Brand.muted)),
-                        ]),
-                ),
-              )
-            else ...[
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-                  child: Text('Your deliveries', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                sliver: SliverList.separated(
-                  itemCount: orders.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (_, i) => _OrderCard(order: orders[i], here: here),
-                ),
-              ),
-            ],
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

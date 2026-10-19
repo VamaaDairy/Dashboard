@@ -165,6 +165,12 @@ class Api {
     return (token: j['token'] as String, rider: RiderProfile(name: r['name'] as String, phone: r['phone'] as String));
   }
 
+  /// Finished deliveries, grouped by day (newest first, last 60 days).
+  Future<List<DeliveryDay>> riderHistory(String token) async {
+    final j = await _send(() => _http.get(_r('/history'), headers: _auth(token)));
+    return ((j['days'] as List?) ?? []).map((e) => DeliveryDay.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<List<Order>> riderOrders(String token) async {
     final j = await _send(() => _http.get(_r('/orders'), headers: _auth(token)));
     return ((j['orders'] as List?) ?? []).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();

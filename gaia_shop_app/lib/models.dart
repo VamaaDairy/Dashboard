@@ -387,3 +387,39 @@ const defaultBanners = [
   ShopBanner(id: -4, title: 'Soft, fresh paneer, rich in protein', cta: 'Add paneer', sku: '1005', bgColor: Color(0xFF4A86E0)),
   ShopBanner(id: -5, title: 'Pin your exact doorstep for perfectly timed delivery', subtitle: 'Drop a pin on the map at checkout', bgColor: Color(0xFF7EAEF5)),
 ];
+
+/// One finished delivery in a rider's history.
+class DoneDelivery {
+  const DoneDelivery({required this.orderNo, required this.name, required this.address, required this.total, required this.items, required this.deliveredAt});
+  final String orderNo;
+  final String name;
+  final String address;
+  final double total;
+  final int items;
+  final DateTime deliveredAt;
+
+  factory DoneDelivery.fromJson(Map<String, dynamic> j) => DoneDelivery(
+        orderNo: j['orderNo'] as String,
+        name: j['name'] as String,
+        address: (j['address'] as String?) ?? '',
+        total: _num(j['total']),
+        items: (j['items'] as num?)?.toInt() ?? 0,
+        deliveredAt: DateTime.parse(j['deliveredAt'] as String).toLocal(),
+      );
+}
+
+/// A day of a rider's work: how many deliveries, how much cash, and which orders.
+class DeliveryDay {
+  const DeliveryDay({required this.day, required this.count, required this.cash, required this.orders});
+  final DateTime day;
+  final int count;
+  final double cash;
+  final List<DoneDelivery> orders;
+
+  factory DeliveryDay.fromJson(Map<String, dynamic> j) => DeliveryDay(
+        day: DateTime.parse(j['day'] as String),
+        count: (j['count'] as num).toInt(),
+        cash: _num(j['cash']),
+        orders: ((j['orders'] as List?) ?? []).map((e) => DoneDelivery.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+}
