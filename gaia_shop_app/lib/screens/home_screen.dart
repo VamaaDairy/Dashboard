@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'account_screen.dart';
 import 'cart_screen.dart';
+import 'my_calendar_screen.dart';
 import 'orders_screen.dart';
 import 'product_screen.dart';
 
@@ -206,6 +207,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       ),
       if (!searching && catalog.banners.isNotEmpty)
         SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 16), child: BannerCarousel(banners: catalog.banners))),
+      // subscriptions: the fortnight at a glance (or an invitation to start one)
+      if (!searching) const SliverToBoxAdapter(child: QuickCalendar()),
       if (!searching && catalog.categories.length > 1)
         SliverToBoxAdapter(
           child: Padding(

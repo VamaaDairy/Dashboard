@@ -27,7 +27,7 @@ const _catalog = {
 
 /// A phone-shaped screen tall enough to show the whole short menu without scrolling.
 void _tallPhone(WidgetTester tester) {
-  tester.view.physicalSize = const Size(1080, 3000);
+  tester.view.physicalSize = const Size(1080, 4200);
   tester.view.devicePixelRatio = 2.5;
   addTearDown(tester.view.reset);
 }

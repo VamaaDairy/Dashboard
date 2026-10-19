@@ -129,3 +129,16 @@ export async function deleteBannerAction(id: number): Promise<{ ok: boolean; err
   revalidatePath("/shop-orders/banners");
   return { ok: true };
 }
+
+// ---- subscriptions ----
+
+/** Turns tomorrow's (or [day]'s) subscriptions into orders now - the same as the evening job. */
+export async function createSubscriptionOrdersAction(day?: string): Promise<{ ok: boolean; error?: string; created?: number; items?: number }> {
+  if (!(await canEdit())) return NO;
+  const { addDays, generateOrders, todayIST } = await import("./subscriptions");
+  const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : addDays(todayIST(), 1);
+  const r = await generateOrders(d);
+  revalidatePath("/shop-orders/subscriptions");
+  revalidatePath("/shop-orders");
+  return { ok: true, created: r.created, items: r.items };
+}

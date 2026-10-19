@@ -8,6 +8,7 @@ import '../store/catalog.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cart_screen.dart';
+import 'subscribe_screen.dart';
 
 /// One product: big swipeable photos, price, highlights, details, nutrition,
 /// storage, then more from the same range and other things to try.
@@ -70,7 +71,22 @@ class ProductScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                AddButton(product: p, large: true, width: 170),
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Brand.accent,
+                    minimumSize: const Size(0, 50),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    side: const BorderSide(color: Brand.accent, width: 1.4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.calendar_month, size: 18),
+                    Text('Subscribe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                  ]),
+                ),
+                const SizedBox(width: 10),
+                AddButton(product: p, large: true, width: 150),
               ],
             ),
           ),

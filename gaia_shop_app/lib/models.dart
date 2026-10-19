@@ -425,3 +425,172 @@ class DeliveryDay {
         orders: ((j['orders'] as List?) ?? []).map((e) => DoneDelivery.fromJson(e as Map<String, dynamic>)).toList(),
       );
 }
+
+// ---- subscriptions ----
+
+String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+DateTime parseYmd(String s) {
+  final p = s.split('-').map(int.parse).toList();
+  return DateTime(p[0], p[1], p[2]);
+}
+
+/// How often a subscription comes. Names match the backend.
+enum Frequency {
+  daily('daily', 'Daily'),
+  alternate('alternate', 'Alternate'),
+  weekdays('weekdays', 'Custom'),
+  everyN('every_n', 'Every nth day'),
+  skipN('skip_n', "Don't deliver on nth day");
+
+  const Frequency(this.api, this.label);
+  final String api;
+  final String label;
+  static Frequency of(String s) => Frequency.values.firstWhere((f) => f.api == s, orElse: () => Frequency.daily);
+}
+
+const weekdayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// A plan: what normally comes and when. Also used on the phone to preview a plan before saving.
+class SubPlan {
+  const SubPlan({required this.frequency, required this.start, this.weekdays = const [], this.everyN = 3, this.end});
+  final Frequency frequency;
+  final DateTime start;
+  final DateTime? end;
+
+  /// ISO weekdays, 1 = Monday ... 7 = Sunday (for [Frequency.weekdays]).
+  final List<int> weekdays;
+  final int everyN;
+
+  /// Same rule as the backend: is a delivery due on [day]?
+  bool due(DateTime day) {
+    final d = DateTime(day.year, day.month, day.day), s = DateTime(start.year, start.month, start.day);
+    if (d.isBefore(s) || (end != null && d.isAfter(end!))) return false;
+    final since = DateTime.utc(d.year, d.month, d.day).difference(DateTime.utc(s.year, s.month, s.day)).inDays;
+    return switch (frequency) {
+      Frequency.daily => true,
+      Frequency.alternate => since % 2 == 0,
+      Frequency.weekdays => weekdays.contains(d.weekday),
+      Frequency.everyN => since % everyN == 0,
+      Frequency.skipN => (since + 1) % everyN != 0,
+    };
+  }
+
+  String get describe => switch (frequency) {
+        Frequency.daily => 'Every day',
+        Frequency.alternate => 'Alternate days',
+        Frequency.weekdays => weekdays.map((w) => weekdayShort[w - 1]).join(', '),
+        Frequency.everyN => 'Every $everyN days',
+        Frequency.skipN => 'Daily, not every ${everyN}th day',
+      };
+}
+
+class Subscription {
+  const Subscription({required this.id, required this.sku, required this.name, required this.qty, required this.plan, required this.status, this.image, this.price, this.size});
+  final int id;
+  final String sku;
+  final String name;
+  final String? image;
+  final double? price;
+  final String? size;
+  final int qty;
+  final SubPlan plan;
+
+  /// active, paused
+  final String status;
+  bool get paused => status == 'paused';
+
+  factory Subscription.fromJson(Map<String, dynamic> j) => Subscription(
+        id: (j['id'] as num).toInt(),
+        sku: j['sku'] as String,
+        name: j['name'] as String,
+        image: j['image'] as String?,
+        price: (j['price'] as num?)?.toDouble(),
+        size: j['size'] as String?,
+        qty: (j['qty'] as num).toInt(),
+        status: j['status'] as String,
+        plan: SubPlan(
+          frequency: Frequency.of(j['frequency'] as String),
+          start: parseYmd(j['startDate'] as String),
+          end: j['endDate'] == null ? null : parseYmd(j['endDate'] as String),
+          weekdays: [for (final w in (j['weekdays'] as List?) ?? const []) (w as num).toInt()],
+          everyN: (j['everyN'] as num?)?.toInt() ?? 3,
+        ),
+      );
+}
+
+class SubItem {
+  const SubItem({required this.subscriptionId, required this.sku, required this.name, required this.qty, required this.planQty, required this.changed, this.image});
+  final int subscriptionId;
+  final String sku;
+  final String name;
+  final String? image;
+  final int qty;
+  final int planQty;
+  final bool changed;
+
+  factory SubItem.fromJson(Map<String, dynamic> j) => SubItem(
+        subscriptionId: (j['subscriptionId'] as num).toInt(),
+        sku: j['sku'] as String,
+        name: j['name'] as String,
+        image: j['image'] as String?,
+        qty: (j['qty'] as num).toInt(),
+        planQty: (j['planQty'] as num).toInt(),
+        changed: j['changed'] == true,
+      );
+}
+
+/// What a calendar day looks like, as in the legend: vacation (skipped), delivered, upcoming, no delivery.
+enum DayKind { vacation, delivered, upcoming, none }
+
+class SubDay {
+  const SubDay({required this.day, required this.items, required this.state, required this.editable, this.orderNo, this.orderStatus, this.accessKey});
+  final DateTime day;
+  final List<SubItem> items;
+
+  /// planned, changed, skipped, ordered, none
+  final String state;
+  final bool editable;
+  final String? orderNo;
+  final String? orderStatus;
+  final String? accessKey;
+
+  int get count => items.fold(0, (n, i) => n + i.qty);
+  DayKind get kind {
+    if (state == 'skipped') return DayKind.vacation;
+    if (state == 'ordered' && orderStatus == 'delivered') return DayKind.delivered;
+    if (state == 'none' || (state == 'ordered' && orderStatus == 'cancelled')) return DayKind.none;
+    return DayKind.upcoming;
+  }
+
+  factory SubDay.fromJson(Map<String, dynamic> j) => SubDay(
+        day: parseYmd(j['day'] as String),
+        items: [for (final e in (j['items'] as List?) ?? const []) SubItem.fromJson(e as Map<String, dynamic>)],
+        state: j['state'] as String,
+        editable: j['editable'] == true,
+        orderNo: j['orderNo'] as String?,
+        orderStatus: j['orderStatus'] as String?,
+        accessKey: j['accessKey'] as String?,
+      );
+}
+
+class SubCalendar {
+  const SubCalendar({required this.firstEditable, required this.cutoffHour, required this.subscriptions, required this.days});
+  final DateTime firstEditable;
+  final int cutoffHour;
+  final List<Subscription> subscriptions;
+  final List<SubDay> days;
+
+  SubDay? on(DateTime d) {
+    for (final x in days) {
+      if (x.day.year == d.year && x.day.month == d.month && x.day.day == d.day) return x;
+    }
+    return null;
+  }
+
+  factory SubCalendar.fromJson(Map<String, dynamic> j) => SubCalendar(
+        firstEditable: parseYmd(j['firstEditableDay'] as String),
+        cutoffHour: (j['cutoffHour'] as num?)?.toInt() ?? 21,
+        subscriptions: [for (final e in (j['subscriptions'] as List?) ?? const []) Subscription.fromJson(e as Map<String, dynamic>)],
+        days: [for (final e in (j['days'] as List?) ?? const []) SubDay.fromJson(e as Map<String, dynamic>)],
+      );
+}

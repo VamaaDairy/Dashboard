@@ -112,6 +112,58 @@ class Api {
     return ((j['orders'] as List?) ?? []).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  // ---- subscriptions (signed-in customer) ----
+
+  Map<String, String> _bearer(String token) => {..._json, 'authorization': 'Bearer $token'};
+
+  /// Raw JSON (kept on the phone as-is) for [days] days from [from].
+  Future<String> subscriptionsRaw(String token, DateTime from, int days) async {
+    final j = await _send(() => _http.get(_u('/subscriptions').replace(queryParameters: {'from': ymd(from), 'days': '$days'}), headers: _bearer(token)));
+    return jsonEncode(j);
+  }
+
+  Future<int> createSubscription(String token, {required String sku, required int qty, required SubPlan plan, required Customer to, List<DateTime> skipDays = const []}) async {
+    final j = await _send(() => _http.post(_u('/subscriptions'),
+        headers: _bearer(token),
+        body: jsonEncode({
+          'sku': sku,
+          'qty': qty,
+          'frequency': plan.frequency.api,
+          'weekdays': plan.weekdays,
+          'everyN': plan.everyN,
+          'startDate': ymd(plan.start),
+          'endDate': plan.end == null ? null : ymd(plan.end!),
+          'name': to.name,
+          'phone': to.phone,
+          'address': to.address,
+          'pincode': to.pincode.isEmpty ? null : to.pincode,
+          'lat': to.lat,
+          'lng': to.lng,
+          'skipDays': [for (final d in skipDays) ymd(d)],
+        })));
+    return (j['id'] as num).toInt();
+  }
+
+  /// [changes]: qty, frequency/weekdays/everyN, endDate, status (active | paused | cancelled).
+  Future<void> updateSubscription(String token, int id, Map<String, Object?> changes) async {
+    await _send(() => _http.patch(_u('/subscriptions/$id'), headers: _bearer(token), body: jsonEncode(changes)));
+  }
+
+  /// One day of one subscription: qty 0 skips it, null goes back to the plan.
+  Future<void> setSubscriptionDay(String token, int id, DateTime day, int? qty) async {
+    await _send(() => _http.put(_u('/subscriptions/$id/day'), headers: _bearer(token), body: jsonEncode({'day': ymd(day), 'qty': qty})));
+  }
+
+  /// Skip (or bring back) every subscription on one day.
+  Future<void> setWholeDay(String token, DateTime day, bool skip) async {
+    await _send(() => _http.put(_u('/subscriptions/day'), headers: _bearer(token), body: jsonEncode({'day': ymd(day), 'skip': skip})));
+  }
+
+  Future<int> setVacation(String token, DateTime from, DateTime to, {bool skip = true}) async {
+    final j = await _send(() => _http.put(_u('/subscriptions/vacation'), headers: _bearer(token), body: jsonEncode({'from': ymd(from), 'to': ymd(to), 'skip': skip})));
+    return (j['days'] as num?)?.toInt() ?? 0;
+  }
+
   // ---- maps (the backend talks to Ola Maps; the key never reaches the phone) ----
 
   Future<MapConfig> mapConfig() async {
