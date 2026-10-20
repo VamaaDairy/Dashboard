@@ -1,0 +1,21 @@
+name: Deploy
+
+# Runs on the production server through a self-hosted runner labelled "dashboard-prod"
+# (setup: docs/DEPLOY.md). Manual on purpose - start it from the Actions tab once CI is green.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, dashboard-prod]
+    timeout-minutes: 30
+    steps:
+      - name: Deploy
+        shell: powershell
+        run: |
+          & "C:\Users\sysadmin07\Desktop\Dashboard\scripts\deploy.ps1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
