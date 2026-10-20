@@ -51,3 +51,6 @@ cj.txt
 p.html
 *.xlsx
 src/app/md.md
+
+# previous build kept by scripts/deploy.ps1 for rollback
+/.next.bak/
