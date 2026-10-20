@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
     "db:setup": "tsx db/setup.ts",
     "db:reset": "tsx db/setup.ts --reset",
