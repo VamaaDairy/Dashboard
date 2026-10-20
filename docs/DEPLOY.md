@@ -22,7 +22,3 @@ If the build or health check fails, the previous build (kept in `.next.bak`) is 
 `GET /api/health` returns 200 `{"status":"ok","db":"up"}` or 503 when the database is unreachable.
 Point an uptime monitor at `https://production.vamadairy.in/api/health`.
 
-## Enabling the workflows
-The files in `docs/github-workflows/` are ready to use. GitHub only runs them from `.github/`, so add them there
-(`.github/workflows/ci.yml`, `.github/workflows/deploy.yml`, `.github/dependabot.yml`), either with the GitHub
-web UI ("Add file" -> "Create new file") or by pushing with a token that has the `workflow` scope.
