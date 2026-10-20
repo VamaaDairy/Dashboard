@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Upload } from "lucide-react";
-import { addGrn } from "@/app/grn/actions";
+import { addGrn } from "@/app/pod/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormRow, Panel } from "@/components/cn/ui";
@@ -32,14 +32,14 @@ export function GrnForm() {
   return (
     <form ref={formRef} onSubmit={submit}>
       <Panel
-        title="Add GRN"
-        description="Enter the invoice number and attach the GRN image."
+        title="Add POD"
+        description="Enter the invoice number and attach the POD image."
         flush
         footer={
           <div className="flex items-center justify-between gap-3">
             {error ? <span className="flex items-center gap-1.5 text-[13px] text-destructive"><AlertCircle className="size-4" />{error}</span> : <span />}
             <Button type="submit" variant="primary" disabled={pending}>
-              {pending ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />} Save GRN
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />} Save POD
             </Button>
           </div>
         }
@@ -48,7 +48,7 @@ export function GrnForm() {
           <FormRow label="Invoice no." required>
             <Input name="invoice_no" className={`${ctl} sm:max-w-72`} maxLength={60} required />
           </FormRow>
-          <FormRow label="GRN image" required hint="JPG, PNG or WebP, up to 3 MB.">
+          <FormRow label="POD image" required hint="JPG, PNG or WebP, up to 3 MB.">
             <Input name="image" type="file" accept="image/jpeg,image/png,image/webp" className={`${ctl} sm:max-w-72`} required />
           </FormRow>
         </div>

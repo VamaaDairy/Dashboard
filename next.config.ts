@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // the page was called GRN before it became POD; keep old bookmarks and image links working
+  async redirects() {
+    return [
+      { source: "/grn", destination: "/pod", permanent: true },
+      { source: "/api/grn/:path*", destination: "/api/pod/:path*", permanent: true },
+    ];
+  },
   // the home directory above this project holds an unrelated package-lock.json
   turbopack: { root: __dirname },
   // dev server is opened by IP from other machines; without this /_next dev resources are blocked

@@ -128,7 +128,7 @@ const DAILY: NavItem[] = [
     ],
   },
   { href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale },
-  { href: "/grn", key: "grn", label: "GRN", icon: PackageCheck },
+  { href: "/pod", key: "grn", label: "POD", icon: PackageCheck },
 ];
 
 /** Opened when the model itself changes - rarely, and never during a normal day. */

@@ -12,7 +12,7 @@ import { atLeast, levelFor } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
-export default async function GrnPage({ searchParams }: PageProps<"/grn">) {
+export default async function GrnPage({ searchParams }: PageProps<"/pod">) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const me = await userFromToken((await cookies()).get("session")?.value);
@@ -22,28 +22,28 @@ export default async function GrnPage({ searchParams }: PageProps<"/grn">) {
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="mx-auto w-full max-w-5xl space-y-5">
-        <PageHeader icon={PackageCheck} title="GRN" subtitle="The goods-received image kept against each invoice number." />
+        <PageHeader icon={PackageCheck} title="POD" subtitle="The proof-of-delivery image kept against each invoice number." />
 
         {canEdit ? <GrnForm /> : null}
 
         <Panel
-          title="Saved GRNs"
+          title="Saved PODs"
           flush
           actions={
-            <form action="/grn" className="w-56">
+            <form action="/pod" className="w-56">
               <Input name="q" defaultValue={q} placeholder="Search invoice no." className="h-8" />
             </form>
           }
         >
           {rows.length === 0 ? (
-            <EmptyState icon={SearchX} title={q ? "No GRN matches that invoice" : "No GRN added yet"} />
+            <EmptyState icon={SearchX} title={q ? "No POD matches that invoice" : "No POD added yet"} />
           ) : (
             <ul className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
               {rows.map((g) => (
                 <li key={g.id} className="overflow-hidden rounded-lg border border-border bg-card">
-                  <a href={g.image_url ?? `/api/grn/${g.id}/image`} target="_blank" rel="noreferrer" className="block aspect-square bg-muted">
+                  <a href={g.image_url ?? `/api/pod/${g.id}/image`} target="_blank" rel="noreferrer" className="block aspect-square bg-muted">
                     {/* eslint-disable-next-line @next/next/no-img-element -- Cloudinary already sizes the thumbnail */}
-                    <img src={g.image_url ? thumb(g.image_url) : `/api/grn/${g.id}/image`} alt={`GRN for invoice ${g.invoice_no}`} loading="lazy" className="size-full object-cover" />
+                    <img src={g.image_url ? thumb(g.image_url) : `/api/pod/${g.id}/image`} alt={`POD for invoice ${g.invoice_no}`} loading="lazy" className="size-full object-cover" />
                   </a>
                   <div className="flex items-center justify-between gap-2 px-3 py-2">
                     <div className="min-w-0">

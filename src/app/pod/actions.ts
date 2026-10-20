@@ -27,7 +27,7 @@ export async function addGrn(form: FormData): Promise<GrnResult> {
   if (invoice.length > 60) return { ok: false, error: "Invoice number is too long." };
 
   const file = form.get("image");
-  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose the GRN image." };
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose the POD image." };
   if (!TYPES.has(file.type)) return { ok: false, error: "The image must be a JPG, PNG or WebP." };
   if (file.size > MAX_BYTES) return { ok: false, error: "The image is over 3 MB - pick a smaller one." };
 
@@ -37,7 +37,7 @@ export async function addGrn(form: FormData): Promise<GrnResult> {
     `insert into grn (invoice_no, image_url, public_id, created_by) values ($1, $2, $3, $4)`,
     [invoice, up.url, up.publicId, me.name ?? me.email],
   );
-  revalidatePath("/grn");
+  revalidatePath("/pod");
   return { ok: true };
 }
 
@@ -46,6 +46,6 @@ export async function deleteGrn(id: number): Promise<GrnResult> {
   if (!me) return { ok: false, error: "You do not have permission to do this." };
   const [row] = await query<{ public_id: string | null }>(`delete from grn where id = $1 returning public_id`, [id]);
   if (row?.public_id) await deleteGrnImage(row.public_id).catch(() => {});
-  revalidatePath("/grn");
+  revalidatePath("/pod");
   return { ok: true };
 }
