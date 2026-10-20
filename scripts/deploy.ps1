@@ -8,7 +8,9 @@ param(
   [string]$Branch = "main"
 )
 
-$ErrorActionPreference = "Stop"
+# Continue, not Stop: Windows PowerShell 5.1 turns any native-command stderr (git's "From ..." line,
+# npm warnings) into a terminating error under Stop. Real failures are caught by the explicit checks below.
+$ErrorActionPreference = "Continue"
 Set-Location $AppDir
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
@@ -39,7 +41,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Step "Restart $Service"
-Restart-Service $Service -Force
+Restart-Service $Service -Force -ErrorAction Stop
 
 Step "Health check"
 $ok = $false
@@ -54,7 +56,7 @@ for ($i = 1; $i -le 15; $i++) {
 if (-not $ok) {
   Write-Host "Health check failed - rolling back" -ForegroundColor Red
   robocopy .next.bak .next /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-  Restart-Service $Service -Force
+  Restart-Service $Service -Force -ErrorAction Stop
   throw "deploy failed health check; previous build restored. See logs\app.err.log"
 }
 
