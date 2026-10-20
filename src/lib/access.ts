@@ -51,6 +51,7 @@ export const RESOURCES: Resource[] = [
   { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
   { key: "shop", label: "Online shop orders", group: "Everyday", path: "/shop-orders" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
+  { key: "grn", label: "GRN", group: "Everyday", path: "/grn" },
   // every Orders screen is its own resource
   ...(ordersResources as Array<{ key: string; label: string; group: string; slug: string }>).map((r) => ({
     key: r.key, label: r.label, group: `Orders - ${r.group}`, path: `/orders/${r.slug}`,
