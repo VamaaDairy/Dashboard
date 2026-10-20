@@ -8,7 +8,9 @@ param(
   [string]$Branch = "main"
 )
 
-$ErrorActionPreference = "Stop"
+# Continue, not Stop: Windows PowerShell 5.1 turns any native-command stderr (git's "From ..." line,
+# npm warnings) into a terminating error under Stop. Real failures are caught by the explicit checks below.
+$ErrorActionPreference = "Continue"
 Set-Location $AppDir
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
@@ -22,24 +24,30 @@ Step "Pull $Branch"
 git pull --ff-only origin $Branch
 if ($LASTEXITCODE -ne 0) { throw "git pull failed" }
 
-Step "Install dependencies"
-npm ci
-if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
-
 Step "Back up current build"
 if (Test-Path .next.bak) { Remove-Item .next.bak -Recurse -Force }
 if (Test-Path .next) { robocopy .next .next.bak /MIR /NFL /NDL /NJH /NJS /NP | Out-Null }
+
+# The running app locks files inside node_modules (Next's native compiler), so npm ci cannot
+# replace them and leaves node_modules half-deleted. Stop the app for the install and build.
+Step "Stop $Service"
+Stop-Service $Service -Force -ErrorAction Stop
+
+Step "Install dependencies"
+npm ci
+if ($LASTEXITCODE -ne 0) { throw "npm ci failed; $Service is STOPPED and node_modules may be incomplete - fix and re-run" }
 
 Step "Build"
 npm run build
 if ($LASTEXITCODE -ne 0) {
   Write-Host "Build failed - restoring previous build" -ForegroundColor Red
   if (Test-Path .next.bak) { robocopy .next.bak .next /MIR /NFL /NDL /NJH /NJS /NP | Out-Null }
-  throw "build failed; the running app was not restarted"
+  Start-Service $Service -ErrorAction Stop
+  throw "build failed; previous build restored and $Service restarted"
 }
 
-Step "Restart $Service"
-Restart-Service $Service -Force
+Step "Start $Service"
+Start-Service $Service -ErrorAction Stop
 
 Step "Health check"
 $ok = $false
@@ -54,7 +62,7 @@ for ($i = 1; $i -le 15; $i++) {
 if (-not $ok) {
   Write-Host "Health check failed - rolling back" -ForegroundColor Red
   robocopy .next.bak .next /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-  Restart-Service $Service -Force
+  Restart-Service $Service -Force -ErrorAction Stop
   throw "deploy failed health check; previous build restored. See logs\app.err.log"
 }
 
