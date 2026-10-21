@@ -224,14 +224,22 @@ class _QuickCalendarState extends ConsumerState<QuickCalendar> {
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Expanded(child: Text('Quick Calendar', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+          // shrinks rather than cuts off when the phone's text size is large
+          const Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text('Quick Calendar', maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            ),
+          ),
+          const SizedBox(width: 8),
           if (signedIn && subs.hasAny) ...[
-            _Pill(icon: Icons.beach_access_outlined, label: 'Set Vacation', dark: false, onTap: () => setVacation(context, ref)),
+            _Pill(icon: Icons.beach_access_outlined, label: 'Vacation', dark: false, onTap: () => setVacation(context, ref)),
             const SizedBox(width: 6),
           ],
           _Pill(
             icon: Icons.calendar_month,
-            label: 'MY CALENDAR',
+            label: 'My calendar',
             dark: true,
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const MyCalendarScreen())),
           ),
