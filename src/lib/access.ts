@@ -66,7 +66,7 @@ export const GROUPS = [...new Set(RESOURCES.map((r) => r.group))];
 /** Pages only owners may open. */
 const OWNER_ONLY = ["/users"];
 /** Pages any signed-in user may open. */
-const OPEN = ["/no-access"];
+const OPEN = ["/no-access", "/profile"];
 
 const under = (path: string, prefix: string) =>
   prefix === "/" ? path === "/" : path === prefix || path.startsWith(prefix + "/");

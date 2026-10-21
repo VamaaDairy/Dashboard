@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { GaiaLogo } from "@/components/brand";
 
@@ -112,6 +113,12 @@ export default function LoginPage() {
                 </button>
               </div>
               {errors.password && <p className="mt-1.5 text-xs text-destructive">{errors.password}</p>}
+            </div>
+
+            <div className="-mt-1 text-right">
+              <Link href="/login/forgot" className="text-xs text-muted-foreground hover:text-foreground">
+                Forgot password?
+              </Link>
             </div>
 
             <button

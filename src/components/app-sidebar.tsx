@@ -366,10 +366,10 @@ export function AppSidebar({
         ) : null}
 
         <div className="flex items-center gap-2 px-2 group-data-[collapsible=icon]:hidden">
-          <div className="flex min-w-0 flex-col leading-tight">
+          <a href="/profile" title="My profile" className="flex min-w-0 flex-col leading-tight hover:underline">
             <span className="truncate text-xs font-semibold text-foreground">{user?.name ?? "—"}</span>
             <span className="text-xs capitalize text-muted-foreground">{user?.role ?? ""}</span>
-          </div>
+          </a>
           <button
             onClick={handleLogout}
             title="Sign out"
