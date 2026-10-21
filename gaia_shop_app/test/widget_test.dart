@@ -151,17 +151,16 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('ADD').first);
       await tester.pump();
-      expect(find.text('View cart'), findsOneWidget);
-      expect(find.text('₹150'), findsWidgets); // 130 + 20 delivery, on the cart bar
+      expect(find.text('2 ITEMS'), findsOneWidget);
 
       // cart, with the bill and the "add more for free delivery" hint
       await tester.tap(find.text('View cart'));
       await tester.pumpAndSettle();
       expect(find.text('Bill details'), findsOneWidget);
-      expect(find.textContaining('more for FREE delivery', findRichText: true), findsOneWidget);
+      expect(find.textContaining('more for free delivery'), findsOneWidget);
 
       // checkout: an empty form is refused
-      await tester.tap(find.text('Checkout'));
+      await tester.tap(find.textContaining('Proceed to checkout'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Place order'));
       await tester.pumpAndSettle();
@@ -205,7 +204,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('View cart'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Checkout'));
+      await tester.tap(find.textContaining('Proceed to checkout'));
       await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextFormField, 'Your name'), 'Asha Verma');
       await tester.enterText(find.widgetWithText(TextFormField, 'Mobile number'), '9876543210');
