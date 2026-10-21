@@ -365,14 +365,24 @@ class DistFirm {
     required this.name,
     required this.code,
     this.city,
+    this.channel,
     this.type,
+    this.firmClass,
+    this.active = true,
+    this.servedBy,
+    this.route,
+    this.erpCode,
+    this.createdAt,
     this.contactPerson,
     this.phone,
     this.email,
     this.address,
+    this.area,
     this.district,
     this.state,
     this.pincode,
+    this.lat,
+    this.lng,
     this.gstin,
     this.pan,
     this.licenceNo,
@@ -384,14 +394,24 @@ class DistFirm {
   final String name;
   final String code;
   final String? city;
+  final String? channel;
   final String? type;
+  final String? firmClass;
+  final bool active;
+  final String? servedBy;
+  final String? route;
+  final String? erpCode;
+  final DateTime? createdAt;
   final String? contactPerson;
   final String? phone;
   final String? email;
   final String? address;
+  final String? area;
   final String? district;
   final String? state;
   final String? pincode;
+  final double? lat;
+  final double? lng;
   final String? gstin;
   final String? pan;
   final String? licenceNo;
@@ -399,10 +419,12 @@ class DistFirm {
   final String? salesOfficer;
   final String? salesOfficerPhone;
 
-  /// Address, city, district, state and pincode on one line, without the gaps.
+  bool get hasLocation => lat != null && lng != null && !(lat == 0 && lng == 0);
+
+  /// Address, area, city, district and state on one line (no repeats), then the pincode.
   String get fullAddress {
     final parts = <String>[];
-    for (final p in [address, city, district, state]) {
+    for (final p in [address, area, city, district, state]) {
       final t = p?.trim() ?? '';
       if (t.isNotEmpty && !parts.any((x) => x.toLowerCase() == t.toLowerCase())) parts.add(t);
     }
@@ -412,27 +434,39 @@ class DistFirm {
 
   factory DistFirm.fromJson(Map<String, dynamic> j) {
     String? s(String k) {
-      final v = (j[k] as String?)?.trim();
+      final v = j[k]?.toString().trim();
       return v == null || v.isEmpty ? null : v;
     }
+
+    double? n(String k) => j[k] is num ? (j[k] as num).toDouble() : double.tryParse(j[k]?.toString() ?? '');
 
     return DistFirm(
       uid: j['uid'] as String,
       name: j['name'] as String,
       code: (j['code'] as String?) ?? '',
       city: s('city'),
+      channel: s('channel'),
       type: s('type'),
+      firmClass: s('class'),
+      active: j['active'] != false,
+      servedBy: s('servedBy'),
+      route: s('route'),
+      erpCode: s('erpCode'),
+      createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '')?.toLocal(),
       contactPerson: s('contactPerson'),
       phone: s('phone'),
       email: s('email'),
       address: s('address'),
+      area: s('area'),
       district: s('district'),
       state: s('state'),
       pincode: s('pincode'),
+      lat: n('lat'),
+      lng: n('lng'),
       gstin: s('gstin'),
       pan: s('pan'),
       licenceNo: s('licenceNo'),
-      creditLimit: (j['creditLimit'] as num?)?.toDouble(),
+      creditLimit: n('creditLimit'),
       salesOfficer: s('salesOfficer'),
       salesOfficerPhone: s('salesOfficerPhone'),
     );

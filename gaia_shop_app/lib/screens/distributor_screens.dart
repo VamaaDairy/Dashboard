@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../models.dart';
 import '../store/cart.dart';
+import '../subscription_widgets.dart' show niceDate;
 import '../store/distributor.dart';
 import '../theme.dart';
 import '../ui.dart';
@@ -459,12 +460,25 @@ class PartnerAccountScreen extends ConsumerWidget {
                     : null,
               ),
               line('Name', f.name),
-              line('Code', f.code),
+              line('Customer code', f.code),
+              line('Channel', f.channel),
               line('Type', f.type),
+              line('Class', f.firmClass),
+              line('Status', f.active ? 'Active' : 'Inactive'),
+              line('Served by', f.servedBy),
+              line('Route', f.route),
+              line('ERP code', f.erpCode),
+              line('Customer since', f.createdAt == null ? null : niceDate(f.createdAt!)),
+              const SizedBox(height: 8),
+              band(),
+              heading('Contact & address'),
               line('Contact person', f.contactPerson),
               line('Phone', f.phone, onTap: f.phone == null ? null : () => call(f.phone!)),
-              line('Email', f.email),
+              line('Email', f.email, onTap: f.email == null ? null : () => launchUrl(Uri(scheme: 'mailto', path: f.email))),
               line('Address', f.fullAddress),
+              if (f.hasLocation)
+                line('Location', 'Open in Maps',
+                    onTap: () => launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=${f.lat},${f.lng}'), mode: LaunchMode.externalApplication)),
               const SizedBox(height: 8),
               if ([f.gstin, f.pan, f.licenceNo, f.creditLimit].any((x) => x != null)) ...[
                 band(),
@@ -475,9 +489,9 @@ class PartnerAccountScreen extends ConsumerWidget {
                 line('Credit limit', f.creditLimit == null ? null : rupees(f.creditLimit!)),
                 const SizedBox(height: 8),
               ],
-              if (!p.isSalesman && f.salesOfficer != null) ...[
+              if (f.salesOfficer != null) ...[
                 band(),
-                heading('Your sales officer'),
+                heading(p.isSalesman ? 'Sales contact' : 'Your sales officer'),
                 line('Name', f.salesOfficer),
                 line('Phone', f.salesOfficerPhone, onTap: f.salesOfficerPhone == null ? null : () => call(f.salesOfficerPhone!)),
                 const SizedBox(height: 8),

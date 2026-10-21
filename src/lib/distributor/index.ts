@@ -19,20 +19,30 @@ export interface DistLogin {
   phone: string;
 }
 
+/** A distributor an order can be placed for, with its profile as on the dashboard's Customer Masters page. */
 export interface DistFirm {
   uid: string;
   name: string;
   code: string;
   city: string | null;
-  /** The rest of the distributor's profile, for the app's Account page. */
+  channel: string | null;
   type: string | null;
+  class: string | null;
+  active: boolean;
+  servedBy: string | null;
+  route: string | null;
+  erpCode: string | null;
+  createdAt: string | null;
   contactPerson: string | null;
   phone: string | null;
   email: string | null;
   address: string | null;
+  area: string | null;
   district: string | null;
   state: string | null;
   pincode: string | null;
+  lat: number | null;
+  lng: number | null;
   gstin: string | null;
   pan: string | null;
   licenceNo: string | null;
@@ -41,14 +51,18 @@ export interface DistFirm {
   salesOfficerPhone: string | null;
 }
 
+// the same joins and columns as the Customer Masters page (src/lib/masters/schemas/customers.ts)
 const FIRM_SELECT = `
-  select f.uid, f.name, f.firm_code as code, f.city, f.firm_type as type, f.contact_person as "contactPerson",
-         f.phone, f.email, nullif(concat_ws(', ', nullif(f.address, ''), nullif(f.place, '')), '') as address,
-         f.district, f.state_state as state, f.pincode, f.gstin, f.pan, f.license_no as "licenceNo",
-         f.credit_limit as "creditLimit",
-         nullif(trim(concat_ws(' ', so.first_name, so.last_name)), '') as "salesOfficer", so.phone as "salesOfficerPhone"
+  select f.uid, f.name, f.firm_code as code, f.city, ch.channel, f.firm_type as type, f.firm_class as class,
+         f.active = 1 as active, p.name as "servedBy", b.beat_name as route, f.erp_code as "erpCode", f.created_at as "createdAt",
+         f.contact_person as "contactPerson", f.phone, f.email, f.address, f.place as area, f.district, f.state_state as state, f.pincode,
+         f.latitude as lat, f.longitude as lng, f.gstin, f.pan, f.license_no as "licenceNo", f.credit_limit as "creditLimit",
+         nullif(trim(so.first_name || ' ' || coalesce(so.last_name, '')), '') as "salesOfficer", so.phone as "salesOfficerPhone"
   from fp_firm f
-  left join fp_staff so on so.uid = f.sales_contact_uid`;
+  left join fp_channel ch on ch.uid = f.channel_uid
+  left join fp_firm p on p.uid = f.parent_firm_uid
+  left join fp_staff so on so.uid = f.sales_contact_uid
+  left join fp_beat b on b.uid = f.beat_uid`;
 
 const LOGIN_SELECT = `
   select l.id, l.kind, l.firm_uid as "firmUid", l.staff_uid as "staffUid", l.phone,
