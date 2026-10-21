@@ -440,7 +440,8 @@ class DistFirm {
 }
 
 class DistOrderLine {
-  const DistOrderLine({required this.name, required this.qty, required this.rate, required this.amount});
+  const DistOrderLine({required this.name, required this.qty, required this.rate, required this.amount, this.sku = ''});
+  final String sku;
   final String name;
   final double qty;
   final double rate;
@@ -467,7 +468,7 @@ class DistOrder {
         total: _num(j['total']),
         lines: [
           for (final l in (j['lines'] as List?) ?? const [])
-            DistOrderLine(name: (l['name'] as String?) ?? '', qty: _num(l['qty']), rate: _num(l['rate']), amount: _num(l['amount'])),
+            DistOrderLine(sku: (l['sku'] as String?) ?? '', name: (l['name'] as String?) ?? '', qty: _num(l['qty']), rate: _num(l['rate']), amount: _num(l['amount'])),
         ],
       );
 }

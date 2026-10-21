@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../models.dart';
+import '../store/cart.dart';
 import '../store/distributor.dart';
 import '../theme.dart';
 import '../ui.dart';
+import '../widgets.dart';
+import 'cart_screen.dart';
 import 'orders_screen.dart' show orderDate;
 
 /// The signed-in distributor's / sales officer's side of the normal app: which distributor the order
@@ -103,7 +107,15 @@ class DistFirmBar extends ConsumerWidget {
   }
 }
 
-/// Orders tab: the primary orders this login placed, newest first; tap one for its lines.
+String _qty(double q) => q.toStringAsFixed(q == q.roundToDouble() ? 0 : 2);
+
+/// Status as one plain word, in sentence case ("PENDING" -> "Pending").
+String _status(String s) {
+  final t = s.trim().replaceAll('_', ' ');
+  return t.isEmpty ? 'Placed' : t[0].toUpperCase() + t.substring(1).toLowerCase();
+}
+
+/// Orders tab: the primary orders this login placed, newest first; tap one for the full order.
 class DistOrdersScreen extends ConsumerWidget {
   const DistOrdersScreen({super.key});
 
@@ -131,45 +143,196 @@ class DistOrdersScreen extends ConsumerWidget {
   }
 }
 
-class _DistOrderCard extends StatelessWidget {
+class _DistOrderCard extends ConsumerWidget {
   const _DistOrderCard({required this.order});
   final DistOrder order;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final o = order;
+    final menu = ref.watch(menuProvider);
+    void open() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DistOrderScreen(order: o)));
+    final pics = o.lines.take(3).toList();
+
     return AppCard(
+      onTap: open,
       padding: const EdgeInsets.all(14),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          childrenPadding: EdgeInsets.zero,
-          title: Row(children: [
-            Text(o.status, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-            const Spacer(),
-            Text(orderDate(o.date), style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
-          ]),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(children: [
-              Expanded(child: Text('#${o.orderId} · ${o.distributor}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Brand.muted, fontSize: 13))),
-              Text(rupees(o.total), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Brand.ink)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(_status(o.status), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Brand.ink)),
+          const Spacer(),
+          Text(orderDate(o.date), style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          for (final (i, l) in pics.indexed)
+            Container(
+              margin: EdgeInsets.only(right: i == pics.length - 1 ? 0 : 6),
+              width: 48,
+              height: 48,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(12)),
+              child: ProductImage(url: menu.bySku(l.sku)?.image, radius: 0, fit: BoxFit.contain),
+            ),
+          if (o.lines.length > 3)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Brand.accentTint, borderRadius: BorderRadius.circular(12)),
+              child: Text('+${o.lines.length - 3}', style: const TextStyle(fontWeight: FontWeight.w800, color: Brand.accent)),
+            ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(o.lines.map((l) => '${l.name} × ${_qty(l.qty)}').join(', '),
+                maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: Brand.muted, height: 1.35)),
+          ),
+        ]),
+        const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(rupees(o.total), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+              Text('#${o.orderId} · ${o.distributor}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.faint, fontWeight: FontWeight.w600)),
             ]),
           ),
-          children: [
-            const Divider(),
-            for (final l in o.lines)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Row(children: [
-                  Expanded(
-                    child: Text('${l.name} × ${l.qty.toStringAsFixed(l.qty == l.qty.roundToDouble() ? 0 : 2)}', style: const TextStyle(fontSize: 13.5)),
-                  ),
-                  Text(rupees(l.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
-                ]),
+          TextButton(onPressed: open, child: const Row(mainAxisSize: MainAxisSize.min, children: [Text('Details'), Icon(Icons.chevron_right_rounded, size: 18)])),
+        ]),
+      ]),
+    );
+  }
+}
+
+/// One primary order, laid out like the customer's order page - status, what was ordered and the
+/// bill, the order's details - without the live map, rider or delivery code (these orders go out
+/// on the distributor's own dispatch).
+class DistOrderScreen extends ConsumerWidget {
+  const DistOrderScreen({super.key, required this.order});
+  final DistOrder order;
+
+  /// Puts this order's lines back in the cart at today's dealer price and opens it.
+  void _orderAgain(BuildContext context, WidgetRef ref) {
+    final menu = ref.read(menuProvider);
+    final cart = ref.read(cartProvider.notifier);
+    var added = 0;
+    for (final l in order.lines) {
+      final p = menu.bySku(l.sku);
+      if (p == null) continue;
+      for (var n = 0; n < l.qty.round(); n++) {
+        cart.add(p);
+      }
+      added++;
+    }
+    if (added == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('These items are not available right now.')));
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CartScreen()));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final o = order;
+    final menu = ref.watch(menuProvider);
+    final status = _status(o.status);
+    final totalQty = o.lines.fold<double>(0, (a, l) => a + l.qty);
+
+    Widget band() => Container(height: 8, color: Brand.surface);
+    Widget section(String t) => Padding(padding: const EdgeInsets.fromLTRB(20, 20, 20, 8), child: Text(t, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)));
+    const value = TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.4);
+    Widget line(String k, Widget v) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(width: 118, child: Text(k, style: const TextStyle(color: Brand.muted, fontSize: 14))),
+            Expanded(child: v),
+          ]),
+        );
+    Widget kv(String k, String v, {bool bold = false}) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text(k, style: TextStyle(color: bold ? Brand.ink : Brand.muted, fontWeight: bold ? FontWeight.w800 : FontWeight.w500, fontSize: bold ? 16 : 14)),
+            Text(v, style: TextStyle(fontWeight: bold ? FontWeight.w900 : FontWeight.w600, fontSize: bold ? 16.5 : 14)),
+          ]),
+        );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        title: Text('Order #${o.orderId}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+      ),
+      body: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          // status
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(status, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.4, color: status.toLowerCase().contains('cancel') ? Brand.danger : Brand.ink)),
+              const SizedBox(height: 4),
+              Text('Placed on ${orderDate(o.date)}', style: const TextStyle(fontSize: 14.5, color: Brand.muted, fontWeight: FontWeight.w500)),
+            ]),
+          ),
+          band(),
+          // what's in it
+          section('Order summary'),
+          for (final l in o.lines)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
+              child: Row(children: [
+                SizedBox(width: 44, height: 44, child: ProductImage(url: menu.bySku(l.sku)?.image, radius: 10, fit: BoxFit.contain)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(l.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                    const SizedBox(height: 2),
+                    Text('${_qty(l.qty)} × ${rupees(l.rate)}', style: const TextStyle(color: Brand.muted, fontSize: 13)),
+                  ]),
+                ),
+                Text(rupees(l.amount), style: const TextStyle(fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          const Padding(padding: EdgeInsets.fromLTRB(20, 10, 20, 6), child: Divider()),
+          kv('Items', '${o.lines.length}'),
+          kv('Total quantity', _qty(totalQty)),
+          const Padding(padding: EdgeInsets.fromLTRB(20, 6, 20, 6), child: Divider()),
+          kv('Order total', rupees(o.total), bold: true),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 2, 20, 20),
+            child: Text('At your dealer price', style: TextStyle(color: Brand.muted, fontSize: 13)),
+          ),
+          band(),
+          // the facts
+          section('Order details'),
+          line(
+            'Order number',
+            Row(children: [
+              Text('#${o.orderId}', style: value),
+              const SizedBox(width: 6),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: '${o.orderId}'));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order number copied')));
+                },
+                child: const Padding(padding: EdgeInsets.all(2), child: Icon(Icons.copy_rounded, size: 16, color: Brand.muted)),
               ),
-          ],
+            ]),
+          ),
+          line('Placed on', Text(orderDate(o.date), style: value)),
+          line('Distributor', Text(o.distributor, style: value)),
+          line('Status', Text(status, style: value)),
+          const SizedBox(height: 28),
+        ],
+      ),
+      bottomNavigationBar: StickyBar(
+        child: FilledButton.icon(
+          onPressed: () => _orderAgain(context, ref),
+          icon: const Icon(Icons.replay_rounded, size: 20),
+          label: const Text('Order again'),
         ),
       ),
     );
