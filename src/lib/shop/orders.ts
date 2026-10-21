@@ -85,6 +85,8 @@ export interface ShopOrder {
   payment_status: string;
   status: string;
   created_at: Date;
+  /** Set when the order was made from a subscription (the delivery day, YYYY-MM-DD). */
+  subscription_day: string | null;
   lat: number | null;
   lng: number | null;
   rider_id: number | null;
@@ -108,8 +110,10 @@ const WITH_ITEMS = `
 export const getOrderByKey = (key: string) =>
   /^[0-9a-f]{32}$/.test(key) ? one<ShopOrder>(`${WITH_ITEMS} where o.access_key = $1`, [key]) : Promise.resolve(null);
 
-export const listOrders = (status?: string) =>
-  query<ShopOrder>(`${WITH_ITEMS} ${status ? "where o.status = $1" : ""} order by o.created_at desc limit 200`, status ? [status] : []);
+export const listOrders = (status?: string, kind?: "regular" | "subscription") => {
+  const where = [status ? "o.status = $1" : "", kind === "subscription" ? "o.subscription_day is not null" : kind === "regular" ? "o.subscription_day is null" : ""].filter(Boolean);
+  return query<ShopOrder>(`${WITH_ITEMS} ${where.length ? `where ${where.join(" and ")}` : ""} order by o.created_at desc limit 200`, status ? [status] : []);
+};
 
 export async function setOrderStatus(id: number, status: string): Promise<boolean> {
   const r = await query(
