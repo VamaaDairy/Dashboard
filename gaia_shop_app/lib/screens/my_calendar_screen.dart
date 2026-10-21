@@ -422,108 +422,161 @@ class _MyCalendarScreenState extends ConsumerState<MyCalendarScreen> {
     final today = dayOnly(DateTime.now());
     final earliest = SubscriptionStore.windowStart;
 
+    Widget band() => Container(height: 8, color: Brand.surface);
+    final canBack = _month.isAfter(earliest);
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('My Calendar', style: TextStyle(fontWeight: FontWeight.w800)),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        titleSpacing: Navigator.of(context).canPop() ? 0 : 20,
+        title: const Text('Calendar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         actions: [
-          TextButton.icon(onPressed: () => setVacation(context, ref), icon: const Icon(Icons.beach_access_outlined, size: 18), label: const Text('Vacation')),
-          const SizedBox(width: 4),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: OutlinedButton.icon(
+              onPressed: () => setVacation(context, ref),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: const StadiumBorder(),
+                side: const BorderSide(color: Brand.line),
+                foregroundColor: Brand.ink,
+              ),
+              icon: const Icon(Icons.beach_access_outlined, size: 18),
+              label: const Text('Vacation', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            ),
+          ),
         ],
+        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: RefreshIndicator(
         color: Brand.accent,
         onRefresh: store.load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          padding: const EdgeInsets.only(bottom: 32),
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
-              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(18)),
-              child: Column(children: [
-                MonthHeader(month: _month, canGoBack: _month.isAfter(earliest), onChange: (m) => setState(() => _month = m)),
-                MonthGrid(
-                  month: _month,
-                  cell: (d) {
-                    final info = subs.on(d);
-                    final kind = info?.kind ?? DayKind.none;
-                    final isToday = sameDay(d, today);
-                    return GestureDetector(
-                      onTap: () => showDaySheet(context, d),
-                      child: Container(
-                        margin: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: kind == DayKind.none ? null : DayColors.of(kind).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                          border: isToday ? Border.all(color: Brand.ink, width: 1.4) : null,
-                        ),
-                        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Text('${d.day}', style: TextStyle(fontWeight: FontWeight.w800, color: d.isBefore(today) ? Brand.faint : Brand.ink)),
-                          const SizedBox(height: 2),
-                          if (kind != DayKind.none)
-                            Text(kind == DayKind.vacation ? 'off' : '${info!.count}',
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: DayColors.of(kind)))
-                          else
-                            const SizedBox(height: 12),
-                        ]),
-                      ),
-                    );
-                  },
+            // month title on the left, arrows on the right
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+              child: Row(children: [
+                Expanded(
+                  child: Text('${monthNames[_month.month - 1]} ${_month.year}',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.3)),
                 ),
-                const SizedBox(height: 8),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: DayLegend()),
+                _Arrow(icon: Icons.chevron_left_rounded, onTap: canBack ? () => setState(() => _month = DateTime(_month.year, _month.month - 1)) : null),
+                const SizedBox(width: 8),
+                _Arrow(icon: Icons.chevron_right_rounded, onTap: () => setState(() => _month = DateTime(_month.year, _month.month + 1))),
               ]),
             ),
-            const SizedBox(height: 8),
-            const Text('Tap a day to skip it or change the quantity. Changes close at 9 PM the evening before.',
-                style: TextStyle(fontSize: 12.5, color: Brand.muted)),
-            const SizedBox(height: 22),
-            Row(children: [
-              const Expanded(child: Text('Your subscriptions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-              TextButton.icon(onPressed: () => pickProductToSubscribe(context, ref), icon: const Icon(Icons.add), label: const Text('Add')),
-            ]),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: MonthGrid(
+                month: _month,
+                cell: (d) {
+                  final kind = subs.on(d)?.kind ?? DayKind.none;
+                  final isToday = sameDay(d, today);
+                  final past = d.isBefore(today);
+                  return InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => showDaySheet(context, d),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: isToday ? const BoxDecoration(color: Brand.ink, shape: BoxShape.circle) : null,
+                        child: Text(
+                          '${d.day}',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                            color: isToday ? Colors.white : (past ? Brand.faint : Brand.ink),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: kind == DayKind.none ? Colors.transparent : DayColors.of(kind).withValues(alpha: past ? 0.5 : 1),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ]),
+                  );
+                },
+              ),
+            ),
+            const Padding(padding: EdgeInsets.fromLTRB(20, 14, 20, 0), child: DayLegend()),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Text('Tap a day to skip it or change the quantity. Changes close at 9 PM the evening before.',
+                  style: TextStyle(fontSize: 13, color: Brand.muted, height: 1.4)),
+            ),
+            band(),
+            // what comes, how often
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
+              child: Row(children: [
+                const Expanded(child: Text('Your subscriptions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+                TextButton.icon(
+                  onPressed: () => pickProductToSubscribe(context, ref),
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Add', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            ),
             if (subs.subscriptions.isEmpty)
-              const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: Text('No subscriptions yet.', style: TextStyle(color: Brand.muted)))),
-            for (final s in subs.subscriptions)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Text('Nothing yet. Subscribe to milk, curd or paneer and it comes every morning on the days you choose.',
+                    style: TextStyle(color: Brand.muted, height: 1.4)),
+              ),
+            for (final (i, s) in subs.subscriptions.indexed) ...[
+              if (i > 0) const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Divider()),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    ProductImage(url: s.image, size: 52, radius: 10, fit: BoxFit.contain),
-                    const SizedBox(width: 12),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(12)),
+                      child: ProductImage(url: s.image, radius: 0, fit: BoxFit.contain),
+                    ),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(s.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        Row(children: [
+                          Expanded(child: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
+                          if (s.paused) const Text('Paused', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Brand.muted)),
+                        ]),
+                        const SizedBox(height: 3),
+                        Text('${s.qty} × ${s.plan.describe}', style: const TextStyle(color: Brand.ink, fontSize: 13.5)),
                         const SizedBox(height: 2),
-                        Text('${s.qty} × · ${s.plan.describe}', style: const TextStyle(color: Brand.muted, fontSize: 13)),
                         Text(
                           'From ${niceDate(s.plan.start)}${s.plan.end != null ? ' to ${niceDate(s.plan.end!)}' : ''}',
-                          style: const TextStyle(color: Brand.faint, fontSize: 12),
+                          style: const TextStyle(color: Brand.muted, fontSize: 12.5),
                         ),
                       ]),
                     ),
-                    if (s.paused)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: DayColors.none.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                        child: const Text('Paused', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: DayColors.none)),
-                      ),
                   ]),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Row(children: [
-                    _Act(icon: Icons.edit_outlined, label: 'Quantity', onTap: () => _editQty(s)),
-                    _Act(
-                      icon: s.paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                      label: s.paused ? 'Resume' : 'Pause',
-                      onTap: () => _try(context, () => store.pause(s.id, !s.paused)),
-                    ),
-                    _Act(icon: Icons.close_rounded, label: 'Stop', color: DayColors.vacation, onTap: () => _cancel(s)),
+                    _Act(label: 'Quantity', onTap: () => _editQty(s)),
+                    const SizedBox(width: 8),
+                    _Act(label: s.paused ? 'Resume' : 'Pause', onTap: () => _try(context, () => store.pause(s.id, !s.paused))),
+                    const SizedBox(width: 8),
+                    _Act(label: 'Stop', color: Brand.danger, onTap: () => _cancel(s)),
                   ]),
                 ]),
               ),
+            ],
           ],
         ),
       ),
@@ -531,20 +584,43 @@ class _MyCalendarScreenState extends ConsumerState<MyCalendarScreen> {
   }
 }
 
-class _Act extends StatelessWidget {
-  const _Act({required this.icon, required this.label, required this.onTap, this.color = Brand.accent});
+/// Small round outlined arrow for changing the month.
+class _Arrow extends StatelessWidget {
+  const _Arrow({required this.icon, required this.onTap});
   final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Brand.line)),
+          child: Icon(icon, size: 22, color: onTap == null ? Brand.faint : Brand.ink),
+        ),
+      );
+}
+
+class _Act extends StatelessWidget {
+  const _Act({required this.label, required this.onTap, this.color = Brand.ink});
   final String label;
   final VoidCallback onTap;
   final Color color;
 
   @override
   Widget build(BuildContext context) => Expanded(
-        child: TextButton.icon(
+        child: OutlinedButton(
           onPressed: onTap,
-          style: TextButton.styleFrom(foregroundColor: color),
-          icon: Icon(icon, size: 18),
-          label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: color,
+            minimumSize: const Size(0, 38),
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            side: const BorderSide(color: Brand.line),
+          ),
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
         ),
       );
 }
