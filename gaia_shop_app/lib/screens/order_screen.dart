@@ -164,7 +164,7 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
           children: [
             if (showMap)
               GaiaMap(
-                height: 240,
+                height: 340,
                 radius: 0,
                 route: _route?.points ?? const [],
                 markers: [
