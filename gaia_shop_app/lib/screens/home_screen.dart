@@ -254,7 +254,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         const SliverToBoxAdapter(child: SectionHeader('Shop by category')),
         SliverToBoxAdapter(
           child: SizedBox(
-            height: 112,
+            height: 118,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -305,7 +305,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
   }
 }
 
-/// A category as a soft rounded tile: photo on a tinted square, name below; outlined when chosen.
+/// A category as before: a round photo with a ring when chosen, its name below.
 class _CategoryCard extends StatelessWidget {
   const _CategoryCard({required this.label, required this.image, required this.selected, required this.onTap});
   final String label;
@@ -317,29 +317,28 @@ class _CategoryCard extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
         onTap: onTap,
         child: SizedBox(
-          width: 76,
+          width: 78,
           child: Column(children: [
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              width: 76,
-              height: 76,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: selected ? Brand.accentTint : Brand.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: selected ? Brand.accent : Colors.transparent, width: 1.8),
-              ),
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: selected ? Brand.accent : Colors.transparent, width: 2)),
               child: image == null && label == 'All'
-                  ? const Icon(Icons.grid_view_rounded, color: Brand.accent, size: 30)
-                  : ProductImage(url: image, radius: 12, fit: BoxFit.contain),
+                  ? Container(
+                      width: 68,
+                      height: 68,
+                      decoration: const BoxDecoration(color: Brand.accentTint, shape: BoxShape.circle),
+                      child: const Icon(Icons.grid_view_rounded, color: Brand.accent, size: 28),
+                    )
+                  : ProductImage(url: image, size: 68, circle: true),
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 6),
             Text(
               label,
               maxLines: 2,
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, height: 1.15, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? Brand.accent : Brand.ink),
+              style: TextStyle(fontSize: 12.5, height: 1.15, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? Brand.accent : Brand.ink),
             ),
           ]),
         ),
