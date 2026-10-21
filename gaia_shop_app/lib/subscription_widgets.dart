@@ -100,6 +100,35 @@ class MonthHeader extends StatelessWidget {
       ]);
 }
 
+/// Month title on the left, round outlined arrows on the right.
+class MonthTitle extends StatelessWidget {
+  const MonthTitle({super.key, required this.month, required this.onChange, this.canGoBack = true, this.size = 22});
+  final DateTime month;
+  final void Function(DateTime) onChange;
+  final bool canGoBack;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget arrow(IconData icon, VoidCallback? onTap) => InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Brand.line)),
+            child: Icon(icon, size: 22, color: onTap == null ? Brand.faint : Brand.ink),
+          ),
+        );
+    return Row(children: [
+      Expanded(child: Text('${monthNames[month.month - 1]} ${month.year}', style: TextStyle(fontSize: size, fontWeight: FontWeight.w900, letterSpacing: -0.3))),
+      arrow(Icons.chevron_left_rounded, canGoBack ? () => onChange(DateTime(month.year, month.month - 1)) : null),
+      const SizedBox(width: 8),
+      arrow(Icons.chevron_right_rounded, () => onChange(DateTime(month.year, month.month + 1))),
+    ]);
+  }
+}
+
 /// Pill-shaped choice chip in the subscription style (grey, dark when chosen), with an optional pencil.
 class PillChoice extends StatelessWidget {
   const PillChoice({super.key, required this.label, required this.selected, required this.onTap, this.editable = false});
@@ -136,11 +165,11 @@ class QtyStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(border: Border.all(color: Brand.accent), borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(12)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          IconButton(visualDensity: VisualDensity.compact, onPressed: value > min ? () => onChanged(value - 1) : null, icon: const Icon(Icons.remove, size: 18, color: Brand.accent)),
+          IconButton(visualDensity: VisualDensity.compact, onPressed: value > min ? () => onChanged(value - 1) : null, icon: const Icon(Icons.remove, size: 18, color: Brand.ink)),
           SizedBox(width: 26, child: Text('$value', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
-          IconButton(visualDensity: VisualDensity.compact, onPressed: value < max ? () => onChanged(value + 1) : null, icon: const Icon(Icons.add, size: 18, color: Brand.accent)),
+          IconButton(visualDensity: VisualDensity.compact, onPressed: value < max ? () => onChanged(value + 1) : null, icon: const Icon(Icons.add, size: 18, color: Brand.ink)),
         ]),
       );
 }

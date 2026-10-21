@@ -8,6 +8,7 @@ import '../store/cart.dart';
 import '../store/subscriptions.dart';
 import '../subscription_widgets.dart';
 import '../theme.dart';
+import '../ui.dart';
 import '../widgets.dart';
 import 'address_picker_screen.dart';
 import 'customer_login_screen.dart';
@@ -165,180 +166,233 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
     final p = widget.product;
     final (count, cost) = _monthTotal();
     final first = firstEditableLocal();
-    const label = TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Brand.ink);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Subscription', style: TextStyle(fontWeight: FontWeight.w700))),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        children: [
-          SizedBox(height: 180, child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
-          const SizedBox(height: 12),
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Widget band() => Container(height: 8, color: Brand.surface);
+    Widget title(String t) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+          child: Text(t, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        );
+    // one radio row per frequency; the ones with a number or days show what is chosen and "Change"
+    Widget freq(Frequency f, String name, {String? detail, Future<void> Function()? edit}) {
+      final on = _freq == f;
+      return InkWell(
+        onTap: () async {
+          setState(() => _freq = f);
+          if (edit != null) await edit();
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+          child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(p.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                if (p.size != null) Text(p.size!, style: const TextStyle(color: Brand.muted)),
+                Text(name, style: TextStyle(fontSize: 15, fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
+                if (on && detail != null) ...[
+                  const SizedBox(height: 2),
+                  Text(detail, style: const TextStyle(fontSize: 13, color: Brand.muted)),
+                ],
               ]),
             ),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(rupees(p.price), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-              const Text('(inclusive of all taxes)', style: TextStyle(fontSize: 11.5, color: Brand.muted)),
+            if (on && edit != null)
+              TextButton(onPressed: edit, style: TextButton.styleFrom(visualDensity: VisualDensity.compact), child: const Text('Change')),
+            Icon(on ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded, color: on ? Brand.accent : Brand.faint, size: 22),
+          ]),
+        ),
+      );
+    }
+
+    Widget dateRow(String k, String v, VoidCallback onTap, {VoidCallback? onClear}) => InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 13, 16, 13),
+            child: Row(children: [
+              Expanded(child: Text(k, style: const TextStyle(fontSize: 15, color: Brand.muted))),
+              Text(v, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 4),
+              if (onClear != null)
+                InkWell(onTap: onClear, customBorder: const CircleBorder(), child: const Padding(padding: EdgeInsets.all(2), child: Icon(Icons.close_rounded, size: 20, color: Brand.muted)))
+              else
+                const Icon(Icons.chevron_right_rounded, size: 22, color: Brand.faint),
             ]),
-          ]),
-          const Divider(height: 28),
-          const Text('Subscription Type', style: label),
-          const SizedBox(height: 10),
-          Wrap(spacing: 8, children: [
-            PillChoice(label: 'One time', selected: !_subscribe, onTap: () => setState(() => _subscribe = false)),
-            PillChoice(label: 'Subscription', selected: _subscribe, onTap: () => setState(() => _subscribe = true)),
-          ]),
-          const SizedBox(height: 18),
-          Row(children: [
-            const Expanded(child: Text('Quantity', style: label)),
-            QtyStepper(value: _qty, onChanged: (v) => setState(() => _qty = v)),
-          ]),
+          ),
+        );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        titleSpacing: 0,
+        title: const Text('Subscribe', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          // the product
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            child: Row(children: [
+              Container(
+                width: 76,
+                height: 76,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+                child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(p.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, height: 1.25)),
+                  if (p.size != null) ...[const SizedBox(height: 2), Text(p.size!, style: const TextStyle(color: Brand.muted, fontSize: 13))],
+                  const SizedBox(height: 6),
+                  Text(rupees(p.price), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                ]),
+              ),
+            ]),
+          ),
+          // once or regularly, and how many
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _Segment(
+              options: const ['Subscribe', 'Buy once'],
+              selected: _subscribe ? 0 : 1,
+              onChanged: (i) => setState(() => _subscribe = i == 0),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Quantity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  Text(_subscribe ? 'On every delivery' : 'Added to your cart', style: const TextStyle(fontSize: 13, color: Brand.muted)),
+                ]),
+              ),
+              QtyStepper(value: _qty, onChanged: (v) => setState(() => _qty = v)),
+            ]),
+          ),
           if (_subscribe) ...[
-            const SizedBox(height: 18),
-            const Text('Frequency', style: label),
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, runSpacing: 10, children: [
-              PillChoice(label: 'Daily', selected: _freq == Frequency.daily, onTap: () => setState(() => _freq = Frequency.daily)),
-              PillChoice(label: 'Alternate', selected: _freq == Frequency.alternate, onTap: () => setState(() => _freq = Frequency.alternate)),
-              PillChoice(
-                label: _freq == Frequency.weekdays ? 'Custom · ${_plan.describe}' : 'Custom',
-                selected: _freq == Frequency.weekdays,
-                editable: true,
-                onTap: () async {
-                  setState(() => _freq = Frequency.weekdays);
-                  await _editWeekdays();
-                },
-              ),
-              PillChoice(
-                label: _freq == Frequency.everyN ? 'Every $_n days' : 'Every nth day',
-                selected: _freq == Frequency.everyN,
-                editable: true,
-                onTap: () async {
-                  setState(() => _freq = Frequency.everyN);
-                  await _editN(Frequency.everyN);
-                },
-              ),
-              PillChoice(
-                label: _freq == Frequency.skipN ? "Don't deliver every ${_n}th day" : "Don't deliver on nth day",
-                selected: _freq == Frequency.skipN,
-                editable: true,
-                onTap: () async {
-                  setState(() => _freq = Frequency.skipN);
-                  await _editN(Frequency.skipN);
-                },
-              ),
-            ]),
-            const SizedBox(height: 20),
-            Row(children: [
-              const Expanded(child: Text('Calendar Preview', style: label)),
-              Text('Tap a day to remove it', style: TextStyle(fontSize: 12, color: Brand.muted.withValues(alpha: 0.9))),
-            ]),
+            band(),
+            title('How often'),
+            freq(Frequency.daily, 'Daily'),
+            freq(Frequency.alternate, 'Alternate days'),
+            freq(Frequency.weekdays, 'Choose days', detail: SubPlan(frequency: Frequency.weekdays, start: _start, weekdays: _weekdays, everyN: _n).describe, edit: _editWeekdays),
+            freq(Frequency.everyN, 'Every few days', detail: 'Every $_n days', edit: () => _editN(Frequency.everyN)),
+            freq(Frequency.skipN, 'Skip every few days', detail: 'Every day except every ${_n}th day', edit: () => _editN(Frequency.skipN)),
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
-              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(16)),
-              child: Column(children: [
-                MonthHeader(
-                  month: _month,
-                  canGoBack: _month.isAfter(DateTime(first.year, first.month)),
-                  onChange: (m) => setState(() => _month = m),
-                ),
-                MonthGrid(
-                  month: _month,
-                  cell: (d) {
-                    final before = d.isBefore(_start);
-                    final due = _plan.due(d);
-                    final removed = _removed.contains(dayOnly(d));
-                    final isStart = sameDay(d, _start);
-                    return GestureDetector(
-                      onTap: before || !due ? null : () => setState(() => removed ? _removed.remove(dayOnly(d)) : _removed.add(dayOnly(d))),
+            band(),
+            title('Dates'),
+            dateRow('Starts on', niceDate(_start), _pickStart),
+            const Padding(padding: EdgeInsets.only(left: 20), child: Divider()),
+            dateRow('Ends on', _end == null ? 'No end date' : niceDate(_end!), _pickEnd, onClear: _end == null ? null : () => setState(() => _end = null)),
+            const SizedBox(height: 8),
+            band(),
+            // the month, as it will come
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 4),
+              child: MonthTitle(
+                month: _month,
+                size: 18,
+                canGoBack: _month.isAfter(DateTime(first.year, first.month)),
+                onChange: (m) => setState(() => _month = m),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Text('Tap a day to take it out', style: TextStyle(fontSize: 13, color: Brand.muted)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: MonthGrid(
+                month: _month,
+                cell: (d) {
+                  final before = d.isBefore(_start);
+                  final due = _plan.due(d) && !before;
+                  final removed = _removed.contains(dayOnly(d));
+                  final on = due && !removed;
+                  return InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: !due ? null : () => setState(() => removed ? _removed.remove(dayOnly(d)) : _removed.add(dayOnly(d))),
+                    child: Center(
                       child: Container(
-                        margin: const EdgeInsets.all(3),
+                        width: 36,
+                        height: 36,
                         alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: due && !removed && !before ? Brand.accent.withValues(alpha: 0.14) : null,
-                          borderRadius: BorderRadius.circular(8),
-                          border: isStart ? Border.all(color: DayColors.delivered, width: 1.6) : null,
-                        ),
+                        decoration: BoxDecoration(color: on ? Brand.accent : null, shape: BoxShape.circle),
                         child: Text(
                           '${d.day}',
                           style: TextStyle(
-                            fontWeight: due && !before ? FontWeight.w800 : FontWeight.w500,
-                            color: before ? Brand.faint.withValues(alpha: 0.6) : removed ? DayColors.vacation : (due ? Brand.accent : Brand.ink),
+                            fontSize: 14.5,
+                            fontWeight: on ? FontWeight.w800 : FontWeight.w500,
+                            color: on ? Colors.white : (before ? Brand.faint.withValues(alpha: 0.6) : (removed ? Brand.faint : Brand.ink)),
                             decoration: removed ? TextDecoration.lineThrough : null,
                           ),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: Row(children: [
+                Expanded(
+                  child: Text('$count deliveries in ${monthNames[_month.month - 1]}',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                 ),
+                Text('about ${rupees(cost)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
               ]),
             ),
-            const SizedBox(height: 10),
-            Text('$count deliveries in ${monthNames[_month.month - 1]} · about ${rupees(cost)}', style: const TextStyle(color: Brand.muted, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 18),
-            Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Delivery Date', style: label),
-                  const SizedBox(height: 8),
-                  _DateChip(text: niceDate(_start), onTap: _pickStart),
-                ]),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Until', style: label),
-                  const SizedBox(height: 8),
-                  _DateChip(text: _end == null ? 'No end date' : niceDate(_end!), onTap: _pickEnd, onClear: _end == null ? null : () => setState(() => _end = null)),
-                ]),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            const Text('Change, skip or pause any day later from My Calendar - until 9 PM the evening before.', style: TextStyle(fontSize: 12.5, color: Brand.muted)),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
+              child: Text('Skip, change or pause any day later from Calendar, until 9 PM the evening before. Pay in cash on delivery.',
+                  style: TextStyle(fontSize: 12.5, color: Brand.muted, height: 1.4)),
+            ),
           ],
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-          child: FilledButton(
-            onPressed: _busy ? null : _confirm,
-            style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28))),
-            child: _busy
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                : Text(_subscribe ? 'CONFIRM SUBSCRIPTION' : 'ADD TO CART · ${rupees(p.price * _qty)}', style: const TextStyle(letterSpacing: 0.4)),
-          ),
+      bottomNavigationBar: StickyBar(
+        child: FilledButton(
+          onPressed: _busy ? null : _confirm,
+          child: _busy
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+              : Text(_subscribe ? 'Start subscription' : 'Add to cart · ${rupees(p.price * _qty)}'),
         ),
       ),
     );
   }
 }
 
-class _DateChip extends StatelessWidget {
-  const _DateChip({required this.text, required this.onTap, this.onClear});
-  final String text;
-  final VoidCallback onTap;
-  final VoidCallback? onClear;
+/// Two-way switch: a grey track with a white thumb on the chosen side.
+class _Segment extends StatelessWidget {
+  const _Segment({required this.options, required this.selected, required this.onChanged});
+  final List<String> options;
+  final int selected;
+  final void Function(int) onChanged;
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          decoration: BoxDecoration(color: const Color(0xFFEDEFF3), borderRadius: BorderRadius.circular(22)),
-          child: Row(children: [
-            Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600, color: Brand.ink))),
-            if (onClear != null)
-              GestureDetector(onTap: onClear, child: const Icon(Icons.close, size: 16, color: Brand.muted))
-            else
-              const Icon(Icons.edit_outlined, size: 16, color: DayColors.vacation),
-          ]),
-        ),
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+        child: Row(children: [
+          for (final (i, o) in options.indexed)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: i == selected ? Colors.white : Colors.transparent,
+                    borderRadius: BorderRadius.circular(11),
+                    boxShadow: i == selected ? const [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 1))] : null,
+                  ),
+                  child: Text(o, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: i == selected ? Brand.ink : Brand.muted)),
+                ),
+              ),
+            ),
+        ]),
       );
 }

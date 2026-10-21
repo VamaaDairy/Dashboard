@@ -460,16 +460,8 @@ class _MyCalendarScreenState extends ConsumerState<MyCalendarScreen> {
           children: [
             // month title on the left, arrows on the right
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
-              child: Row(children: [
-                Expanded(
-                  child: Text('${monthNames[_month.month - 1]} ${_month.year}',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.3)),
-                ),
-                _Arrow(icon: Icons.chevron_left_rounded, onTap: canBack ? () => setState(() => _month = DateTime(_month.year, _month.month - 1)) : null),
-                const SizedBox(width: 8),
-                _Arrow(icon: Icons.chevron_right_rounded, onTap: () => setState(() => _month = DateTime(_month.year, _month.month + 1))),
-              ]),
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 10),
+              child: MonthTitle(month: _month, canGoBack: canBack, onChange: (m) => setState(() => _month = m)),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -582,25 +574,6 @@ class _MyCalendarScreenState extends ConsumerState<MyCalendarScreen> {
       ),
     );
   }
-}
-
-/// Small round outlined arrow for changing the month.
-class _Arrow extends StatelessWidget {
-  const _Arrow({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Brand.line)),
-          child: Icon(icon, size: 22, color: onTap == null ? Brand.faint : Brand.ink),
-        ),
-      );
 }
 
 class _Act extends StatelessWidget {
