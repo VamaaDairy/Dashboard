@@ -26,6 +26,7 @@ class TokenVault {
 
   static const customer = 'gaia_customer_token';
   static const rider = 'gaia_rider_token';
+  static const distributor = 'gaia_distributor_token';
 
   final FlutterSecureStorage _store;
   final Map<String, String> _cache;
@@ -34,7 +35,7 @@ class TokenVault {
   static Future<TokenVault> open(SharedPreferences prefs) async {
     const store = FlutterSecureStorage();
     final cache = <String, String>{};
-    const legacy = {customer: 'gaia_customer_token_v1', rider: 'gaia_rider_token_v1'};
+    const legacy = {customer: 'gaia_customer_token_v1', rider: 'gaia_rider_token_v1', distributor: 'gaia_distributor_token_v1'};
     for (final e in legacy.entries) {
       String? v;
       try {

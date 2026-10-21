@@ -344,6 +344,60 @@ class RiderProfile {
   final String phone;
 }
 
+/// A distributor (or a salesman booking for distributors) signed in to the app.
+class DistProfile {
+  const DistProfile({required this.kind, required this.name, required this.phone});
+  final String kind; // 'distributor' | 'salesman'
+  final String name;
+  final String phone;
+  bool get isSalesman => kind == 'salesman';
+}
+
+/// A distributor an order can be placed for.
+class DistFirm {
+  const DistFirm({required this.uid, required this.name, required this.code, this.city});
+  final String uid;
+  final String name;
+  final String code;
+  final String? city;
+
+  factory DistFirm.fromJson(Map<String, dynamic> j) =>
+      DistFirm(uid: j['uid'] as String, name: j['name'] as String, code: (j['code'] as String?) ?? '', city: j['city'] as String?);
+}
+
+class DistOrderLine {
+  const DistOrderLine({required this.name, required this.qty, required this.rate, required this.amount});
+  final String name;
+  final double qty;
+  final double rate;
+  final double amount;
+}
+
+/// A primary order the signed-in distributor / salesman placed.
+class DistOrder {
+  const DistOrder({required this.orderId, required this.date, required this.distributor, required this.status, required this.qty, required this.total, required this.lines});
+  final int orderId;
+  final DateTime date;
+  final String distributor;
+  final String status;
+  final double qty;
+  final double total;
+  final List<DistOrderLine> lines;
+
+  factory DistOrder.fromJson(Map<String, dynamic> j) => DistOrder(
+        orderId: (j['orderId'] as num).toInt(),
+        date: DateTime.parse(j['date'] as String).toLocal(),
+        distributor: (j['distributor'] as String?) ?? '',
+        status: (j['status'] as String?) ?? '',
+        qty: _num(j['qty']),
+        total: _num(j['total']),
+        lines: [
+          for (final l in (j['lines'] as List?) ?? const [])
+            DistOrderLine(name: (l['name'] as String?) ?? '', qty: _num(l['qty']), rate: _num(l['rate']), amount: _num(l['amount'])),
+        ],
+      );
+}
+
 /// One slide of the home-screen carousel: an uploaded poster, or a designed card
 /// (title, subtitle, colour) that can point at a product.
 class ShopBanner {

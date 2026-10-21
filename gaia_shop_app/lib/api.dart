@@ -266,6 +266,47 @@ class Api {
     await _send(() => _http.post(_r('/location'), headers: _auth(token), body: jsonEncode({'lat': lat, 'lng': lng})));
   }
 
+  // ---- distributors / salesmen (primary orders) ----
+
+  Uri _d(String path, [Map<String, String>? q]) => Uri.parse('$_base/api/distributor$path').replace(queryParameters: q);
+
+  Future<({String token, DistProfile profile})> distLogin(String phone, String pin) async {
+    final j = await _send(() => _http.post(_d('/login'), headers: _json, body: jsonEncode({'phone': phone, 'pin': pin})));
+    final l = j['login'] as Map<String, dynamic>;
+    return (token: j['token'] as String, profile: DistProfile(kind: l['kind'] as String, name: l['name'] as String, phone: l['phone'] as String));
+  }
+
+  /// The distributors this login can order for.
+  Future<List<DistFirm>> distFirms(String token) async {
+    final j = await _send(() => _http.get(_d('/me'), headers: _auth(token)));
+    return ((j['distributors'] as List?) ?? []).map((e) => DistFirm.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// The shop catalogue at [firmUid]'s dealer price.
+  Future<List<Product>> distProducts(String token, String firmUid) async {
+    final j = await _send(() => _http.get(_d('/products', {'firm': firmUid}), headers: _auth(token)));
+    return ((j['products'] as List?) ?? []).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<DistOrder>> distOrders(String token) async {
+    final j = await _send(() => _http.get(_d('/orders'), headers: _auth(token)));
+    return ((j['orders'] as List?) ?? []).map((e) => DistOrder.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Places the order; returns the order number.
+  Future<int> distPlaceOrder(String token, {required String firmUid, required Map<String, int> qty, String? notes}) async {
+    final j = await _send(() => _http.post(
+          _d('/orders'),
+          headers: _auth(token),
+          body: jsonEncode({
+            'firmUid': firmUid,
+            if (notes != null && notes.isNotEmpty) 'notes': notes,
+            'lines': [for (final e in qty.entries) {'sku': e.key, 'qty': e.value}],
+          }),
+        ));
+    return (j['orderId'] as num).toInt();
+  }
+
   Future<Map<String, dynamic>> _send(Future<http.Response> Function() call) async {
     final http.Response r;
     try {
