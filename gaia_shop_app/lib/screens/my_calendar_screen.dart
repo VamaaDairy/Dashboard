@@ -216,39 +216,6 @@ class _QuickCalendarState extends ConsumerState<QuickCalendar> {
     final signedIn = ref.watch(accountProvider.select((a) => a.signedIn));
     final subs = ref.watch(subscriptionsProvider);
 
-    // no subscriptions yet: an invitation instead of an empty calendar
-    if (!signedIn || !subs.hasAny) {
-      return Container(
-        margin: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFFEEF3FD), Color(0xFFE3ECFB)]),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: const Icon(Icons.calendar_month, color: Brand.accent),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Fresh dairy every morning', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-              SizedBox(height: 2),
-              Text('Subscribe and pick your days - skip any day you like.', style: TextStyle(color: Brand.muted, fontSize: 12.5)),
-            ]),
-          ),
-          FilledButton(
-            onPressed: () => pickProductToSubscribe(context, ref),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-            child: const Text('Subscribe', style: TextStyle(fontSize: 13.5)),
-          ),
-        ]),
-      );
-    }
-
     final today = dayOnly(DateTime.now());
     final days = [for (var i = -2; i < 14; i++) DateTime(today.year, today.month, today.day + i)];
     final sel = subs.on(_picked);
@@ -258,8 +225,10 @@ class _QuickCalendarState extends ConsumerState<QuickCalendar> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           const Expanded(child: Text('Quick Calendar', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
-          _Pill(icon: Icons.beach_access_outlined, label: 'Set Vacation', dark: false, onTap: () => setVacation(context, ref)),
-          const SizedBox(width: 6),
+          if (signedIn && subs.hasAny) ...[
+            _Pill(icon: Icons.beach_access_outlined, label: 'Set Vacation', dark: false, onTap: () => setVacation(context, ref)),
+            const SizedBox(width: 6),
+          ],
           _Pill(
             icon: Icons.calendar_month,
             label: 'MY CALENDAR',
@@ -302,7 +271,17 @@ class _QuickCalendarState extends ConsumerState<QuickCalendar> {
         const DayLegend(),
         const SizedBox(height: 10),
         // what the chosen day holds
-        if (sel == null || sel.count == 0)
+        if (!signedIn || !subs.hasAny)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(16)),
+            child: const Row(children: [
+              Icon(Icons.info_outline, size: 18, color: Brand.muted),
+              SizedBox(width: 8),
+              Expanded(child: Text('Tap Subscribe on any product to see its daily deliveries here.', style: TextStyle(fontSize: 13, color: Brand.muted))),
+            ]),
+          )
+        else if (sel == null || sel.count == 0)
           Container(
             padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
             decoration: BoxDecoration(color: const Color(0xFFFBE9E9), borderRadius: BorderRadius.circular(24)),

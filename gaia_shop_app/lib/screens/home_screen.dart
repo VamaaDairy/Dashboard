@@ -276,8 +276,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 18,
                 crossAxisSpacing: 14,
-                // square photo (ADD on its corner) + fixed room for size, 2 lines of name and the price
-                mainAxisExtent: (MediaQuery.sizeOf(context).width - 46) / 2 + 112,
+                // square photo (ADD on its corner) + fixed room for size, 2 lines of name, the price and Subscribe
+                mainAxisExtent: (MediaQuery.sizeOf(context).width - 46) / 2 + 146,
               ),
               itemCount: g.value.length,
               itemBuilder: (_, i) => ProductTile(

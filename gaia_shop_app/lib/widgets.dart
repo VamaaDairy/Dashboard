@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
 import 'screens/cart_screen.dart';
+import 'screens/subscribe_screen.dart';
 import 'store/cart.dart';
 import 'theme.dart';
 
@@ -223,6 +224,23 @@ class ProductTile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           PriceTag(product: p),
+          const SizedBox(height: 6),
+          // every product can be subscribed to, right from the list
+          SizedBox(
+            height: 28,
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Brand.accent,
+                padding: EdgeInsets.zero,
+                side: const BorderSide(color: Brand.accent, width: 1),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: const Icon(Icons.calendar_month, size: 14),
+              label: const Text('Subscribe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+            ),
+          ),
         ],
       ),
     );
