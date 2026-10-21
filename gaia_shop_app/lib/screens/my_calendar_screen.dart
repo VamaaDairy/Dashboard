@@ -271,16 +271,9 @@ class _QuickCalendarState extends ConsumerState<QuickCalendar> {
         const DayLegend(),
         const SizedBox(height: 10),
         // what the chosen day holds
+        // no subscriptions: just the strip and legend, nothing more
         if (!signedIn || !subs.hasAny)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(16)),
-            child: const Row(children: [
-              Icon(Icons.info_outline, size: 18, color: Brand.muted),
-              SizedBox(width: 8),
-              Expanded(child: Text('Tap Subscribe on any product to see its daily deliveries here.', style: TextStyle(fontSize: 13, color: Brand.muted))),
-            ]),
-          )
+          const SizedBox.shrink()
         else if (sel == null || sel.count == 0)
           Container(
             padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
