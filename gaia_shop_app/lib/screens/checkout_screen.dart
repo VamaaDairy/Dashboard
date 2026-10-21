@@ -7,6 +7,7 @@ import '../store/account.dart';
 import '../store/cart.dart';
 import '../store/map.dart';
 import '../theme.dart';
+import '../ui.dart';
 import '../widgets.dart';
 import 'address_picker_screen.dart';
 import 'customer_login_screen.dart';
@@ -120,128 +121,131 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final total = ref.watch(cartProvider.select((c) => c.total));
+    final count = ref.watch(cartProvider.select((c) => c.count));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Delivery details')),
+      backgroundColor: Brand.surface,
+      appBar: AppBar(title: const Text('Checkout')),
       body: Form(
         key: _form,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             if (_error != null)
               Container(
-                margin: const EdgeInsets.only(bottom: 14),
+                margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: const Color(0xFFFDECEE), border: Border.all(color: const Color(0xFFF3B9BF)), borderRadius: BorderRadius.circular(12)),
-                child: Text(_error!, style: const TextStyle(color: Color(0xFFB3202D), fontWeight: FontWeight.w600)),
+                decoration: BoxDecoration(color: const Color(0xFFFDECEE), borderRadius: BorderRadius.circular(14)),
+                child: Row(children: [
+                  const Icon(Icons.error_outline_rounded, color: Brand.danger, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_error!, style: const TextStyle(color: Color(0xFFB3202D), fontWeight: FontWeight.w600))),
+                ]),
               ),
+            const _Step('1', 'Deliver to'),
             _locationCard(),
-            _field(_name, 'Your name', 'name', autofill: const [AutofillHints.name], validator: (v) => (v ?? '').trim().length < 2 ? 'Please enter your name' : null),
-            _field(_phone, 'Mobile number', 'phone',
-                keyboard: TextInputType.phone,
-                autofill: const [AutofillHints.telephoneNumber],
-                hint: '10-digit number',
-                validator: (v) {
-                  final d = (v ?? '').replaceAll(RegExp(r'\D'), '');
-                  final ten = d.length > 10 ? d.substring(d.length - 10) : d;
-                  return RegExp(r'^[6-9]\d{9}$').hasMatch(ten) ? null : 'Enter a valid 10-digit mobile number';
-                }),
-            _field(_address, 'Full address', 'address',
-                lines: 3,
-                hint: 'Add your house / flat no. and landmark',
-                autofill: const [AutofillHints.fullStreetAddress],
-                validator: (v) => (v ?? '').trim().length < 10 ? 'Please enter your full delivery address' : null),
-            _field(_pincode, 'Pincode (optional)', 'pincode',
-                keyboard: TextInputType.number,
-                autofill: const [AutofillHints.postalCode],
-                validator: (v) => (v ?? '').trim().isNotEmpty && (v ?? '').trim().length != 6 ? 'Pincode must be 6 digits' : null),
-            _field(_notes, 'Anything we should know? (optional)', 'notes', hint: 'e.g. call before delivery'),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Payment', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(color: Brand.accentTint, border: Border.all(color: Brand.accent, width: 2), borderRadius: BorderRadius.circular(12)),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.payments_outlined, color: Brand.accent),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Cash on delivery', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                              Text('Pay when your order arrives', style: TextStyle(fontSize: 12, color: Brand.muted)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 18),
+            const _Step('2', 'Contact & address'),
+            AppCard(
+              padding: const EdgeInsets.fromLTRB(14, 16, 14, 2),
+              child: Column(children: [
+                _field(_name, 'Your name', 'name', icon: Icons.person_outline_rounded, autofill: const [AutofillHints.name], validator: (v) => (v ?? '').trim().length < 2 ? 'Please enter your name' : null),
+                _field(_phone, 'Mobile number', 'phone',
+                    icon: Icons.phone_outlined,
+                    keyboard: TextInputType.phone,
+                    autofill: const [AutofillHints.telephoneNumber],
+                    hint: '10-digit number',
+                    validator: (v) {
+                      final d = (v ?? '').replaceAll(RegExp(r'\D'), '');
+                      final ten = d.length > 10 ? d.substring(d.length - 10) : d;
+                      return RegExp(r'^[6-9]\d{9}$').hasMatch(ten) ? null : 'Enter a valid 10-digit mobile number';
+                    }),
+                _field(_address, 'Full address', 'address',
+                    lines: 3,
+                    hint: 'House / flat no., street, landmark',
+                    autofill: const [AutofillHints.fullStreetAddress],
+                    validator: (v) => (v ?? '').trim().length < 10 ? 'Please enter your full delivery address' : null),
+                _field(_pincode, 'Pincode (optional)', 'pincode',
+                    icon: Icons.markunread_mailbox_outlined,
+                    keyboard: TextInputType.number,
+                    autofill: const [AutofillHints.postalCode],
+                    validator: (v) => (v ?? '').trim().isNotEmpty && (v ?? '').trim().length != 6 ? 'Pincode must be 6 digits' : null),
+                _field(_notes, 'Delivery note (optional)', 'notes', icon: Icons.sticky_note_2_outlined, hint: 'e.g. ring the bell, call before delivery'),
+              ]),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
+            const _Step('3', 'Payment'),
+            AppCard(
+              padding: const EdgeInsets.all(14),
+              child: Row(children: [
+                const IconTile(Icons.payments_outlined, color: Brand.veg),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Cash on delivery', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    Text('Pay when your order arrives', style: TextStyle(fontSize: 12.5, color: Brand.muted)),
+                  ]),
+                ),
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Brand.accent, width: 2)),
+                  child: Center(child: Container(width: 12, height: 12, decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle))),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 18),
             const BillDetails(),
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: Brand.line))),
-          child: FilledButton(
-            onPressed: _placing ? null : _place,
-            child: _placing
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                : Text('Place order · ${rupees(total)}'),
+      bottomNavigationBar: StickyBar(
+        child: Row(children: [
+          Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(rupees(total), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+            Text('$count ${count == 1 ? 'item' : 'items'} · cash', style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(width: 16),
+          Expanded(
+            child: FilledButton(
+              onPressed: _placing ? null : _place,
+              style: FilledButton.styleFrom(backgroundColor: Brand.veg),
+              child: _placing
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                  : const Text('Place order'),
+            ),
           ),
-        ),
+        ]),
       ),
     );
   }
 
   Widget _locationCard() {
     final has = _lat != null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: InkWell(
-        onTap: _pickOnMap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: has ? Brand.accentTint : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _pinMissing ? Brand.danger : (has ? Brand.accent : Brand.line), width: has || _pinMissing ? 1.6 : 1),
-          ),
-          child: Row(
-            children: [
-              Icon(has ? Icons.location_on : Icons.add_location_alt_outlined, color: _pinMissing ? Brand.danger : Brand.accent),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(has ? 'Delivery pin set' : 'Set delivery location on map', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                    Text(
-                      has ? 'Tap to change. Riders navigate to this pin.' : (_pinMissing ? 'Please set your location so we can deliver to you.' : 'So the rider can find you quickly'),
-                      style: TextStyle(fontSize: 12.5, color: _pinMissing ? Brand.danger : Brand.muted),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Brand.muted),
-            ],
-          ),
+    final c = _pinMissing ? Brand.danger : Brand.accent;
+    return AppCard(
+      onTap: _pickOnMap,
+      padding: const EdgeInsets.all(14),
+      child: Row(children: [
+        IconTile(has ? Icons.location_on_rounded : Icons.add_location_alt_outlined, color: c, size: 46),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(has ? 'Pinned on the map' : 'Set your location on the map', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: _pinMissing ? Brand.danger : Brand.ink)),
+            const SizedBox(height: 2),
+            Text(
+              has
+                  ? (_address.text.trim().isEmpty ? 'The rider navigates straight to this pin' : _address.text.trim())
+                  : (_pinMissing ? 'Please set your location so we can deliver to you' : 'So the rider finds your door quickly'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12.5, color: _pinMissing ? Brand.danger : Brand.muted, height: 1.3),
+            ),
+          ]),
         ),
-      ),
+        const SizedBox(width: 8),
+        Text(has ? 'Change' : 'Set', style: TextStyle(color: c, fontWeight: FontWeight.w800)),
+      ]),
     );
   }
 
@@ -249,6 +253,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     TextEditingController c,
     String label,
     String key, {
+    IconData? icon,
     String? hint,
     int lines = 1,
     TextInputType? keyboard,
@@ -264,9 +269,32 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         maxLines: lines,
         autofillHints: autofill,
         textInputAction: lines > 1 ? TextInputAction.newline : TextInputAction.next,
-        decoration: InputDecoration(labelText: label, hintText: hint, alignLabelWithHint: lines > 1),
+        decoration: InputDecoration(labelText: label, hintText: hint, alignLabelWithHint: lines > 1, prefixIcon: icon == null ? null : Icon(icon, size: 20)),
         validator: (v) => validator?.call(v) ?? _server(key),
       ),
     );
   }
+}
+
+/// A numbered section heading: (1) Deliver to.
+class _Step extends StatelessWidget {
+  const _Step(this.n, this.title);
+  final String n;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 10, left: 2),
+        child: Row(children: [
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle),
+            child: Text(n, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(width: 8),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        ]),
+      );
 }

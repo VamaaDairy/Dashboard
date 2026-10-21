@@ -396,7 +396,7 @@ class _Rail extends StatelessWidget {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Brand.ink))),
           const SizedBox(height: 12),
           SizedBox(
-            height: _w + 146,
+            height: ProductTile.heightFor(_w),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),

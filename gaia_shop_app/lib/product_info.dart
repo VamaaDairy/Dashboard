@@ -34,7 +34,6 @@ const _antibiotic = Highlight(Icons.verified_outlined, 'Antibiotic free');
 const _untouched = Highlight(Icons.back_hand_outlined, 'Untouched by hand');
 const _protein = Highlight(Icons.fitness_center, 'Rich in protein');
 const _calcium = Highlight(Icons.health_and_safety_outlined, 'Source of calcium');
-const _veg = Highlight(Icons.eco_outlined, '100% vegetarian');
 
 const _milk = ProductInfo(
   per: '100 ml',
@@ -57,7 +56,7 @@ const _uht = ProductInfo(
 const _paneer = ProductInfo(
   about: 'Soft, fresh Gaia malai paneer made from pure milk. It holds its shape in curries, tikka and bhurji and stays soft in every bite - '
       'a simple way to add protein to everyday meals.',
-  highlights: [_protein, _calcium, Highlight(Icons.restaurant_outlined, 'Soft & fresh'), _veg],
+  highlights: [_protein, _calcium, Highlight(Icons.restaurant_outlined, 'Soft & fresh')],
   nutrition: [('Energy', '265 kcal'), ('Protein', '18 g'), ('Fat', '20 g'), ('Carbohydrate', '1.2 g'), ('Calcium', '480 mg')],
   storage: _chilled,
 );
@@ -65,7 +64,7 @@ const _paneer = ProductInfo(
 const _lowFatPaneer = ProductInfo(
   about: 'Gaia Low Fat Paneer gives you the bite of fresh paneer with less fat - made for people watching their fat intake '
       'without giving up protein.',
-  highlights: [Highlight(Icons.trending_down, 'Low fat'), _protein, _calcium, _veg],
+  highlights: [Highlight(Icons.trending_down, 'Low fat'), _protein, _calcium],
   nutrition: [('Energy', '185 kcal'), ('Protein', '22 g'), ('Fat', '10 g'), ('Carbohydrate', '3.0 g'), ('Calcium', '500 mg')],
   storage: _chilled,
 );
@@ -81,7 +80,7 @@ const _dahi = ProductInfo(
 const _kadhiDahi = ProductInfo(
   about: 'Gaia Kadhi Dahi is set slightly tangy, just right for kadhi, marinades, dhokla and batters - the sourness cooking needs, '
       'without waiting a day for it.',
-  highlights: [Highlight(Icons.soup_kitchen_outlined, 'Made for cooking'), Highlight(Icons.spa_outlined, 'Live cultures'), _pasteurised, _veg],
+  highlights: [Highlight(Icons.soup_kitchen_outlined, 'Made for cooking'), Highlight(Icons.spa_outlined, 'Live cultures'), _pasteurised],
   nutrition: [('Energy', '50 kcal'), ('Protein', '3.0 g'), ('Fat', '2.0 g'), ('Carbohydrate', '4.5 g'), ('Calcium', '110 mg')],
   storage: _chilled,
 );
@@ -89,7 +88,7 @@ const _kadhiDahi = ProductInfo(
 const _lassi = ProductInfo(
   per: '100 ml',
   about: 'Chilled Gaia lassi, churned from fresh dahi - thick, sweet and refreshing. Best served cold on a hot afternoon.',
-  highlights: [Highlight(Icons.ac_unit, 'Serve chilled'), Highlight(Icons.spa_outlined, 'Made from fresh dahi'), Highlight(Icons.local_drink_outlined, 'Ready to drink'), _veg],
+  highlights: [Highlight(Icons.ac_unit, 'Serve chilled'), Highlight(Icons.spa_outlined, 'Made from fresh dahi'), Highlight(Icons.local_drink_outlined, 'Ready to drink')],
   nutrition: [('Energy', '90 kcal'), ('Protein', '2.5 g'), ('Fat', '2.0 g'), ('Carbohydrate', '15 g'), ('Calcium', '90 mg')],
   storage: 'Keep refrigerated at or below 4°C. Shake well and drink soon after opening.',
 );
@@ -97,7 +96,7 @@ const _lassi = ProductInfo(
 const _chaas = ProductInfo(
   per: '100 ml',
   about: 'Gaia Masala Chaas - light buttermilk with a touch of spices. Cools you down and goes well with any meal.',
-  highlights: [Highlight(Icons.ac_unit, 'Serve chilled'), Highlight(Icons.favorite_border, 'Light & cooling'), Highlight(Icons.local_drink_outlined, 'Ready to drink'), _veg],
+  highlights: [Highlight(Icons.ac_unit, 'Serve chilled'), Highlight(Icons.favorite_border, 'Light & cooling'), Highlight(Icons.local_drink_outlined, 'Ready to drink')],
   nutrition: [('Energy', '25 kcal'), ('Protein', '1.2 g'), ('Fat', '0.8 g'), ('Carbohydrate', '3.0 g'), ('Calcium', '50 mg')],
   storage: 'Keep refrigerated at or below 4°C. Shake well before serving.',
 );
@@ -105,21 +104,21 @@ const _chaas = ProductInfo(
 const _sweet = ProductInfo(
   about: 'A traditional Gaia sweet made from milk the slow way - rich, creamy and just sweet enough. Perfect for festivals, guests '
       'or an after-dinner treat.',
-  highlights: [Highlight(Icons.celebration_outlined, 'Festive favourite'), Highlight(Icons.water_drop_outlined, 'Made from pure milk'), _veg],
+  highlights: [Highlight(Icons.celebration_outlined, 'Festive favourite'), Highlight(Icons.water_drop_outlined, 'Made from pure milk')],
   nutrition: [('Energy', '300 kcal'), ('Protein', '8 g'), ('Fat', '15 g'), ('Carbohydrate', '35 g')],
   storage: _chilled,
 );
 
 const _peda = ProductInfo(
   about: 'Gaia peda, cooked down from milk and khowa the traditional way. Soft, melt-in-the-mouth and made for sharing.',
-  highlights: [Highlight(Icons.celebration_outlined, 'Festive favourite'), Highlight(Icons.water_drop_outlined, 'Made from pure milk'), _veg],
+  highlights: [Highlight(Icons.celebration_outlined, 'Festive favourite'), Highlight(Icons.water_drop_outlined, 'Made from pure milk')],
   nutrition: [('Energy', '420 kcal'), ('Protein', '10 g'), ('Fat', '15 g'), ('Carbohydrate', '60 g')],
   storage: 'Store in a cool, dry place or refrigerate. Best consumed within a few days of opening.',
 );
 
 const _khowa = ProductInfo(
   about: 'Unsweetened Gaia khowa (mawa), slow-cooked from milk until rich and grainy - the base for gulab jamun, barfi, halwa and peda.',
-  highlights: [Highlight(Icons.soup_kitchen_outlined, 'For sweets & cooking'), Highlight(Icons.no_food_outlined, 'Unsweetened'), _protein, _veg],
+  highlights: [Highlight(Icons.soup_kitchen_outlined, 'For sweets & cooking'), Highlight(Icons.no_food_outlined, 'Unsweetened'), _protein],
   nutrition: [('Energy', '420 kcal'), ('Protein', '20 g'), ('Fat', '25 g'), ('Carbohydrate', '25 g')],
   storage: _chilled,
 );
@@ -127,7 +126,7 @@ const _khowa = ProductInfo(
 const _ghee = ProductInfo(
   about: 'Gaia Desi Ghee is slow-cooked from cream the traditional way for its rich aroma and grainy texture. '
       'A spoon on hot rotis or dal, or use it for tadka and sweets.',
-  highlights: [Highlight(Icons.local_fire_department_outlined, 'Slow-cooked'), Highlight(Icons.air, 'Rich aroma'), Highlight(Icons.grain, 'Grainy texture'), _veg],
+  highlights: [Highlight(Icons.local_fire_department_outlined, 'Slow-cooked'), Highlight(Icons.air, 'Rich aroma'), Highlight(Icons.grain, 'Grainy texture')],
   nutrition: [('Energy', '897 kcal'), ('Fat', '99.7 g'), ('Protein', '0 g'), ('Carbohydrate', '0 g')],
   storage: 'Store in a cool, dry place away from sunlight. Use a dry spoon. No refrigeration needed.',
 );

@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
@@ -7,6 +8,7 @@ import 'screens/cart_screen.dart';
 import 'screens/subscribe_screen.dart';
 import 'store/cart.dart';
 import 'theme.dart';
+import 'ui.dart';
 
 /// A product photo, or a soft placeholder when there isn't one (or it can't load).
 class ProductImage extends StatelessWidget {
@@ -23,7 +25,11 @@ class ProductImage extends StatelessWidget {
           color: Brand.surface,
         ),
         alignment: Alignment.center,
-        child: Opacity(opacity: 0.35, child: Image.asset('assets/images/gaia-logo.jpg', width: (size ?? 80) * 0.5, fit: BoxFit.contain)),
+        // the logo stays small whatever the box: half a small box, at most 110 px wide
+        child: Opacity(
+          opacity: 0.35,
+          child: Image.asset('assets/images/gaia-logo.jpg', width: (size == null || !size!.isFinite) ? 110 : (size! * 0.5).clamp(16, 110).toDouble(), fit: BoxFit.contain),
+        ),
       );
 
   @override
@@ -73,7 +79,10 @@ class AddButton extends ConsumerWidget {
           width: w,
           height: h,
           child: FilledButton.icon(
-            onPressed: () => cart.add(product),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              cart.add(product);
+            },
             style: FilledButton.styleFrom(minimumSize: Size(w, h), shape: RoundedRectangleBorder(borderRadius: r), padding: EdgeInsets.zero),
             icon: const Icon(Icons.add_shopping_cart, size: 20),
             label: const Text('Add to cart'),
@@ -86,7 +95,10 @@ class AddButton extends ConsumerWidget {
         elevation: 2,
         shadowColor: Colors.black26,
         child: InkWell(
-          onTap: () => cart.add(product),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            cart.add(product);
+          },
           borderRadius: r,
           child: Container(
             width: w,
@@ -180,68 +192,79 @@ class OffBadge extends StatelessWidget {
 /// Used in the menu grid and the "you may also like" rows.
 class ProductTile extends StatelessWidget {
   const ProductTile({super.key, required this.product, required this.onOpen});
+
+  /// The height a tile [width] wide needs: its photo plus room for size, two lines of name, price and Subscribe.
+  static double heightFor(double width) => (width - 12) / 1.08 + 150;
   final Product product;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
     final p = product;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onOpen,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: Brand.line.withValues(alpha: 0.6))),
-                    padding: const EdgeInsets.fromLTRB(8, 10, 8, 16),
-                    child: Hero(tag: 'p-${p.sku}', child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
-                  ),
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Brand.line)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 1.08,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
+                        child: Hero(tag: 'p-${p.sku}', child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
+                      ),
+                    ),
+                    if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent)),
+                    // ADD sits on the photo's corner so it is always in the same place
+                    Positioned(right: 6, bottom: -14, child: AddButton(product: p)),
+                  ],
                 ),
-                if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent)),
-                // ADD sits on the photo's corner so it is always in the same place
-                Positioned(right: 6, bottom: -14, child: AddButton(product: p)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (p.size != null && p.size!.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(5)),
-              child: Text(p.size!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Brand.muted, fontWeight: FontWeight.w600)),
-            ),
-          const SizedBox(height: 5),
-          SizedBox(
-            height: 34,
-            child: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.3, color: Brand.ink)),
-          ),
-          const SizedBox(height: 4),
-          PriceTag(product: p),
-          const SizedBox(height: 6),
-          // every product can be subscribed to, right from the list
-          SizedBox(
-            height: 28,
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Brand.accent,
-                padding: EdgeInsets.zero,
-                side: const BorderSide(color: Brand.accent, width: 1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              icon: const Icon(Icons.calendar_month, size: 14),
-              label: const Text('Subscribe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-            ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 20, 6, 0),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  SizedBox(
+                    height: 18,
+                    child: (p.size != null && p.size!.isNotEmpty)
+                        ? Text(p.size!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: Brand.muted, fontWeight: FontWeight.w600))
+                        : null,
+                  ),
+                  SizedBox(
+                    height: 36,
+                    child: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.3, color: Brand.ink)),
+                  ),
+                  const SizedBox(height: 6),
+                  PriceTag(product: p),
+                  const SizedBox(height: 6),
+                  // every product can be subscribed to, right from the list
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Row(children: [
+                        Icon(Icons.event_repeat_rounded, size: 15, color: Brand.sky),
+                        SizedBox(width: 5),
+                        Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.sky)),
+                        Icon(Icons.chevron_right_rounded, size: 16, color: Brand.sky),
+                      ]),
+                    ),
+                  ),
+                ]),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -256,34 +279,41 @@ class CartBar extends ConsumerWidget {
     final cart = ref.watch(cartProvider);
     if (cart.count == 0) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Material(
         color: Brand.accent,
-        borderRadius: BorderRadius.circular(16),
-        elevation: 6,
-        shadowColor: Brand.accent.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(18),
+        elevation: 8,
+        shadowColor: Brand.accent.withValues(alpha: 0.45),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CartScreen())),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${cart.count} ${cart.count == 1 ? 'ITEM' : 'ITEMS'}',
-                          style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                      Text('${rupees(cart.subtotal)}  plus delivery',
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-                    ],
-                  ),
+            padding: const EdgeInsets.fromLTRB(10, 10, 14, 10),
+            child: Row(children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
+                child: Badge(
+                  label: Text('${cart.count}'),
+                  backgroundColor: Brand.gaiaGreen,
+                  offset: const Offset(6, -6),
+                  child: const Icon(Icons.shopping_bag_rounded, color: Colors.white),
                 ),
-                const Text('View cart', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-                const Icon(Icons.chevron_right, color: Colors.white),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(rupees(cart.total), style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900)),
+                  Text(cart.delivery == 0 ? 'Free delivery included' : 'Includes ${rupees(cart.delivery)} delivery',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+              const Text('View cart', style: TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.w800)),
+              const SizedBox(width: 2),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white),
+            ]),
           ),
         ),
       ),
@@ -298,43 +328,38 @@ class BillDetails extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
-    Widget row(String l, Widget r) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l, style: const TextStyle(color: Brand.muted)), r]),
+    Widget row(IconData icon, String l, Widget r) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Icon(icon, size: 18, color: Brand.muted),
+            const SizedBox(width: 10),
+            Expanded(child: Text(l, style: const TextStyle(color: Brand.ink, fontWeight: FontWeight.w500))),
+            r,
+          ]),
         );
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Bill details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-          const SizedBox(height: 8),
-          row('Item total', Text(rupees(cart.subtotal))),
-          row(
-            'Delivery fee',
-            cart.delivery == 0
-                ? const Text('FREE', style: TextStyle(color: Brand.veg, fontWeight: FontWeight.w700))
-                : Text(rupees(cart.delivery)),
-          ),
-          const Divider(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('To pay', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              Text(rupees(cart.total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            ],
-          ),
-          if (cart.toFreeDelivery > 0)
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: Brand.accentTint, borderRadius: BorderRadius.circular(8)),
-              child: Text('Add items worth ${rupees(cart.toFreeDelivery)} more for free delivery',
-                  style: const TextStyle(color: Brand.accent, fontSize: 12, fontWeight: FontWeight.w600)),
-            ),
-        ],
-      ),
+    return AppCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Bill details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+        const SizedBox(height: 8),
+        row(Icons.receipt_long_outlined, 'Item total', Text(rupees(cart.subtotal), style: const TextStyle(fontWeight: FontWeight.w600))),
+        row(
+          Icons.two_wheeler_outlined,
+          'Delivery fee',
+          cart.delivery == 0
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (cart.rule.fee > 0)
+                    Text(rupees(cart.rule.fee), style: const TextStyle(color: Brand.faint, decoration: TextDecoration.lineThrough)),
+                  const SizedBox(width: 6),
+                  const Text('FREE', style: TextStyle(color: Brand.veg, fontWeight: FontWeight.w800)),
+                ])
+              : Text(rupees(cart.delivery), style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+        const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider()),
+        Row(children: [
+          const Expanded(child: Text('To pay', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17))),
+          Text(rupees(cart.total), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+        ]),
+      ]),
     );
   }
 }

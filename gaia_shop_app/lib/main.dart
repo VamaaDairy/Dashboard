@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +16,10 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // the bundled typeface's licence shows in the app's licences page
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['Plus Jakarta Sans'], await rootBundle.loadString('assets/fonts/PlusJakartaSans-OFL.txt'));
+  });
   runApp(const SplashScreen());
   // keep the opening screen up for a beat even when startup is instant
   final minSplash = Future<void>.delayed(const Duration(milliseconds: 1500));

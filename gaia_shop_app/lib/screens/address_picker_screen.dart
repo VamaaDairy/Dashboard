@@ -9,6 +9,7 @@ import '../models.dart';
 import '../store/core.dart';
 import '../store/map.dart';
 import '../theme.dart';
+import '../ui.dart';
 
 /// Choose where the order goes: search an address, use the current location, or move the map under the pin.
 class AddressPickerScreen extends ConsumerStatefulWidget {
@@ -129,14 +130,20 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
   Widget build(BuildContext context) {
     final map = ref.watch(mapProvider);
     final start = widget.initial == null ? _start : LatLng(widget.initial!.lat, widget.initial!.lng);
+    final top = MediaQuery.paddingOf(context).top;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Delivery location')),
       body: Stack(
         children: [
           Positioned.fill(
             child: !map.enabled
-                ? const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('The map is not available right now.', style: TextStyle(color: Brand.muted))))
+                ? Container(
+                    color: Brand.surface,
+                    alignment: Alignment.center,
+                    child: map.pending
+                        ? const CircularProgressIndicator()
+                        : const Padding(padding: EdgeInsets.all(32), child: Text('The map is not available right now.', style: TextStyle(color: Brand.muted))),
+                  )
                 : MapLibreMap(
                     styleString: map.styleUrl,
                     initialCameraPosition: CameraPosition(target: start, zoom: widget.initial == null ? 12 : 17),
@@ -149,108 +156,145 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
                   ),
           ),
           // the pin stays in the middle; the map moves under it
-          const IgnorePointer(child: Center(child: Padding(padding: EdgeInsets.only(bottom: 40), child: Icon(Icons.location_on, size: 48, color: Brand.accent)))),
+          IgnorePointer(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 92),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Brand.ink, borderRadius: BorderRadius.circular(12)),
+                    child: const Text('Your order will be delivered here', style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(height: 4),
+                  const Icon(Icons.location_on_rounded, size: 54, color: Brand.accent, shadows: [Shadow(color: Color(0x40000000), blurRadius: 8, offset: Offset(0, 3))]),
+                  Container(width: 12, height: 5, decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(6))),
+                ]),
+              ),
+            ),
+          ),
+          // back + search, floating on the map
           Positioned(
-            left: 16,
-            right: 16,
-            top: 12,
-            child: Column(
-              children: [
+            left: 12,
+            right: 12,
+            top: top + 8,
+            child: Column(children: [
+              Row(children: [
                 Material(
+                  color: Colors.white,
+                  shape: const CircleBorder(),
                   elevation: 3,
-                  borderRadius: BorderRadius.circular(14),
-                  child: TextField(
-                    controller: _search,
-                    onChanged: _onSearch,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: 'Search area, street or landmark',
-                      prefixIcon: const Icon(Icons.search, color: Brand.muted),
-                      suffixIcon: _searching
-                          ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-                          : null,
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                  shadowColor: Colors.black26,
+                  child: IconButton(icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Back', onPressed: () => Navigator.of(context).maybePop()),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Material(
+                    elevation: 3,
+                    shadowColor: Colors.black26,
+                    borderRadius: BorderRadius.circular(Brand.radius),
+                    child: TextField(
+                      controller: _search,
+                      onChanged: _onSearch,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: 'Search area, street or landmark',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        fillColor: Colors.white,
+                        suffixIcon: _searching
+                            ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                            : null,
+                      ),
                     ),
                   ),
                 ),
-                if (_suggestions.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(top: 6),
-                    constraints: const BoxConstraints(maxHeight: 280),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: const [BoxShadow(color: Color(0x26000000), blurRadius: 10)]),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      padding: EdgeInsets.zero,
-                      itemCount: _suggestions.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final s = _suggestions[i];
-                        return ListTile(
-                          dense: true,
-                          leading: const Icon(Icons.place_outlined, color: Brand.muted),
-                          title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          subtitle: Text(s.address, maxLines: 2, overflow: TextOverflow.ellipsis),
-                          onTap: () => _pick(s),
-                        );
-                      },
-                    ),
+              ]),
+              if (_suggestions.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(Brand.radius), boxShadow: Brand.lift),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    itemCount: _suggestions.length,
+                    separatorBuilder: (_, __) => const Padding(padding: EdgeInsets.only(left: 64), child: Divider()),
+                    itemBuilder: (_, i) {
+                      final sg = _suggestions[i];
+                      return ListTile(
+                        leading: const IconTile(Icons.place_outlined, size: 38),
+                        title: Text(sg.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                        subtitle: Text(sg.address, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Brand.muted, fontSize: 12.5)),
+                        onTap: () => _pick(sg),
+                      );
+                    },
                   ),
-              ],
-            ),
+                ),
+            ]),
           ),
           Positioned(
             right: 16,
-            bottom: 178,
-            child: FloatingActionButton.small(
-              heroTag: 'locate',
-              backgroundColor: Colors.white,
-              foregroundColor: Brand.accent,
-              onPressed: () => _useCurrent(),
-              tooltip: 'Use my current location',
-              child: const Icon(Icons.my_location),
+            bottom: 16,
+            child: Material(
+              color: Colors.white,
+              elevation: 3,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(24),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () => _useCurrent(),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.my_location_rounded, size: 18, color: Brand.accent),
+                    SizedBox(width: 6),
+                    Text('Current location', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w800)),
+                  ]),
+                ),
+              ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-          decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Brand.line))),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_note != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_note!, style: const TextStyle(color: Brand.danger, fontSize: 13))),
-              const Text('DELIVER TO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: Brand.faint)),
-              const SizedBox(height: 4),
-              SizedBox(
-                height: 44,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(padding: EdgeInsets.only(top: 2), child: Icon(Icons.location_on, size: 20, color: Brand.accent)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _resolving ? 'Finding address…' : (_picked?.address ?? 'Move the map to place the pin on your door'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, height: 1.3),
-                      ),
+      bottomNavigationBar: Container(
+        padding: EdgeInsets.fromLTRB(16, 18, 16, 14 + MediaQuery.paddingOf(context).bottom),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [BoxShadow(color: Color(0x1A111827), blurRadius: 18, offset: Offset(0, -4))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Deliver to', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 10),
+            if (_note != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_note!, style: const TextStyle(color: Brand.danger, fontSize: 13))),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.location_on_rounded, size: 22, color: Brand.accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: Text(
+                      _resolving ? 'Finding the address…' : (_picked?.address ?? 'Move the map to put the pin on your door'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.4),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _picked == null || _resolving ? null : () => Navigator.of(context).pop(_picked),
-                child: const Text('Confirm location'),
-              ),
-            ],
-          ),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            FilledButton(
+              onPressed: _picked == null || _resolving ? null : () => Navigator.of(context).pop(_picked),
+              child: const Text('Confirm location'),
+            ),
+          ],
         ),
       ),
     );
