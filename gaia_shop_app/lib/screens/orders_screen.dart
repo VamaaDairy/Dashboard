@@ -106,7 +106,6 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = order;
-    final (color, icon) = statusLook(o.status);
     void open() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => OrderScreen(order: o)));
     final pics = o.items.take(3).toList();
 
@@ -115,7 +114,8 @@ class _OrderCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          StatusChip(o.statusLabel, color: color, icon: icon),
+          // just the word: no colour, no icon, no badge
+          Text(o.statusLabel, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Brand.ink)),
           const Spacer(),
           Text(orderDate(o.createdAt), style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
         ]),
