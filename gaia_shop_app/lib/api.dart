@@ -276,8 +276,8 @@ class Api {
 
   Uri _d(String path, [Map<String, String>? q]) => Uri.parse('$_base/api/distributor$path').replace(queryParameters: q);
 
-  Future<({String token, DistProfile profile})> distLogin(String phone, String pin) async {
-    final j = await _send(() => _http.post(_d('/login'), headers: _json, body: jsonEncode({'phone': phone, 'pin': pin})));
+  Future<({String token, DistProfile profile})> distLogin(String phone, String pin, String kind) async {
+    final j = await _send(() => _http.post(_d('/login'), headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'kind': kind})));
     final l = j['login'] as Map<String, dynamic>;
     return (token: j['token'] as String, profile: DistProfile(kind: l['kind'] as String, name: l['name'] as String, phone: l['phone'] as String));
   }

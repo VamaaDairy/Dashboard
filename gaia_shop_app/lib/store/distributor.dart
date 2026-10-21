@@ -84,8 +84,8 @@ class DistributorStore extends Notifier<DistData> {
     return DistData(profile: _token != null && k != null && n != null && p != null ? DistProfile(kind: k, name: n, phone: p) : null);
   }
 
-  Future<void> login(String phone, String pin) async {
-    final r = await _api.distLogin(phone, pin);
+  Future<void> login(String phone, String pin, String kind) async {
+    final r = await _api.distLogin(phone, pin, kind);
     await _vault.write(TokenVault.distributor, r.token);
     final prefs = ref.read(prefsProvider);
     await prefs.setString(_kindKey, r.profile.kind);

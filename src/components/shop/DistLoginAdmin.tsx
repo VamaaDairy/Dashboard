@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addDistLoginAction, setDistLoginAction } from "@/lib/distributor/actions";
+import { addDistLoginAction, createAllDistLoginsAction, setDistLoginAction } from "@/lib/distributor/actions";
 
 const box = "h-9 rounded-lg border border-input bg-transparent px-3 text-sm";
 type Opt = { uid: string; label: string; phone: string | null };
@@ -76,6 +76,38 @@ export function DistLoginActions({ id, active }: { id: number; active: boolean }
       <button disabled={pending} onClick={() => run({ active: !active })} className="h-8 rounded-lg border border-input px-3 text-sm hover:bg-muted disabled:opacity-60">
         {active ? "Deactivate" : "Activate"}
       </button>
+    </div>
+  );
+}
+
+/** Creates logins for every distributor and employee that has none, then downloads the PIN list. */
+export function CreateAllLoginsButton() {
+  const [msg, setMsg] = useState("");
+  const [pending, start] = useTransition();
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
+      <button
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            if (!window.confirm("Create a login for every distributor and employee that does not have one? A PIN list will download - keep it safe, the PINs cannot be shown again.")) return;
+            const r = await createAllDistLoginsAction();
+            if (!r.ok) { setMsg(r.error ?? "Could not create the logins."); return; }
+            if (r.csv && r.created) {
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(new Blob([r.csv], { type: "text/csv" }));
+              a.download = `gaia-app-logins-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }
+            setMsg(`${r.created} logins created.${r.skipped?.length ? ` Skipped ${r.skipped.length}: ${r.skipped.join("; ")}` : ""}`);
+          })
+        }
+        className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
+      >
+        Create logins for everyone
+      </button>
+      <span className="text-sm text-muted-foreground">{msg || "Every active distributor and employee, on their registered mobile number."}</span>
     </div>
   );
 }

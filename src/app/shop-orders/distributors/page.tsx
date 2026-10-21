@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Building2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { AddDistLoginForm, DistLoginActions } from "@/components/shop/DistLoginAdmin";
+import { AddDistLoginForm, CreateAllLoginsButton, DistLoginActions } from "@/components/shop/DistLoginAdmin";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { query } from "@/lib/db";
@@ -34,9 +34,10 @@ export default async function DistributorLoginsPage() {
         <PageHeader
           icon={Building2}
           title="Distributor app logins"
-          subtitle="Distributors (and salesmen booking for them) sign in to the Gaia app with their mobile number and PIN. Their orders appear under Primary."
+          subtitle="Distributors, and sales officers (employees) booking for them, each have their own sign-in. They sign in to the Gaia app with their mobile number and PIN. Their orders appear under Primary."
           actions={<Link href="/shop-orders" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Shop orders</Link>}
         />
+        {canEdit ? <CreateAllLoginsButton /> : null}
         {canEdit ? <AddDistLoginForm distributors={distributors} salesmen={salesmen} /> : null}
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
@@ -47,7 +48,7 @@ export default async function DistributorLoginsPage() {
               {logins.map((r) => (
                 <tr key={r.id} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{r.name}</td>
-                  <td className="px-3 py-2 capitalize">{r.kind}</td>
+                  <td className="px-3 py-2">{r.kind === "salesman" ? "Sales officer" : "Distributor"}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.code}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.phone}</td>
                   <td className="num px-3 py-2">{r.orders}</td>

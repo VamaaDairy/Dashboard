@@ -1,5 +1,6 @@
 "use server";
 
+import { randomInt } from "node:crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { userFromToken } from "@/lib/access-server";
@@ -46,4 +47,43 @@ export async function setDistLoginAction(id: number, patch: { active?: boolean; 
   if (patch.active !== undefined) await query(`update dist_login set active = $2, token = case when $2 then token else null end where id = $1`, [id, patch.active]);
   revalidatePath(PATH);
   return { ok: true };
+}
+
+export type BulkResult = { ok: boolean; error?: string; csv?: string; created?: number; skipped?: string[] };
+
+/**
+ * Give every active distributor (level 3) and every active employee an app login that does not have one yet,
+ * on their registered mobile number with a random 6-digit PIN. Returns the new credentials as CSV - the PINs
+ * are stored hashed, so this is the only time they can be handed out. Numbers already in use are skipped.
+ */
+export async function createAllDistLoginsAction(): Promise<BulkResult> {
+  if (!(await canEdit())) return NO;
+  const people = await query<{ kind: "distributor" | "salesman"; uid: string; name: string; code: string | null; phone: string | null }>(
+    `select 'distributor' as kind, f.uid, f.name, f.firm_code as code, f.phone
+       from fp_firm f join fp_channel c on c.uid = f.channel_uid
+       where f.active = 1 and c.level = 3 and not exists (select 1 from dist_login l where l.firm_uid = f.uid)
+     union all
+     select 'salesman', s.uid, trim(concat_ws(' ', s.first_name, s.last_name)), s.employee_code, s.phone
+       from fp_staff s where s.active = 1 and not exists (select 1 from dist_login l where l.staff_uid = s.uid)
+     order by 1, 3`,
+  );
+  const taken = new Set((await query<{ phone: string }>(`select phone from dist_login`)).map((r) => r.phone));
+  const rows: string[] = ["Type,Name,Code,Mobile,PIN"];
+  const skipped: string[] = [];
+  let created = 0;
+  for (const p of people) {
+    const phone = (p.phone ?? "").replace(/\D/g, "").slice(-10);
+    if (!/^[6-9]\d{9}$/.test(phone)) { skipped.push(`${p.name}: no valid mobile number`); continue; }
+    if (taken.has(phone)) { skipped.push(`${p.name}: ${phone} is already used by another login`); continue; }
+    const pin = String(randomInt(100000, 1000000));
+    await query(
+      `insert into dist_login (kind, firm_uid, staff_uid, phone, pin_hash) values ($1, $2, $3, $4, $5)`,
+      [p.kind, p.kind === "distributor" ? p.uid : null, p.kind === "salesman" ? p.uid : null, phone, hashPin(pin)],
+    );
+    taken.add(phone);
+    created++;
+    rows.push([p.kind === "distributor" ? "Distributor" : "Sales officer", p.name, p.code ?? "", phone, pin].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+  }
+  revalidatePath(PATH);
+  return { ok: true, csv: rows.join("\r\n"), created, skipped };
 }

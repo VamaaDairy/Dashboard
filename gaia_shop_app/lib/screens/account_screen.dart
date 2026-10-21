@@ -168,6 +168,8 @@ class AccountScreen extends ConsumerWidget {
           _Row(icon: Icons.two_wheeler_rounded, title: 'Delivery partner', subtitle: 'Sign in to deliver orders', onTap: () => _go(context, const RiderLoginScreen())),
           gap(),
           _Row(icon: Icons.storefront_outlined, title: 'Distributor', subtitle: 'Sign in to place your orders', onTap: () => _go(context, const DistributorLoginScreen())),
+          gap(),
+          _Row(icon: Icons.badge_outlined, title: 'Sales officer', subtitle: 'Sign in to book orders for distributors', onTap: () => _go(context, const DistributorLoginScreen(salesOfficer: true))),
           const SizedBox(height: 8),
           band(),
           heading('More'),

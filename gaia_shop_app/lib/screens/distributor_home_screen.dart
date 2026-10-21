@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
@@ -37,7 +38,7 @@ class _DistributorHomeScreenState extends ConsumerState<DistributorHomeScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(d.profile?.name ?? 'Gaia', overflow: TextOverflow.ellipsis),
+          title: Text(d.profile == null ? 'Gaia' : '${d.profile!.name}${d.profile!.kind == 'salesman' ? ' · Sales officer' : ''}', overflow: TextOverflow.ellipsis),
           actions: [
             IconButton(
               tooltip: 'Sign out',
@@ -53,37 +54,58 @@ class _DistributorHomeScreenState extends ConsumerState<DistributorHomeScreen> {
   }
 }
 
-class _NewOrder extends ConsumerWidget {
+class _NewOrder extends ConsumerStatefulWidget {
   const _NewOrder();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_NewOrder> createState() => _NewOrderState();
+}
+
+class _NewOrderState extends ConsumerState<_NewOrder> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
     final d = ref.watch(distributorProvider);
     final store = ref.read(distributorProvider.notifier);
+    final q = _q.trim().toLowerCase();
 
     if (d.firm == null) {
       if (d.loading) return const Center(child: CircularProgressIndicator());
       if (d.firms.isEmpty) {
         return _Message(d.error ?? 'No distributor is linked to this login yet. Please contact Gaia.', onRetry: store.start);
       }
+      final firms = q.isEmpty ? d.firms : d.firms.where((f) => '${f.name} ${f.code} ${f.city ?? ''}'.toLowerCase().contains(q)).toList();
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const Text('Order for which distributor?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
-          for (final f in d.firms)
+          if (d.firms.length > 8)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextField(
+                onChanged: (v) => setState(() => _q = v),
+                decoration: const InputDecoration(hintText: 'Search name, code or city', prefixIcon: Icon(Icons.search)),
+              ),
+            ),
+          for (final f in firms)
             Card(
               child: ListTile(
                 title: Text(f.name, style: const TextStyle(fontWeight: FontWeight.w700)),
                 subtitle: Text([f.code, if (f.city != null) f.city!].join(' · ')),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => store.selectFirm(f),
+                onTap: () {
+                  setState(() => _q = '');
+                  store.selectFirm(f);
+                },
               ),
             ),
         ],
       );
     }
 
+    final products = q.isEmpty ? d.products : d.products.where((p) => '${p.name} ${p.category} ${p.size ?? ''}'.toLowerCase().contains(q)).toList();
     return Column(
       children: [
         Container(
@@ -93,8 +115,22 @@ class _NewOrder extends ConsumerWidget {
           child: Row(
             children: [
               Expanded(child: Text('For ${d.firm!.name}', style: const TextStyle(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
-              if (d.firms.length > 1) TextButton(onPressed: () => store.selectFirm(null), child: const Text('Change')),
+              if (d.firms.length > 1)
+                TextButton(
+                  onPressed: () {
+                    setState(() => _q = '');
+                    store.selectFirm(null);
+                  },
+                  child: const Text('Change'),
+                ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: TextField(
+            onChanged: (v) => setState(() => _q = v),
+            decoration: const InputDecoration(hintText: 'Search products', prefixIcon: Icon(Icons.search)),
           ),
         ),
         if (d.error != null)
@@ -107,12 +143,20 @@ class _NewOrder extends ConsumerWidget {
               ? const Center(child: CircularProgressIndicator())
               : d.products.isEmpty
                   ? _Message('No products are available to order.', onRetry: () => store.selectFirm(d.firm))
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      itemCount: d.products.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: Brand.line),
-                      itemBuilder: (_, i) => _ProductRow(product: d.products[i], qty: d.qty[d.products[i].sku] ?? 0),
-                    ),
+                  : LayoutBuilder(builder: (_, c) {
+                      final tileW = (c.maxWidth - 32 - 12) / 2;
+                      return GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          mainAxisExtent: (tileW - 12) / 1.08 + 128,
+                        ),
+                        itemCount: products.length,
+                        itemBuilder: (_, i) => _ProductTile(product: products[i], qty: d.qty[products[i].sku] ?? 0),
+                      );
+                    }),
         ),
         if (d.qty.isNotEmpty) _OrderBar(d: d),
       ],
@@ -120,46 +164,128 @@ class _NewOrder extends ConsumerWidget {
   }
 }
 
-class _ProductRow extends ConsumerWidget {
-  const _ProductRow({required this.product, required this.qty});
+/// The retail menu's product tile, minus Subscribe (a primary order is a one-off): photo, size, name,
+/// dealer price with the MRP, and ADD / the quantity stepper on the photo's corner.
+class _ProductTile extends ConsumerWidget {
+  const _ProductTile({required this.product, required this.qty});
   final Product product;
   final int qty;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = product;
     final store = ref.read(distributorProvider.notifier);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Brand.line)),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 1.08,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
+                      child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain),
+                    ),
+                  ),
+                  Positioned(right: 6, bottom: -14, child: _Stepper(qty: qty, store: store, product: p)),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 20, 6, 0),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(
+                  height: 18,
+                  child: (p.size != null && p.size!.isNotEmpty)
+                      ? Text(p.size!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: Brand.muted, fontWeight: FontWeight.w600))
+                      : null,
+                ),
+                SizedBox(
+                  height: 36,
+                  child: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.3, color: Brand.ink)),
+                ),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Text(_rs(p.price), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Brand.ink)),
+                  const SizedBox(width: 6),
+                  if (p.mrp > p.price) Text(_rs(p.mrp), style: const TextStyle(fontSize: 12, color: Brand.faint, decoration: TextDecoration.lineThrough)),
+                ]),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ADD, which becomes a  -  qty  +  stepper; tap the number to type it (distributors order in cases).
+class _Stepper extends StatelessWidget {
+  const _Stepper({required this.qty, required this.store, required this.product});
+  final int qty;
+  final DistributorStore store;
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = BorderRadius.circular(9);
+    if (qty == 0) {
+      return Material(
+        color: Colors.white,
+        borderRadius: r,
+        elevation: 2,
+        shadowColor: Colors.black26,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            store.setQty(product.sku, 1);
+          },
+          borderRadius: r,
+          child: Container(
+            width: 76,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(borderRadius: r, border: Border.all(color: Brand.accent, width: 1.2)),
+            child: const Text('ADD', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 0.6)),
+          ),
+        ),
+      );
+    }
+    Widget step(IconData icon, int to) => InkWell(
+          onTap: () => store.setQty(product.sku, to),
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(width: 26, height: double.infinity, child: Icon(icon, color: Colors.white, size: 16)),
+        );
+    return Container(
+      width: 88,
+      height: 34,
+      decoration: BoxDecoration(
+        color: Brand.accent,
+        borderRadius: r,
+        boxShadow: const [BoxShadow(color: Color(0x2E000000), blurRadius: 8, offset: Offset(0, 2))],
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          ProductImage(url: product.image, size: 56, radius: 10),
-          const SizedBox(width: 12),
+          step(Icons.remove, qty - 1),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text('${_rs(product.price)}  ·  MRP ${_rs(product.mrp)}', style: const TextStyle(color: Brand.muted, fontSize: 12.5)),
-              ],
+            child: InkWell(
+              onTap: () async {
+                final n = await _askQty(context, product.name, qty);
+                if (n != null) store.setQty(product.sku, n);
+              },
+              child: Center(child: Text('$qty', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15))),
             ),
           ),
-          qty == 0
-              ? OutlinedButton(onPressed: () => store.setQty(product.sku, 1), child: const Text('ADD'))
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(onPressed: () => store.setQty(product.sku, qty - 1), icon: const Icon(Icons.remove_circle_outline)),
-                    InkWell(
-                      onTap: () async {
-                        final n = await _askQty(context, product.name, qty);
-                        if (n != null) store.setQty(product.sku, n);
-                      },
-                      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8), child: Text('$qty', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
-                    ),
-                    IconButton(onPressed: () => store.setQty(product.sku, qty + 1), icon: const Icon(Icons.add_circle_outline)),
-                  ],
-                ),
+          step(Icons.add, qty + 1),
         ],
       ),
     );
@@ -182,55 +308,142 @@ Future<int?> _askQty(BuildContext context, String name, int current) {
   );
 }
 
-class _OrderBar extends ConsumerWidget {
+/// The bar at the bottom once something is in the order, like the retail cart bar - without any delivery charge.
+class _OrderBar extends StatelessWidget {
   const _OrderBar({required this.d});
   final DistData d;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Brand.line))),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: Material(
+          color: Brand.accent,
+          borderRadius: BorderRadius.circular(16),
+          elevation: 6,
+          shadowColor: Brand.accent.withValues(alpha: 0.5),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const _ReviewOrderScreen())),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
                 children: [
-                  Text('${d.lines} items · ${d.units} qty', style: const TextStyle(color: Brand.muted, fontSize: 12.5)),
-                  Text(_rs(d.total), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${d.lines} ${d.lines == 1 ? 'ITEM' : 'ITEMS'} · ${d.units} QTY',
+                            style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                        Text(_rs(d.total), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                  const Text('Review order', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                  const Icon(Icons.chevron_right, color: Colors.white),
                 ],
               ),
             ),
-            FilledButton(
-              onPressed: d.placing ? null : () => _confirm(context, ref),
-              child: d.placing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Place order'),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Future<void> _confirm(BuildContext context, WidgetRef ref) async {
+/// The order's lines with a bill total and Place order - the retail cart/checkout, for a primary order.
+class _ReviewOrderScreen extends ConsumerStatefulWidget {
+  const _ReviewOrderScreen();
+
+  @override
+  ConsumerState<_ReviewOrderScreen> createState() => _ReviewOrderScreenState();
+}
+
+class _ReviewOrderScreenState extends ConsumerState<_ReviewOrderScreen> {
+  final _notes = TextEditingController();
+
+  @override
+  void dispose() {
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _place() async {
+    final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Place this order?'),
-        content: Text('${d.lines} items · ${d.units} qty · ${_rs(d.total)}\nfor ${d.firm!.name}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Place order')),
+    final id = await ref.read(distributorProvider.notifier).place(notes: _notes.text);
+    if (id == null) return;
+    messenger.showSnackBar(SnackBar(content: Text('Order #$id placed')));
+    nav.pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = ref.watch(distributorProvider);
+    final store = ref.read(distributorProvider.notifier);
+    final lines = d.products.where((p) => (d.qty[p.sku] ?? 0) > 0).toList();
+    // the last line was removed: nothing left to review
+    if (lines.isEmpty && !d.placing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).maybePop();
+      });
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Your order')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('For ${d.firm?.name ?? ''}', style: const TextStyle(fontWeight: FontWeight.w700, color: Brand.muted)),
+          const SizedBox(height: 8),
+          for (final p in lines)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  ProductImage(url: p.image, size: 52, radius: 10),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text('${_rs(p.price)} × ${d.qty[p.sku]} = ${_rs(p.price * d.qty[p.sku]!)}', style: const TextStyle(color: Brand.muted, fontSize: 12.5)),
+                      ],
+                    ),
+                  ),
+                  _Stepper(qty: d.qty[p.sku] ?? 0, store: store, product: p),
+                ],
+              ),
+            ),
+          const Divider(height: 28, color: Brand.line),
+          TextField(controller: _notes, maxLength: 300, decoration: const InputDecoration(labelText: 'Note for Gaia (optional)')),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text('Bill total', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              Text(_rs(d.total), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            ],
+          ),
+          if (d.error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(d.error!, style: const TextStyle(color: Color(0xFFB3202D), fontWeight: FontWeight.w600)),
+            ),
         ],
       ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: FilledButton(
+            onPressed: d.placing || d.qty.isEmpty ? null : _place,
+            child: d.placing ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : Text('Place order · ${_rs(d.total)}'),
+          ),
+        ),
+      ),
     );
-    if (ok != true) return;
-    final id = await ref.read(distributorProvider.notifier).place();
-    if (id != null) messenger.showSnackBar(SnackBar(content: Text('Order #$id placed')));
   }
 }
 

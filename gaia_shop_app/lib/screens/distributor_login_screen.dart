@@ -5,9 +5,10 @@ import '../api.dart';
 import '../store/distributor.dart';
 import '../theme.dart';
 
-/// Distributors, and the salesmen who book for them, sign in with the mobile number and PIN Gaia gave them.
+/// Distributors and sales officers each have their own sign-in: [salesOfficer] picks which, with the mobile number and PIN Gaia gave them.
 class DistributorLoginScreen extends ConsumerStatefulWidget {
-  const DistributorLoginScreen({super.key});
+  const DistributorLoginScreen({super.key, this.salesOfficer = false});
+  final bool salesOfficer;
 
   @override
   ConsumerState<DistributorLoginScreen> createState() => _DistributorLoginScreenState();
@@ -34,7 +35,7 @@ class _DistributorLoginScreenState extends ConsumerState<DistributorLoginScreen>
       _error = null;
     });
     try {
-      await store.login(_phone.text.trim(), _pin.text.trim());
+      await store.login(_phone.text.trim(), _pin.text.trim(), widget.salesOfficer ? 'salesman' : 'distributor');
       nav.popUntil((r) => r.isFirst); // the app now opens on the distributor's order screen
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -53,9 +54,9 @@ class _DistributorLoginScreenState extends ConsumerState<DistributorLoginScreen>
         children: [
           Image.asset('assets/images/gaia-logo.jpg', height: 72, alignment: Alignment.centerLeft, fit: BoxFit.contain),
           const SizedBox(height: 24),
-          const Text('Distributor sign in', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          Text(widget.salesOfficer ? 'Sales officer sign in' : 'Distributor sign in', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          const Text('Distributors and their salesmen: use the mobile number and PIN given to you by Gaia.', style: TextStyle(color: Brand.muted)),
+          Text(widget.salesOfficer ? 'Use the mobile number and PIN given to you by Gaia to book orders for distributors.' : 'Use the mobile number and PIN given to you by Gaia to order for your firm.', style: TextStyle(color: Brand.muted)),
           const SizedBox(height: 24),
           if (_error != null)
             Container(

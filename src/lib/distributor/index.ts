@@ -29,8 +29,12 @@ const LOGIN_SELECT = `
   left join fp_staff s on s.uid = l.staff_uid`;
 
 /** Phone + PIN -> a fresh session token (replaces any earlier one), or null. */
-export async function distLogin(phone: string, pin: string): Promise<{ token: string; login: DistLogin } | null> {
-  const r = await one<{ id: number; pin_hash: string }>(`select id, pin_hash from dist_login where phone = $1 and active`, [phone]);
+export async function distLogin(phone: string, pin: string, kind?: DistLogin["kind"]): Promise<{ token: string; login: DistLogin } | null> {
+  // the distributor and sales-officer sign-ins are separate screens: each only opens its own kind of login
+  const r = await one<{ id: number; pin_hash: string }>(
+    `select id, pin_hash from dist_login where phone = $1 and active and ($2::text is null or kind = $2)`,
+    [phone, kind ?? null],
+  );
   if (!r || !pinMatches(pin, r.pin_hash)) return null;
   const token = randomBytes(32).toString("hex");
   await query(`update dist_login set token = $2 where id = $1`, [r.id, token]);
@@ -44,17 +48,24 @@ export async function distFromRequest(req: NextRequest): Promise<DistLogin | nul
   return one<DistLogin>(`${LOGIN_SELECT} where l.token = $1 and l.active`, [t]);
 }
 
-/** The distributors this login may order for: its own firm, or (salesman) the firms he is the sales contact of. */
+/** The distributors this login may order for: its own firm, or (sales officer) the firms they are the sales contact of; a sales officer with none mapped can book for any distributor. */
 export async function firmsFor(login: DistLogin): Promise<DistFirm[]> {
   if (login.kind === "distributor") {
     return query<DistFirm>(`select uid, name, firm_code as code, city from fp_firm where uid = $1 and active = 1`, [login.firmUid]);
   }
-  return query<DistFirm>(
+  const mapped = await query<DistFirm>(
     `select f.uid, f.name, f.firm_code as code, f.city
      from fp_firm f join fp_channel c on c.uid = f.channel_uid
      where f.sales_contact_uid = $1 and f.active = 1 and c.level <= 3
      order by f.name`,
     [login.staffUid],
+  );
+  if (mapped.length) return mapped;
+  return query<DistFirm>(
+    `select f.uid, f.name, f.firm_code as code, f.city
+     from fp_firm f join fp_channel c on c.uid = f.channel_uid
+     where f.active = 1 and c.level = 3
+     order by f.name`,
   );
 }
 
