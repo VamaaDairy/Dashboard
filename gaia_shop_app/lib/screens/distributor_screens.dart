@@ -36,9 +36,10 @@ class _DistFirmPickerState extends ConsumerState<DistFirmPicker> {
     if (d.loading) return const Center(child: CircularProgressIndicator());
     if (d.firms.isEmpty) {
       return Center(
+        // a failed request is not "no distributor": say what went wrong and offer a retry
         child: EmptyState(
-          icon: Icons.storefront_outlined,
-          title: 'No distributor linked',
+          icon: d.error != null ? Icons.wifi_off_rounded : Icons.storefront_outlined,
+          title: d.error != null ? 'Could not load' : 'No distributor linked',
           message: d.error ?? 'No distributor is linked to this login yet. Please contact Gaia.',
           action: 'Try again',
           onAction: store.start,
