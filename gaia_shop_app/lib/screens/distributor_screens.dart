@@ -112,37 +112,109 @@ class DistFirmBar extends ConsumerWidget {
 String _qty(double q) => q.toStringAsFixed(q == q.roundToDouble() ? 0 : 2);
 
 /// Status as one plain word, in sentence case ("PENDING" -> "Pending").
-String _status(String s) {
+String statusWord(String s) {
   final t = s.trim().replaceAll('_', ' ');
   return t.isEmpty ? 'Placed' : t[0].toUpperCase() + t.substring(1).toLowerCase();
 }
 
-/// Orders tab: the primary orders this login placed, newest first; tap one for the full order.
-class DistOrdersScreen extends ConsumerWidget {
+/// Puts an order's lines back in the cart at today's dealer price and opens the cart.
+void orderAgain(BuildContext context, WidgetRef ref, DistOrder order) {
+  final menu = ref.read(menuProvider);
+  final cart = ref.read(cartProvider.notifier);
+  var added = 0;
+  for (final l in order.lines) {
+    final p = menu.bySku(l.sku);
+    if (p == null) continue;
+    for (var n = 0; n < l.qty.round(); n++) {
+      cart.add(p);
+    }
+    added++;
+  }
+  if (added == 0) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('These items are not available right now.')));
+    return;
+  }
+  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CartScreen()));
+}
+
+/// Orders tab: the primary orders this login placed, newest first, with a filter per status
+/// (only the statuses that actually occur); tap one for the full order.
+class DistOrdersScreen extends ConsumerStatefulWidget {
   const DistOrdersScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DistOrdersScreen> createState() => _DistOrdersScreenState();
+}
+
+class _DistOrdersScreenState extends ConsumerState<DistOrdersScreen> {
+  String? _filter; // null = all
+
+  @override
+  Widget build(BuildContext context) {
     final d = ref.watch(distributorProvider);
+    final statuses = {for (final o in d.orders) statusWord(o.status)}.toList();
+    final pick = statuses.contains(_filter) ? _filter : null;
+    final orders = pick == null ? d.orders : d.orders.where((o) => statusWord(o.status) == pick).toList();
+    final now = DateTime.now();
+    final month = d.orders.where((o) => o.date.year == now.year && o.date.month == now.month).toList();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Orders'), automaticallyImplyLeading: false),
-      body: RefreshIndicator(
-        color: Brand.accent,
-        onRefresh: ref.read(distributorProvider.notifier).loadOrders,
-        child: d.orders.isEmpty
-            ? ListView(children: const [
-                SizedBox(height: 70),
-                EmptyState(icon: Icons.receipt_long_outlined, title: 'No orders yet', message: 'Orders you place show up here. Pull down to refresh.'),
-              ])
-            : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                itemCount: d.orders.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (_, i) => _DistOrderCard(order: d.orders[i]),
+      body: Column(children: [
+        if (d.orders.isNotEmpty) ...[
+          // this month, at a glance
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(children: [
+              Text('This month', style: const TextStyle(fontSize: 13.5, color: Brand.muted, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text('${month.length} order${month.length == 1 ? '' : 's'} · ${rupees(month.fold<double>(0, (a, o) => a + o.total))}',
+                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
+            ]),
+          ),
+          if (statuses.length > 1)
+            SizedBox(
+              height: 46,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 10),
+                children: [
+                  for (final (label, value) in [('All', null), for (final st in statuses) (st, st)])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(label),
+                        selected: pick == value,
+                        showCheckmark: false,
+                        labelStyle: TextStyle(fontWeight: FontWeight.w700, color: pick == value ? Colors.white : Brand.ink),
+                        onSelected: (_) => setState(() => _filter = value),
+                      ),
+                    ),
+                ],
               ),
-      ),
+            ),
+        ],
+        Expanded(
+          child: RefreshIndicator(
+            color: Brand.accent,
+            onRefresh: ref.read(distributorProvider.notifier).loadOrders,
+            child: orders.isEmpty
+                ? ListView(children: const [
+                    SizedBox(height: 70),
+                    EmptyState(icon: Icons.receipt_long_outlined, title: 'No orders yet', message: 'Orders you place show up here. Pull down to refresh.'),
+                  ])
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                    itemCount: orders.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (_, i) => _DistOrderCard(order: orders[i]),
+                  ),
+          ),
+        ),
+      ]),
     );
   }
+
 }
 
 class _DistOrderCard extends ConsumerWidget {
@@ -154,52 +226,66 @@ class _DistOrderCard extends ConsumerWidget {
     final o = order;
     final menu = ref.watch(menuProvider);
     void open() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DistOrderScreen(order: o)));
-    final pics = o.lines.take(3).toList();
+    final shown = o.lines.take(3).toList();
+    final units = o.lines.fold<double>(0, (a, l) => a + l.qty);
 
     return AppCard(
       onTap: open,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text(_status(o.status), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Brand.ink)),
+          Text(statusWord(o.status), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Brand.ink)),
           const Spacer(),
-          Text(orderDate(o.date), style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
+          Text(orderDate(o.date), style: const TextStyle(fontSize: 12.5, color: Brand.muted, fontWeight: FontWeight.w600)),
         ]),
         const SizedBox(height: 12),
-        Row(children: [
-          for (final (i, l) in pics.indexed)
-            Container(
-              margin: EdgeInsets.only(right: i == pics.length - 1 ? 0 : 6),
-              width: 48,
-              height: 48,
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(12)),
-              child: ProductImage(url: menu.bySku(l.sku)?.image, radius: 0, fit: BoxFit.contain),
-            ),
-          if (o.lines.length > 3)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: Brand.accentTint, borderRadius: BorderRadius.circular(12)),
-              child: Text('+${o.lines.length - 3}', style: const TextStyle(fontWeight: FontWeight.w800, color: Brand.accent)),
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(o.lines.map((l) => '${l.name} × ${_qty(l.qty)}').join(', '),
-                maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: Brand.muted, height: 1.35)),
+        // what was ordered: photo, name and quantity, in full colour
+        for (final l in shown)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(children: [
+              Container(
+                width: 40,
+                height: 40,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(10)),
+                child: ProductImage(url: menu.bySku(l.sku)?.image, radius: 0, fit: BoxFit.contain),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Brand.ink))),
+              const SizedBox(width: 8),
+              Text('× ${_qty(l.qty)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Brand.ink)),
+            ]),
           ),
-        ]),
-        const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
+        if (o.lines.length > shown.length)
+          Padding(
+            padding: const EdgeInsets.only(left: 52, bottom: 8),
+            child: Text('+ ${o.lines.length - shown.length} more item${o.lines.length - shown.length == 1 ? '' : 's'}',
+                style: const TextStyle(fontSize: 13, color: Brand.accent, fontWeight: FontWeight.w700)),
+          ),
+        const Divider(),
+        const SizedBox(height: 6),
         Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(rupees(o.total), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-              Text('#${o.orderId} · ${o.distributor}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.faint, fontWeight: FontWeight.w600)),
+              Text(rupees(o.total), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Brand.ink)),
+              Text('#${o.orderId} · ${o.lines.length} item${o.lines.length == 1 ? '' : 's'} · ${_qty(units)} units',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: Brand.muted, fontWeight: FontWeight.w600)),
             ]),
           ),
-          TextButton(onPressed: open, child: const Row(mainAxisSize: MainAxisSize.min, children: [Text('Details'), Icon(Icons.chevron_right_rounded, size: 18)])),
+          OutlinedButton(
+            onPressed: () => orderAgain(context, ref, o),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 38),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              shape: const StadiumBorder(),
+              side: const BorderSide(color: Brand.line),
+              foregroundColor: Brand.ink,
+            ),
+            child: const Text('Reorder', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 4),
+          IconButton(onPressed: open, icon: const Icon(Icons.chevron_right_rounded, color: Brand.muted), tooltip: 'Details'),
         ]),
       ]),
     );
@@ -213,31 +299,11 @@ class DistOrderScreen extends ConsumerWidget {
   const DistOrderScreen({super.key, required this.order});
   final DistOrder order;
 
-  /// Puts this order's lines back in the cart at today's dealer price and opens it.
-  void _orderAgain(BuildContext context, WidgetRef ref) {
-    final menu = ref.read(menuProvider);
-    final cart = ref.read(cartProvider.notifier);
-    var added = 0;
-    for (final l in order.lines) {
-      final p = menu.bySku(l.sku);
-      if (p == null) continue;
-      for (var n = 0; n < l.qty.round(); n++) {
-        cart.add(p);
-      }
-      added++;
-    }
-    if (added == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('These items are not available right now.')));
-      return;
-    }
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CartScreen()));
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final o = order;
     final menu = ref.watch(menuProvider);
-    final status = _status(o.status);
+    final status = statusWord(o.status);
     final totalQty = o.lines.fold<double>(0, (a, l) => a + l.qty);
 
     Widget band() => Container(height: 8, color: Brand.surface);
@@ -332,7 +398,7 @@ class DistOrderScreen extends ConsumerWidget {
       ),
       bottomNavigationBar: StickyBar(
         child: FilledButton.icon(
-          onPressed: () => _orderAgain(context, ref),
+          onPressed: () => orderAgain(context, ref, o),
           icon: const Icon(Icons.replay_rounded, size: 20),
           label: const Text('Order again'),
         ),
