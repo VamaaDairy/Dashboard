@@ -107,6 +107,12 @@ class Api {
     return Customer.fromJson(j['customer'] as Map<String, dynamic>);
   }
 
+  /// Changes the account's name and/or saved delivery address; returns the account as saved.
+  Future<Customer> customerUpdate(String token, Map<String, dynamic> changes) async {
+    final j = await _send(() => _http.patch(_u('/customer/me'), headers: _bearer(token), body: jsonEncode(changes)));
+    return Customer.fromJson(j['customer'] as Map<String, dynamic>);
+  }
+
   Future<List<Order>> customerOrders(String token) async {
     final j = await _send(() => _http.get(_u('/customer/orders'), headers: {'authorization': 'Bearer $token'}));
     return ((j['orders'] as List?) ?? []).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();

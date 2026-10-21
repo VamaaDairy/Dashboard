@@ -75,6 +75,44 @@ export async function customerLogin(phone: string, pin: string, name: string, mo
   return { ok: true, token, customer, created: false };
 }
 
+export type ProfileChange = { name?: string; address?: string; pincode?: string | null; lat?: number | null; lng?: number | null };
+
+/** Checks a profile change from the app; null fields are left as they are. */
+export function parseProfile(body: unknown): { ok: true; change: ProfileChange } | { ok: false; error: string } {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const change: ProfileChange = {};
+  if (b.name !== undefined) {
+    const name = typeof b.name === "string" ? b.name.trim().replace(/\s+/g, " ") : "";
+    if (name.length < 2 || name.length > 80) return { ok: false, error: "Enter your name (2 to 80 letters)." };
+    change.name = name;
+  }
+  if (b.address !== undefined) {
+    const address = typeof b.address === "string" ? b.address.trim() : "";
+    if (address.length < 5 || address.length > 300) return { ok: false, error: "Enter a full delivery address." };
+    const pin = typeof b.pincode === "string" ? b.pincode.trim() : "";
+    if (pin && !/^\d{6}$/.test(pin)) return { ok: false, error: "Pincode must be 6 digits." };
+    const num = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : null);
+    Object.assign(change, { address, pincode: pin || null, lat: num(b.lat, -90, 90), lng: num(b.lng, -180, 180) });
+  }
+  if (change.name === undefined && change.address === undefined) return { ok: false, error: "Nothing to change." };
+  return { ok: true, change };
+}
+
+/** Saves the customer's name and/or delivery address. */
+export async function updateProfile(id: number, ch: ProfileChange): Promise<Customer> {
+  const c = await one<Customer>(
+    `update shop_customer set
+       name = coalesce($2, name),
+       address = case when $3::boolean then $4 else address end,
+       pincode = case when $3::boolean then $5 else pincode end,
+       lat = case when $3::boolean then $6 else lat end,
+       lng = case when $3::boolean then $7 else lng end
+     where id = $1 returning ${COLS}`,
+    [id, ch.name ?? null, ch.address !== undefined, ch.address ?? null, ch.pincode ?? null, ch.lat ?? null, ch.lng ?? null],
+  );
+  return c!;
+}
+
 export async function customerFromRequest(req: NextRequest): Promise<Customer | null> {
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;

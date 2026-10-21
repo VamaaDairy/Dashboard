@@ -75,6 +75,30 @@ class AccountStore extends Notifier<Account> {
     await refresh();
   }
 
+  /// Changes the name on the account. Throws [ApiException] when the server says no.
+  Future<void> rename(String name) async {
+    final t = _token;
+    if (t == null) throw ApiException('Please sign in again.');
+    final c = await _api.customerUpdate(t, {'name': name});
+    final customer = Customer(name: c.name, phone: state.customer.phone, address: state.customer.address, pincode: state.customer.pincode, lat: state.customer.lat, lng: state.customer.lng);
+    await _remember(customer);
+    state = state.copyWith(customer: customer);
+  }
+
+  /// Saves the delivery address on this phone (it pre-fills checkout) and on the account.
+  /// The account copy also updates with the next order, so a failed save there is not fatal.
+  Future<void> setAddress({required String address, String pincode = '', double? lat, double? lng}) async {
+    final was = state.customer;
+    final customer = Customer(name: was.name, phone: was.phone, address: address, pincode: pincode, lat: lat, lng: lng);
+    await _remember(customer);
+    state = state.copyWith(customer: customer);
+    final t = _token;
+    if (t == null) return;
+    try {
+      await _api.customerUpdate(t, {'address': address, 'pincode': pincode, 'lat': lat, 'lng': lng});
+    } catch (_) {}
+  }
+
   /// Signs out on this phone only; the customer's other phones stay signed in.
   Future<void> signOut() async {
     final t = _token;
