@@ -58,19 +58,27 @@ class DistData {
 
 final distributorProvider = NotifierProvider<DistributorStore, DistData>(DistributorStore.new);
 
+/// The distributor's menu, built once per price list: it only changes when the dealer prices or the
+/// items do - not on every loading flag, order refresh or distributor-list update - so the home
+/// screen and the cart stay put. An empty list while a distributor's prices load is "nothing yet".
+final _distCatalogProvider = Provider<Catalog?>((ref) {
+  final products = ref.watch(distributorProvider.select((d) => d.products));
+  final waiting = ref.watch(distributorProvider.select((d) => d.products.isEmpty && (d.firm == null || d.loading)));
+  final categories = ref.watch(catalogProvider.select((c) => c.categories));
+  if (waiting) return null;
+  return Catalog(rule: const DeliveryRule(), categories: categories, products: products);
+});
+
 /// What the menu, product pages and cart show: the retail menu normally, or - for a signed-in
 /// distributor with a distributor chosen - the same menu at dealer prices (and no delivery fee).
 final menuProvider = Provider<CatalogData>((ref) {
-  final retail = ref.watch(catalogProvider);
-  final d = ref.watch(distributorProvider);
-  if (!d.signedIn) return retail;
-  return CatalogData(
-    catalog: Catalog(rule: const DeliveryRule(), categories: retail.categories, products: d.products),
-    banners: retail.banners,
-    loading: d.loading,
-    error: d.error,
-    fetchedAt: DateTime.now(),
-  );
+  if (!ref.watch(distributorProvider.select((d) => d.signedIn))) return ref.watch(catalogProvider);
+  final catalog = ref.watch(_distCatalogProvider);
+  final banners = ref.watch(catalogProvider.select((c) => c.banners));
+  // loading / error only matter while there is no menu to show
+  final loading = ref.watch(distributorProvider.select((d) => d.products.isEmpty && d.loading));
+  final error = ref.watch(distributorProvider.select((d) => d.products.isEmpty ? d.error : null));
+  return CatalogData(catalog: catalog, banners: banners, loading: loading, error: error);
 });
 
 class DistributorStore extends Notifier<DistData> {
@@ -80,6 +88,8 @@ class DistributorStore extends Notifier<DistData> {
 
   Api get _api => ref.read(apiProvider);
   TokenVault get _vault => ref.read(vaultProvider);
+  DateTime? _pricedAt;
+  bool _pricing = false;
   String? get _token => _vault.read(TokenVault.distributor);
 
   @override
@@ -137,17 +147,48 @@ class DistributorStore extends Notifier<DistData> {
   Future<void> selectFirm(DistFirm? f) async {
     final t = _token;
     ref.read(cartProvider.notifier).clear();
-    state = state.copyWith(firm: f, products: const [], error: null);
+    // one change, so the menu goes straight to "loading" - never a flash of an empty menu
+    state = state.copyWith(firm: f, products: const [], error: null, loading: f != null && t != null);
     if (f == null || t == null) return;
-    state = state.copyWith(loading: true);
     try {
       final products = await _api.distProducts(t, f.uid);
+      _pricedAt = DateTime.now();
       state = state.copyWith(products: products, loading: false);
     } on ApiException catch (e) {
       await _failed(e);
     } catch (_) {
       state = state.copyWith(loading: false, error: 'Something went wrong. Please try again.');
     }
+  }
+
+  /// Fetches the chosen distributor's dealer prices again, in the background: the menu on screen
+  /// stays as it is and only changes if a price or an item actually changed. Used when the app is
+  /// opened again; [minGap] stops back-to-back calls (a dialog closing also "reopens" the app).
+  Future<void> refreshPrices({Duration minGap = const Duration(seconds: 30)}) async {
+    final t = _token, f = state.firm;
+    if (t == null || f == null || _pricing || state.loading) return;
+    if (_pricedAt != null && DateTime.now().difference(_pricedAt!) < minGap) return;
+    _pricing = true;
+    try {
+      final products = await _api.distProducts(t, f.uid);
+      _pricedAt = DateTime.now();
+      if (state.firm?.uid == f.uid && !_samePrices(state.products, products)) state = state.copyWith(products: products);
+    } on ApiException catch (e) {
+      if (e.message.contains('sign in')) await logout();
+    } catch (_) {
+      // no signal: keep the prices already on screen
+    } finally {
+      _pricing = false;
+    }
+  }
+
+  static bool _samePrices(List<Product> a, List<Product> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i], y = b[i];
+      if (x.sku != y.sku || x.price != y.price || x.mrp != y.mrp || x.name != y.name || x.image != y.image || x.size != y.size) return false;
+    }
+    return true;
   }
 
   /// Places the cart as a primary order; returns its number, or null with [DistData.error] set.

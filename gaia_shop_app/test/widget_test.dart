@@ -8,6 +8,7 @@ import 'package:gaia_shop/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gaia_shop/store/cart.dart';
 import 'package:gaia_shop/store/core.dart';
+import 'package:gaia_shop/store/distributor.dart';
 import 'package:gaia_shop/theme.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -225,6 +226,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Could not reach the server'), findsOneWidget);
       expect(find.text('Try again'), findsOneWidget);
+    });
+  });
+
+  group('distributor menu', () {
+    test('stays the same menu until a dealer price changes', () async {
+      SharedPreferences.setMockInitialValues({'gaia_dist_kind_v1': 'distributor', 'gaia_dist_name_v1': 'Bhog', 'gaia_dist_phone_v1': '9827012345'});
+      final prefs = await SharedPreferences.getInstance();
+      var milk = 26;
+      final c = ProviderContainer(overrides: [
+        prefsProvider.overrideWithValue(prefs),
+        vaultProvider.overrideWithValue(TokenVault.memory({TokenVault.distributor: 'd' * 64})),
+        apiProvider.overrideWithValue(Api(
+            client: MockClient((r) async {
+              if (r.url.path.endsWith('/me')) return http.Response(jsonEncode({'distributors': [{'uid': 'f1', 'name': 'Bhog', 'code': 'DB1'}]}), 200);
+              if (r.url.path.endsWith('/orders')) return http.Response(jsonEncode({'orders': []}), 200);
+              return http.Response(jsonEncode({'products': [
+                {'sku': '1003', 'name': 'Milk', 'category': 'Milk', 'subCategory': 'Milk', 'mrp': 30, 'price': milk},
+              ]}), 200);
+            }),
+            base: 'http://test')),
+      ]);
+      addTearDown(c.dispose);
+      c.listen(menuProvider, (_, __) {});
+      final store = c.read(distributorProvider.notifier);
+      await store.start(); // one distributor: chosen and priced straight away
+      final first = c.read(menuProvider).catalog;
+      expect(first!.products.single.price, 26);
+
+      await store.loadOrders(); // unrelated changes leave the menu alone
+      await store.refreshPrices(minGap: Duration.zero); // same prices
+      expect(identical(c.read(menuProvider).catalog, first), true);
+
+      milk = 27; // the dealer price changes
+      await store.refreshPrices(minGap: Duration.zero);
+      expect(identical(c.read(menuProvider).catalog, first), false);
+      expect(c.read(menuProvider).catalog!.products.single.price, 27);
     });
   });
 }

@@ -53,13 +53,26 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     super.dispose();
   }
 
-  /// Back in the app after a while: refresh the menu if it has gone stale (prices, stock).
+  /// Back in the app: refresh the menu if it has gone stale (prices, stock); a distributor gets
+  /// today's dealer prices, quietly - the menu only changes if a price did.
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s == AppLifecycleState.resumed) _load();
+    if (s != AppLifecycleState.resumed) return;
+    if (ref.read(distributorProvider).signedIn) {
+      ref.read(distributorProvider.notifier).refreshPrices();
+    } else {
+      _load();
+    }
   }
 
   Future<void> _load({bool force = false}) => ref.read(catalogProvider.notifier).load(force: force);
+
+  /// Pull to refresh / Try again on a distributor's menu: today's dealer prices.
+  Future<void> _reloadPrices() {
+    final d = ref.read(distributorProvider), s = ref.read(distributorProvider.notifier);
+    if (d.firm != null && d.products.isEmpty) return s.selectFirm(d.firm);
+    return s.refreshPrices(minGap: Duration.zero);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +91,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     return Scaffold(
       // distributors / sales officers get no Calendar (subscriptions are for home delivery)
       body: IndexedStack(index: _tab, children: [
-        MenuScreen(onRetry: () => _load(force: true)),
+        MenuScreen(onRetry: () => partner ? _reloadPrices() : _load(force: true)),
         if (!partner) const MyCalendarScreen(),
         partner ? const DistOrdersScreen() : const OrdersScreen(),
         partner ? const PartnerAccountScreen() : const AccountScreen(),
