@@ -360,14 +360,83 @@ class DistProfile {
 
 /// A distributor an order can be placed for.
 class DistFirm {
-  const DistFirm({required this.uid, required this.name, required this.code, this.city});
+  const DistFirm({
+    required this.uid,
+    required this.name,
+    required this.code,
+    this.city,
+    this.type,
+    this.contactPerson,
+    this.phone,
+    this.email,
+    this.address,
+    this.district,
+    this.state,
+    this.pincode,
+    this.gstin,
+    this.pan,
+    this.licenceNo,
+    this.creditLimit,
+    this.salesOfficer,
+    this.salesOfficerPhone,
+  });
   final String uid;
   final String name;
   final String code;
   final String? city;
+  final String? type;
+  final String? contactPerson;
+  final String? phone;
+  final String? email;
+  final String? address;
+  final String? district;
+  final String? state;
+  final String? pincode;
+  final String? gstin;
+  final String? pan;
+  final String? licenceNo;
+  final double? creditLimit;
+  final String? salesOfficer;
+  final String? salesOfficerPhone;
 
-  factory DistFirm.fromJson(Map<String, dynamic> j) =>
-      DistFirm(uid: j['uid'] as String, name: j['name'] as String, code: (j['code'] as String?) ?? '', city: j['city'] as String?);
+  /// Address, city, district, state and pincode on one line, without the gaps.
+  String get fullAddress {
+    final parts = <String>[];
+    for (final p in [address, city, district, state]) {
+      final t = p?.trim() ?? '';
+      if (t.isNotEmpty && !parts.any((x) => x.toLowerCase() == t.toLowerCase())) parts.add(t);
+    }
+    final pin = pincode?.trim() ?? '';
+    return [parts.join(', '), if (pin.isNotEmpty) pin].where((x) => x.isNotEmpty).join(' - ');
+  }
+
+  factory DistFirm.fromJson(Map<String, dynamic> j) {
+    String? s(String k) {
+      final v = (j[k] as String?)?.trim();
+      return v == null || v.isEmpty ? null : v;
+    }
+
+    return DistFirm(
+      uid: j['uid'] as String,
+      name: j['name'] as String,
+      code: (j['code'] as String?) ?? '',
+      city: s('city'),
+      type: s('type'),
+      contactPerson: s('contactPerson'),
+      phone: s('phone'),
+      email: s('email'),
+      address: s('address'),
+      district: s('district'),
+      state: s('state'),
+      pincode: s('pincode'),
+      gstin: s('gstin'),
+      pan: s('pan'),
+      licenceNo: s('licenceNo'),
+      creditLimit: (j['creditLimit'] as num?)?.toDouble(),
+      salesOfficer: s('salesOfficer'),
+      salesOfficerPhone: s('salesOfficerPhone'),
+    );
+  }
 }
 
 class DistOrderLine {

@@ -19,7 +19,36 @@ export interface DistLogin {
   phone: string;
 }
 
-export interface DistFirm { uid: string; name: string; code: string; city: string | null }
+export interface DistFirm {
+  uid: string;
+  name: string;
+  code: string;
+  city: string | null;
+  /** The rest of the distributor's profile, for the app's Account page. */
+  type: string | null;
+  contactPerson: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  district: string | null;
+  state: string | null;
+  pincode: string | null;
+  gstin: string | null;
+  pan: string | null;
+  licenceNo: string | null;
+  creditLimit: number | null;
+  salesOfficer: string | null;
+  salesOfficerPhone: string | null;
+}
+
+const FIRM_SELECT = `
+  select f.uid, f.name, f.firm_code as code, f.city, f.firm_type as type, f.contact_person as "contactPerson",
+         f.phone, f.email, nullif(concat_ws(', ', nullif(f.address, ''), nullif(f.place, '')), '') as address,
+         f.district, f.state_state as state, f.pincode, f.gstin, f.pan, f.license_no as "licenceNo",
+         f.credit_limit as "creditLimit",
+         nullif(trim(concat_ws(' ', so.first_name, so.last_name)), '') as "salesOfficer", so.phone as "salesOfficerPhone"
+  from fp_firm f
+  left join fp_staff so on so.uid = f.sales_contact_uid`;
 
 const LOGIN_SELECT = `
   select l.id, l.kind, l.firm_uid as "firmUid", l.staff_uid as "staffUid", l.phone,
@@ -51,19 +80,17 @@ export async function distFromRequest(req: NextRequest): Promise<DistLogin | nul
 /** The distributors this login may order for: its own firm, or (sales officer) the firms they are the sales contact of; a sales officer with none mapped can book for any distributor. */
 export async function firmsFor(login: DistLogin): Promise<DistFirm[]> {
   if (login.kind === "distributor") {
-    return query<DistFirm>(`select uid, name, firm_code as code, city from fp_firm where uid = $1 and active = 1`, [login.firmUid]);
+    return query<DistFirm>(`${FIRM_SELECT} where f.uid = $1 and f.active = 1`, [login.firmUid]);
   }
   const mapped = await query<DistFirm>(
-    `select f.uid, f.name, f.firm_code as code, f.city
-     from fp_firm f join fp_channel c on c.uid = f.channel_uid
+    `${FIRM_SELECT} join fp_channel c on c.uid = f.channel_uid
      where f.sales_contact_uid = $1 and f.active = 1 and c.level <= 3
      order by f.name`,
     [login.staffUid],
   );
   if (mapped.length) return mapped;
   return query<DistFirm>(
-    `select f.uid, f.name, f.firm_code as code, f.city
-     from fp_firm f join fp_channel c on c.uid = f.channel_uid
+    `${FIRM_SELECT} join fp_channel c on c.uid = f.channel_uid
      where f.active = 1 and c.level = 3
      order by f.name`,
   );
