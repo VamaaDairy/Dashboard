@@ -2,17 +2,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
 import '../models.dart';
+import 'cart.dart';
+import 'catalog.dart';
 import 'core.dart';
 
-/// The distributor side: a distributor (or a salesman booking for one) signs in, picks the
-/// distributor, fills quantities from the catalogue at dealer price and places a primary order.
+/// The distributor side: a distributor (or a sales officer booking for one) signs in and then uses
+/// the same app as everyone else - same menu, product pages and cart - with the distributor's
+/// dealer prices. Placing the cart creates a primary order instead of a delivery.
 class DistData {
   const DistData({
     this.profile,
     this.firms = const [],
     this.firm,
     this.products = const [],
-    this.qty = const {},
     this.orders = const [],
     this.loading = false,
     this.placing = false,
@@ -22,32 +24,21 @@ class DistData {
   final DistProfile? profile;
   final List<DistFirm> firms;
   final DistFirm? firm;
-  final List<Product> products;
 
-  /// sku -> quantity in the order being built.
-  final Map<String, int> qty;
+  /// The menu at [firm]'s dealer price.
+  final List<Product> products;
   final List<DistOrder> orders;
   final bool loading;
   final bool placing;
   final String? error;
 
   bool get signedIn => profile != null;
-  int get lines => qty.length;
-  int get units => qty.values.fold(0, (a, b) => a + b);
-  double get total {
-    var t = 0.0;
-    for (final p in products) {
-      t += p.price * (qty[p.sku] ?? 0);
-    }
-    return t;
-  }
 
   DistData copyWith({
     Object? profile = keep,
     List<DistFirm>? firms,
     Object? firm = keep,
     List<Product>? products,
-    Map<String, int>? qty,
     List<DistOrder>? orders,
     bool? loading,
     bool? placing,
@@ -58,7 +49,6 @@ class DistData {
         firms: firms ?? this.firms,
         firm: identical(firm, keep) ? this.firm : firm as DistFirm?,
         products: products ?? this.products,
-        qty: qty ?? this.qty,
         orders: orders ?? this.orders,
         loading: loading ?? this.loading,
         placing: placing ?? this.placing,
@@ -67,6 +57,21 @@ class DistData {
 }
 
 final distributorProvider = NotifierProvider<DistributorStore, DistData>(DistributorStore.new);
+
+/// What the menu, product pages and cart show: the retail menu normally, or - for a signed-in
+/// distributor with a distributor chosen - the same menu at dealer prices (and no delivery fee).
+final menuProvider = Provider<CatalogData>((ref) {
+  final retail = ref.watch(catalogProvider);
+  final d = ref.watch(distributorProvider);
+  if (!d.signedIn) return retail;
+  return CatalogData(
+    catalog: Catalog(rule: const DeliveryRule(), categories: retail.categories, products: d.products),
+    banners: retail.banners,
+    loading: d.loading,
+    error: d.error,
+    fetchedAt: DateTime.now(),
+  );
+});
 
 class DistributorStore extends Notifier<DistData> {
   static const _kindKey = 'gaia_dist_kind_v1';
@@ -91,6 +96,8 @@ class DistributorStore extends Notifier<DistData> {
     await prefs.setString(_kindKey, r.profile.kind);
     await prefs.setString(_nameKey, r.profile.name);
     await prefs.setString(_phoneKey, r.profile.phone);
+    // a retail cart is priced differently: start clean
+    ref.read(cartProvider.notifier).clear();
     state = DistData(profile: r.profile);
   }
 
@@ -100,6 +107,7 @@ class DistributorStore extends Notifier<DistData> {
     await prefs.remove(_kindKey);
     await prefs.remove(_nameKey);
     await prefs.remove(_phoneKey);
+    ref.read(cartProvider.notifier).clear();
     state = const DistData();
   }
 
@@ -125,10 +133,11 @@ class DistributorStore extends Notifier<DistData> {
     }
   }
 
-  /// Switching distributor starts a fresh order (prices are per distributor).
+  /// Switching distributor changes the prices, so it starts a fresh cart.
   Future<void> selectFirm(DistFirm? f) async {
     final t = _token;
-    state = state.copyWith(firm: f, products: const [], qty: const {}, error: null);
+    ref.read(cartProvider.notifier).clear();
+    state = state.copyWith(firm: f, products: const [], error: null);
     if (f == null || t == null) return;
     state = state.copyWith(loading: true);
     try {
@@ -141,24 +150,15 @@ class DistributorStore extends Notifier<DistData> {
     }
   }
 
-  void setQty(String sku, int n) {
-    final q = {...state.qty};
-    if (n <= 0) {
-      q.remove(sku);
-    } else {
-      q[sku] = n;
-    }
-    state = state.copyWith(qty: q);
-  }
-
-  /// Places the order; returns its number, or null with [DistData.error] set.
-  Future<int?> place({String? notes}) async {
+  /// Places the cart as a primary order; returns its number, or null with [DistData.error] set.
+  Future<int?> place(Map<String, int> qty, {String? notes}) async {
     final t = _token, f = state.firm;
-    if (t == null || f == null || state.qty.isEmpty || state.placing) return null;
+    if (t == null || f == null || qty.isEmpty || state.placing) return null;
     state = state.copyWith(placing: true, error: null);
     try {
-      final id = await _api.distPlaceOrder(t, firmUid: f.uid, qty: state.qty, notes: notes);
-      state = state.copyWith(placing: false, qty: const {});
+      final id = await _api.distPlaceOrder(t, firmUid: f.uid, qty: qty, notes: notes);
+      state = state.copyWith(placing: false);
+      ref.read(cartProvider.notifier).clear();
       await loadOrders();
       return id;
     } on ApiException catch (e) {

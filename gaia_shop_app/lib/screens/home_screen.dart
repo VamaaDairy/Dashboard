@@ -6,11 +6,13 @@ import '../models.dart';
 import '../store/account.dart';
 import '../store/cart.dart';
 import '../store/catalog.dart';
+import '../store/distributor.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
 import 'account_screen.dart';
 import 'cart_screen.dart';
+import 'distributor_screens.dart';
 import 'my_calendar_screen.dart';
 import 'orders_screen.dart';
 import 'product_screen.dart';
@@ -31,7 +33,18 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // the saved menu is already on screen; this only refreshes it if it is stale
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _startPartner();
+    });
+  }
+
+  /// A signed-in distributor / sales officer: load who they can order for (and their past orders).
+  void _startPartner() {
+    if (!mounted || !ref.read(distributorProvider).signedIn) return;
+    final s = ref.read(distributorProvider.notifier);
+    s.start();
+    s.loadOrders();
   }
 
   @override
@@ -51,18 +64,24 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     // whenever the menu changes, the cart follows: current prices, delivery rule, nothing that's gone
-    ref.listen(catalogProvider, (prev, next) {
+    ref.listen(distributorProvider.select((d) => d.signedIn), (prev, next) {
+      if (next) _startPartner();
+      setState(() => _tab = 0);
+    });
+    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
+    ref.listen(menuProvider, (prev, next) {
       if (identical(prev?.catalog, next.catalog) || next.catalog == null) return;
       final cart = ref.read(cartProvider.notifier);
       cart.setRule(next.rule);
       cart.syncWith(next.products);
     });
     return Scaffold(
+      // distributors / sales officers get no Calendar (subscriptions are for home delivery)
       body: IndexedStack(index: _tab, children: [
         MenuScreen(onRetry: () => _load(force: true)),
-        const MyCalendarScreen(),
-        const OrdersScreen(),
-        const AccountScreen(),
+        if (!partner) const MyCalendarScreen(),
+        partner ? const DistOrdersScreen() : const OrdersScreen(),
+        partner ? const PartnerAccountScreen() : const AccountScreen(),
       ]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -74,13 +93,15 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               selectedIndex: _tab,
               onDestinationSelected: (i) {
                 setState(() => _tab = i);
-                if (i == 2) ref.read(accountProvider.notifier).refresh();
+                if (i == (partner ? 1 : 2)) {
+                  partner ? ref.read(distributorProvider.notifier).loadOrders() : ref.read(accountProvider.notifier).refresh();
+                }
               },
-              destinations: const [
-                NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
-                NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendar'),
-                NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
-                NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Account'),
+              destinations: [
+                const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
+                if (!partner) const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendar'),
+                const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
+                const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Account'),
               ],
             ),
           ),
@@ -115,9 +136,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final catalog = ref.watch(catalogProvider);
+    final catalog = ref.watch(menuProvider);
+    final dist = ref.watch(distributorProvider);
     final count = ref.watch(cartProvider.select((c) => c.count));
-    final name = ref.watch(accountProvider.select((a) => a.signedIn ? a.customer.name.split(' ').first : ''));
+    final name = dist.signedIn
+        ? dist.profile!.name.split(' ').first
+        : ref.watch(accountProvider.select((a) => a.signedIn ? a.customer.name.split(' ').first : ''));
 
     return SafeArea(
       bottom: false,
@@ -138,7 +162,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(name.isEmpty ? _greeting : '$_greeting, $name', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    const Text('Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
+                    Text(dist.signedIn ? (dist.profile!.isSalesman ? 'Sales officer' : 'Distributor') : 'Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
                   ]),
                 ),
               ]),
@@ -162,7 +186,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 ),
               ],
             ),
-            ..._body(catalog),
+            if (dist.signedIn && dist.firm == null)
+              const SliverFillRemaining(hasScrollBody: false, child: DistFirmPicker())
+            else ...[
+              if (dist.signedIn) const SliverToBoxAdapter(child: DistFirmBar()),
+              ..._body(catalog),
+            ],
           ],
         ),
       ),
@@ -249,7 +278,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       if (!searching && catalog.banners.isNotEmpty)
         SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 16), child: BannerCarousel(banners: catalog.banners))),
       // subscriptions: the fortnight at a glance
-      if (!searching) const SliverToBoxAdapter(child: QuickCalendar()),
+      if (!searching && !ref.read(distributorProvider).signedIn) const SliverToBoxAdapter(child: QuickCalendar()),
       if (!searching && catalog.categories.length > 1) ...[
         const SliverToBoxAdapter(child: SectionHeader('Shop by category')),
         SliverToBoxAdapter(

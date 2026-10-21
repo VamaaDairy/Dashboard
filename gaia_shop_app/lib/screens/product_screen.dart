@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../product_info.dart';
 import '../store/cart.dart';
-import '../store/catalog.dart';
+import '../store/distributor.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cart_screen.dart';
@@ -23,7 +23,8 @@ class ProductScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = product;
     final info = infoFor(p);
-    final all = ref.watch(catalogProvider.select((c) => c.products));
+    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
+    final all = ref.watch(menuProvider.select((c) => c.products));
     final sameRange = [for (final o in all) if (o.sku != p.sku && o.category == p.category) o];
     // one or two from each other category, so the row shows the range rather than six ghees
     final seen = <String, int>{};
@@ -67,10 +68,11 @@ class ProductScreen extends ConsumerWidget {
                     children: [
                       if (p.size != null && p.size!.isNotEmpty) Text(p.size!, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
                       PriceTag(product: p, size: 20),
-                      const Text('Inclusive of all taxes', style: TextStyle(fontSize: 11, color: Brand.faint)),
+                      if (!partner) const Text('Inclusive of all taxes', style: TextStyle(fontSize: 11, color: Brand.faint)),
                     ],
                   ),
                 ),
+                if (!partner)
                 OutlinedButton(
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
                   style: OutlinedButton.styleFrom(
@@ -85,7 +87,7 @@ class ProductScreen extends ConsumerWidget {
                     Text('Subscribe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                   ]),
                 ),
-                const SizedBox(width: 10),
+                if (!partner) const SizedBox(width: 10),
                 AddButton(product: p, large: true, width: 150),
               ],
             ),

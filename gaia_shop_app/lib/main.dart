@@ -7,10 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'config.dart';
 import 'screens/home_screen.dart';
-import 'screens/distributor_home_screen.dart';
 import 'screens/rider_home_screen.dart';
 import 'store/core.dart';
-import 'store/distributor.dart';
 import 'store/rider.dart';
 import 'theme.dart';
 
@@ -72,8 +70,6 @@ class GaiaApp extends StatelessWidget {
         // a signed-in delivery partner opens straight on their deliveries
         home: Consumer(builder: (_, ref, __) {
           if (ref.watch(riderProvider.select((r) => r.signedIn))) return const RiderHomeScreen();
-          // a signed-in distributor / salesman opens straight on their order screen
-          if (ref.watch(distributorProvider.select((d) => d.signedIn))) return const DistributorHomeScreen();
           return const HomeShell();
         }),
       ),

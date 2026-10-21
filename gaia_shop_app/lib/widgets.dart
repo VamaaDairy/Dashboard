@@ -7,6 +7,7 @@ import 'models.dart';
 import 'screens/cart_screen.dart';
 import 'screens/subscribe_screen.dart';
 import 'store/cart.dart';
+import 'store/distributor.dart';
 import 'theme.dart';
 
 /// A product photo, or a soft placeholder when there isn't one (or it can't load).
@@ -128,7 +129,18 @@ class AddButton extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _step(Icons.remove, () => cart.setQty(product.sku, qty - 1), 'Remove one'),
-          Text('$qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: large ? 18 : 15)),
+          Flexible(
+            child: InkWell(
+              // distributors order in cases: tap the number to type it
+              onTap: ref.read(distributorProvider).signedIn
+                  ? () async {
+                      final n = await _askQty(context, product.name, qty);
+                      if (n != null) cart.setQty(product.sku, n);
+                    }
+                  : null,
+              child: Text('$qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: large ? 18 : 15)),
+            ),
+          ),
           _step(Icons.add, () => cart.add(product), 'Add one more'),
         ],
       ),
@@ -144,6 +156,21 @@ class AddButton extends ConsumerWidget {
           child: SizedBox(width: large ? 48 : 26, height: double.infinity, child: Icon(icon, color: Colors.white, size: large ? 22 : 16)),
         ),
       );
+}
+
+Future<int?> _askQty(BuildContext context, String name, int current) {
+  final c = TextEditingController(text: '$current');
+  return showDialog<int>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      content: TextField(controller: c, autofocus: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(c.text.trim()) ?? current), child: const Text('OK')),
+      ],
+    ),
+  );
 }
 
 /// Selling price, with the MRP struck through and the saving when there is one.
@@ -189,7 +216,7 @@ class OffBadge extends StatelessWidget {
 
 /// A compact product tile: photo with ADD on its corner, then name, size and price.
 /// Used in the menu grid and the "you may also like" rows.
-class ProductTile extends StatelessWidget {
+class ProductTile extends ConsumerWidget {
   const ProductTile({super.key, required this.product, required this.onOpen});
 
   /// The height a tile [width] wide needs: its photo plus room for size, two lines of name, price and Subscribe.
@@ -198,8 +225,9 @@ class ProductTile extends StatelessWidget {
   final VoidCallback onOpen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = product;
+    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
     return Material(
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Brand.line)),
@@ -244,9 +272,9 @@ class ProductTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   PriceTag(product: p),
-                  const SizedBox(height: 6),
+                  if (!partner) const SizedBox(height: 6),
                   // every product can be subscribed to, right from the list
-                  InkWell(
+                  if (!partner) InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
                     child: const Padding(
@@ -276,6 +304,7 @@ class CartBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
+    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
     if (cart.count == 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -297,7 +326,7 @@ class CartBar extends ConsumerWidget {
                     children: [
                       Text('${cart.count} ${cart.count == 1 ? 'ITEM' : 'ITEMS'}',
                           style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                      Text('${rupees(cart.subtotal)}  plus delivery',
+                      Text(partner ? rupees(cart.subtotal) : '${rupees(cart.subtotal)}  plus delivery',
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
                     ],
                   ),
@@ -320,6 +349,7 @@ class BillDetails extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
+    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
     Widget row(String l, Widget r) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l, style: const TextStyle(color: Brand.muted)), r]),
@@ -333,21 +363,22 @@ class BillDetails extends ConsumerWidget {
           const Text('Bill details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
           const SizedBox(height: 8),
           row('Item total', Text(rupees(cart.subtotal))),
-          row(
-            'Delivery fee',
-            cart.delivery == 0
-                ? const Text('FREE', style: TextStyle(color: Brand.veg, fontWeight: FontWeight.w700))
-                : Text(rupees(cart.delivery)),
-          ),
+          if (!partner)
+            row(
+              'Delivery fee',
+              cart.delivery == 0
+                  ? const Text('FREE', style: TextStyle(color: Brand.veg, fontWeight: FontWeight.w700))
+                  : Text(rupees(cart.delivery)),
+            ),
           const Divider(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('To pay', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              Text(rupees(cart.total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              Text(partner ? 'Order total' : 'To pay', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              Text(rupees(partner ? cart.subtotal : cart.total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             ],
           ),
-          if (cart.toFreeDelivery > 0)
+          if (!partner && cart.toFreeDelivery > 0)
             Container(
               margin: const EdgeInsets.only(top: 12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
 import 'screens/product_screen.dart';
-import 'store/catalog.dart';
+import 'store/distributor.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -108,7 +108,7 @@ class _Slide extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final b = banner;
-    final product = b.sku == null ? null : ref.watch(catalogProvider.select((c) => c.bySku(b.sku!)));
+    final product = b.sku == null ? null : ref.watch(menuProvider.select((c) => c.bySku(b.sku!)));
     void open() {
       if (product != null) Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: product)));
     }

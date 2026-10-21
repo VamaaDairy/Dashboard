@@ -49,7 +49,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       prefs = await SharedPreferences.getInstance();
     });
-    ProviderContainer box() => ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs)]);
+    ProviderContainer box() => ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs), vaultProvider.overrideWithValue(TokenVault.memory())]);
 
     test('adds, counts, totals and applies the delivery rule', () {
       final c = box();
@@ -76,7 +76,7 @@ void main() {
       expect(c.read(cartProvider).isEmpty, true);
       cart.add(_p('a', 10));
       cart.setQty('a', 999);
-      expect(c.read(cartProvider).qtyOf('a'), CartStore.maxPerItem);
+      expect(c.read(cartProvider).qtyOf('a'), 20);
     });
 
     test('survives closing the app', () {
@@ -185,7 +185,7 @@ void main() {
       // confirmation, and the cart is empty again
       expect(find.text('Order placed'), findsOneWidget);
       expect(find.text('GS-000042'), findsOneWidget);
-      expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs)]).read(cartProvider).isEmpty, true); // what is saved on the phone
+      expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs), vaultProvider.overrideWithValue(TokenVault.memory())]).read(cartProvider).isEmpty, true); // what is saved on the phone
     });
 
     testWidgets('a server error is shown, and the order is kept in the cart', (tester) async {
@@ -213,7 +213,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('no longer available'), findsOneWidget);
-      expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs)]).read(cartProvider).count, 1);
+      expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs), vaultProvider.overrideWithValue(TokenVault.memory())]).read(cartProvider).count, 1);
     });
 
     testWidgets('no connection shows a retry instead of a blank screen', (tester) async {
