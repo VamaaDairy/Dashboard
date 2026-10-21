@@ -41,13 +41,14 @@ class MapStore extends Notifier<MapInfo> {
       } else if (c.enabled && c.styleUrl != null) {
         style = await api.keyedOlaStyle(c.styleUrl!) ?? '';
       }
-      state = MapInfo(config: c, style: style);
+      if (ref.mounted) state = MapInfo(config: c, style: style);
       return;
     } catch (_) {
       // no signal / server hiccup: try again shortly
     }
+    if (!ref.mounted) return;
     state = const MapInfo();
     await Future<void>.delayed(const Duration(seconds: 8));
-    if (state.config == null) await load();
+    if (ref.mounted && state.config == null) await load();
   }
 }

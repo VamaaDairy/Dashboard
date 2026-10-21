@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -8,12 +9,14 @@ import '../api.dart';
 import '../gaia_map.dart';
 import '../models.dart';
 import '../store/account.dart';
+import '../store/cart.dart';
+import '../store/catalog.dart';
 import '../store/core.dart';
 import '../store/map.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
-import 'orders_screen.dart';
+import 'cart_screen.dart';
 
 const _steps = ['placed', 'confirmed', 'out_for_delivery', 'delivered'];
 
@@ -84,281 +87,250 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
     }
   }
 
+  /// Puts this order's items back in the cart (current prices) and opens it.
+  void _orderAgain() {
+    final menu = ref.read(catalogProvider);
+    final cart = ref.read(cartProvider.notifier);
+    var added = 0;
+    for (final it in _order.items) {
+      final p = menu.bySku(it.sku);
+      if (p == null) continue;
+      for (var n = 0; n < it.qty; n++) {
+        cart.add(p);
+      }
+      added++;
+    }
+    if (added == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('These items are not available right now.')));
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CartScreen()));
+  }
+
+  String _clock(DateTime d) {
+    final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    return '$h:${d.minute.toString().padLeft(2, '0')} ${d.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  String _day(DateTime d) {
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final now = DateTime.now();
+    if (d.year == now.year && d.month == now.month && d.day == now.day) return 'Today';
+    return '${d.day} ${m[d.month - 1]} ${d.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = _order;
     final cancelled = o.status == 'cancelled';
+    final delivered = o.status == 'delivered';
+    final out = o.status == 'out_for_delivery';
     final at = _steps.indexOf(o.status);
-    final (color, icon) = statusLook(o.status);
+    final r = o.rider;
+    final eta = _route?.eta ?? '';
+    final showMap = o.isOpen && o.status != 'placed' && o.hasPin;
+
+    // the one line that matters, big - like the food apps do it
+    final (String title, String sub) = switch (o.status) {
+      'placed' => (widget.justPlaced ? 'Order placed' : 'Order received', 'We will confirm it in a moment'),
+      'confirmed' => ('Order confirmed', r != null ? '${r.name} will bring it to you' : 'Being packed for delivery'),
+      'out_for_delivery' => (eta.isNotEmpty ? 'Arriving in $eta' : 'On the way', r != null ? '${r.name} is on the way to you' : 'Your order is on the way'),
+      'delivered' => ('Delivered', o.deliveredAt != null ? 'on ${_day(o.deliveredAt!)} at ${_clock(o.deliveredAt!)}' : 'Your order was delivered'),
+      _ => ('Order cancelled', 'This order will not be delivered'),
+    };
+
+    Widget band() => Container(height: 8, color: Brand.surface);
+    Widget section(String t) => Padding(padding: const EdgeInsets.fromLTRB(20, 20, 20, 8), child: Text(t, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)));
+    Widget line(String k, Widget v) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(width: 118, child: Text(k, style: const TextStyle(color: Brand.muted, fontSize: 14))),
+            Expanded(child: v),
+          ]),
+        );
+    const value = TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.4);
 
     return Scaffold(
-      backgroundColor: Brand.surface,
       appBar: AppBar(
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(o.orderNo),
-          Text(orderDate(o.createdAt), style: const TextStyle(fontSize: 12.5, color: Brand.muted, fontWeight: FontWeight.w600)),
-        ]),
+        title: Text('Order ${o.orderNo}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: RefreshIndicator(
         color: Brand.accent,
         onRefresh: _refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+          padding: EdgeInsets.zero,
           children: [
-            if (widget.justPlaced && !cancelled) ...[
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 92,
-                  height: 92,
-                  decoration: BoxDecoration(color: Brand.veg.withValues(alpha: 0.12), shape: BoxShape.circle),
-                  child: Center(
-                    child: Container(
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(color: Brand.veg, shape: BoxShape.circle),
-                      child: const Icon(Icons.check_rounded, size: 40, color: Colors.white),
-                    ),
-                  ),
-                ),
+            if (showMap)
+              GaiaMap(
+                height: 240,
+                radius: 0,
+                route: _route?.points ?? const [],
+                markers: [
+                  MapMarker.home(GeoPoint(o.lat!, o.lng!)),
+                  if (out && r != null && r.hasPosition) MapMarker.rider(GeoPoint(r.lat!, r.lng!)),
+                ],
               ),
-              const SizedBox(height: 14),
-              const Center(child: Text('Order placed!', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900))),
-              const SizedBox(height: 4),
-              Center(child: Text('Pay ${rupees(o.total)} in cash when it arrives', style: const TextStyle(color: Brand.muted, fontWeight: FontWeight.w600))),
-              const SizedBox(height: 22),
-            ],
-            if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(_error!, style: const TextStyle(color: Brand.danger))),
-            // where it is now
-            AppCard(
+            // status
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  IconTile(icon, color: color, size: 46),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(cancelled ? 'Order cancelled' : o.statusLabel, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: cancelled ? Brand.danger : Brand.ink)),
-                      Text(
-                        switch (o.status) {
-                          'placed' => 'We have your order and will confirm it shortly',
-                          'confirmed' => 'Being packed for delivery',
-                          'out_for_delivery' => 'Your delivery partner is on the way',
-                          'delivered' => 'Delivered. Enjoy!',
-                          _ => 'This order will not be delivered',
-                        },
-                        style: const TextStyle(color: Brand.muted, fontSize: 13),
+                Text(title, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.4, color: cancelled ? Brand.danger : Brand.ink)),
+                const SizedBox(height: 4),
+                Text(sub, style: const TextStyle(fontSize: 14.5, color: Brand.muted, fontWeight: FontWeight.w500)),
+                if (!cancelled && !delivered) ...[
+                  const SizedBox(height: 16),
+                  Row(children: [
+                    for (var i = 0; i < 4; i++) ...[
+                      Expanded(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          height: 4,
+                          decoration: BoxDecoration(color: i <= at ? Brand.veg : Brand.line, borderRadius: BorderRadius.circular(2)),
+                        ),
                       ),
-                    ]),
+                      if (i < 3) const SizedBox(width: 6),
+                    ],
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(
+                    const ['Order received', 'Confirmed and packing', 'Out for delivery', 'Delivered'][at < 0 ? 0 : at],
+                    style: const TextStyle(fontSize: 12.5, color: Brand.muted, fontWeight: FontWeight.w600),
                   ),
-                ]),
-                if (!cancelled) ...[
-                  const SizedBox(height: 18),
-                  _Progress(at: at),
                 ],
               ]),
             ),
-            ..._tracking(o),
-            const SizedBox(height: 12),
+            if (_error != null) Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), child: Text(_error!, style: const TextStyle(color: Brand.danger))),
+            // who is bringing it, and the code for the door
+            if (o.isOpen && (r != null || o.deliveryOtp != null)) ...[
+              const Divider(),
+              if (r != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+                  child: Row(children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: Brand.surface,
+                      child: Text(r.name.isEmpty ? '?' : r.name[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: Brand.ink)),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(r.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
+                        const Text('Delivery partner', style: TextStyle(color: Brand.muted, fontSize: 13)),
+                      ]),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _call(r.phone),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 14), shape: const StadiumBorder(), side: const BorderSide(color: Brand.line)),
+                      icon: const Icon(Icons.call_outlined, size: 18),
+                      label: const Text('Call', style: TextStyle(fontSize: 14)),
+                    ),
+                  ]),
+                ),
+              if (r != null && o.deliveryOtp != null) const Padding(padding: EdgeInsets.only(left: 20), child: Divider()),
+              if (o.deliveryOtp != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+                  child: Row(children: [
+                    const Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Delivery code', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                        SizedBox(height: 2),
+                        Text('Share it with the delivery partner when they arrive', style: TextStyle(color: Brand.muted, fontSize: 13)),
+                      ]),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(o.deliveryOtp!.split('').join(' '), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                  ]),
+                ),
+            ],
+            band(),
             // what's in it
-            AppCard(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${o.itemCount} ${o.itemCount == 1 ? 'item' : 'items'}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                const SizedBox(height: 6),
-                for (final i in o.items)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    child: Row(children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(12)),
-                        child: ProductImage(url: i.image, radius: 0, fit: BoxFit.contain),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(i.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          Text('${i.qty} × ${rupees(i.unitPrice)}', style: const TextStyle(color: Brand.muted, fontSize: 12.5)),
-                        ]),
-                      ),
-                      Text(rupees(i.lineTotal), style: const TextStyle(fontWeight: FontWeight.w700)),
+            section('Order summary'),
+            for (final i in o.items)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
+                child: Row(children: [
+                  SizedBox(width: 44, height: 44, child: ProductImage(url: i.image, radius: 10, fit: BoxFit.contain)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(i.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                      const SizedBox(height: 2),
+                      Text('${i.qty} × ${rupees(i.unitPrice)}', style: const TextStyle(color: Brand.muted, fontSize: 13)),
                     ]),
                   ),
-                const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider()),
-                _kv('Item total', rupees(o.subtotal)),
-                _kv('Delivery fee', o.deliveryFee == 0 ? 'FREE' : rupees(o.deliveryFee), good: o.deliveryFee == 0),
-                const SizedBox(height: 6),
-                _kv(o.paymentStatus == 'paid' ? 'Paid' : 'To pay in cash', rupees(o.total), bold: true),
-              ]),
+                  Text(rupees(i.lineTotal), style: const TextStyle(fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            const Padding(padding: EdgeInsets.fromLTRB(20, 10, 20, 6), child: Divider()),
+            _kv('Item total', rupees(o.subtotal)),
+            _kv('Delivery fee', o.deliveryFee == 0 ? 'FREE' : rupees(o.deliveryFee), good: o.deliveryFee == 0),
+            const Padding(padding: EdgeInsets.fromLTRB(20, 6, 20, 6), child: Divider()),
+            _kv('Grand total', rupees(o.total), bold: true),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 20),
+              child: Text(
+                o.paymentStatus == 'paid' ? 'Paid in cash' : (cancelled ? 'Nothing to pay' : 'Pay in cash on delivery'),
+                style: const TextStyle(color: Brand.muted, fontSize: 13),
+              ),
             ),
-            const SizedBox(height: 12),
-            // where it goes
-            AppCard(
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const IconTile(Icons.location_on_outlined),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Delivering to', style: TextStyle(fontSize: 12.5, color: Brand.muted, fontWeight: FontWeight.w600)),
-                    Text(o.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                    const SizedBox(height: 2),
-                    Text('${o.address}${o.pincode != null ? ' - ${o.pincode}' : ''}', style: const TextStyle(color: Brand.muted, height: 1.35)),
-                    Text(o.phone, style: const TextStyle(color: Brand.muted)),
-                    if (o.notes != null && o.notes!.trim().isNotEmpty)
-                      Padding(padding: const EdgeInsets.only(top: 6), child: Text('Note: ${o.notes}', style: const TextStyle(color: Brand.muted, fontStyle: FontStyle.italic))),
-                  ]),
+            band(),
+            // the facts
+            section('Order details'),
+            line(
+              'Order number',
+              Row(children: [
+                Text(o.orderNo, style: value),
+                const SizedBox(width: 6),
+                InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: o.orderNo));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order number copied')));
+                  },
+                  child: const Padding(padding: EdgeInsets.all(2), child: Icon(Icons.copy_rounded, size: 16, color: Brand.muted)),
                 ),
               ]),
             ),
+            line('Placed on', Text('${_day(o.createdAt)}, ${_clock(o.createdAt)}', style: value)),
+            line('Payment', const Text('Cash on delivery', style: value)),
+            line(
+              'Deliver to',
+              Text(
+                [o.name, '${o.address}${o.pincode != null ? ' - ${o.pincode}' : ''}', o.phone].join('\n'),
+                style: value,
+              ),
+            ),
+            if (o.notes != null && o.notes!.trim().isNotEmpty) line('Note', Text(o.notes!, style: value)),
+            const SizedBox(height: 28),
           ],
         ),
       ),
       bottomNavigationBar: widget.justPlaced
           ? StickyBar(child: FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Continue shopping')))
-          : null,
+          : (!o.isOpen
+              ? StickyBar(
+                  child: FilledButton.icon(
+                    onPressed: _orderAgain,
+                    icon: const Icon(Icons.replay_rounded, size: 20),
+                    label: const Text('Order again'),
+                  ),
+                )
+              : null),
     );
   }
 
-  /// The live part: map with the rider coming, who is bringing it, and the code to hand over.
-  List<Widget> _tracking(Order o) {
-    if (!o.isOpen || o.status == 'placed') return [];
-    final r = o.rider;
-    final out = o.status == 'out_for_delivery';
-    final markers = <MapMarker>[
-      if (o.hasPin) MapMarker.home(GeoPoint(o.lat!, o.lng!)),
-      if (out && r != null && r.hasPosition) MapMarker.rider(GeoPoint(r.lat!, r.lng!)),
-    ];
-    final eta = _route?.eta ?? '';
-    return [
-      const SizedBox(height: 12),
-      if (o.hasPin && markers.isNotEmpty)
-        ClipRRect(
-          borderRadius: BorderRadius.circular(Brand.radius),
-          child: Stack(children: [
-            GaiaMap(markers: markers, route: _route?.points ?? const [], height: 300, radius: 0),
-            if (out && eta.isNotEmpty)
-              Positioned(
-                left: 12,
-                top: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: Brand.lift),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.schedule_rounded, size: 18, color: Brand.veg),
-                    const SizedBox(width: 6),
-                    Text(eta, style: const TextStyle(fontWeight: FontWeight.w900, color: Brand.veg)),
-                    if (_route!.distance.isNotEmpty) Text('  ·  ${_route!.distance}', style: const TextStyle(color: Brand.muted, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-          ]),
-        ),
-      const SizedBox(height: 12),
-      AppCard(
-        padding: const EdgeInsets.all(14),
-        child: r != null
-            ? Row(children: [
-                const CircleAvatar(radius: 24, backgroundColor: Brand.accentTint, child: Icon(Icons.two_wheeler_rounded, color: Brand.accent)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(r.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
-                    Text(out ? 'Your delivery partner' : 'Will deliver your order', style: const TextStyle(color: Brand.muted, fontSize: 13)),
-                  ]),
-                ),
-                Material(
-                  color: Brand.veg,
-                  shape: const CircleBorder(),
-                  child: IconButton(onPressed: () => _call(r.phone), icon: const Icon(Icons.call_rounded, color: Colors.white), tooltip: 'Call ${r.name}'),
-                ),
-              ])
-            : const Row(children: [
-                SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
-                SizedBox(width: 14),
-                Expanded(child: Text('Assigning a delivery partner…', style: TextStyle(fontWeight: FontWeight.w700))),
-              ]),
-      ),
-      if (o.deliveryOtp != null) ...[
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Brand.accent, Brand.accentDark], begin: Alignment.topLeft, end: Alignment.bottomRight),
-            borderRadius: BorderRadius.circular(Brand.radius),
-          ),
-          child: Row(children: [
-            const Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Delivery code', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5, color: Colors.white)),
-                SizedBox(height: 2),
-                Text('Share it with the delivery partner at your door', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
-              ]),
-            ),
-            const SizedBox(width: 10),
-            for (final ch in o.deliveryOtp!.split(''))
-              Container(
-                margin: const EdgeInsets.only(left: 5),
-                width: 34,
-                height: 42,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                child: Text(ch, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Brand.accent)),
-              ),
-          ]),
-        ),
-      ],
-    ];
-  }
-
   Widget _kv(String k, String v, {bool bold = false, bool good = false}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(k, style: TextStyle(color: bold ? Brand.ink : Brand.muted, fontWeight: bold ? FontWeight.w800 : FontWeight.w500, fontSize: bold ? 16.5 : 14)),
-            Text(v, style: TextStyle(fontWeight: bold ? FontWeight.w900 : FontWeight.w600, fontSize: bold ? 17 : 14, color: good ? Brand.veg : Brand.ink)),
+            Text(k, style: TextStyle(color: bold ? Brand.ink : Brand.muted, fontWeight: bold ? FontWeight.w800 : FontWeight.w500, fontSize: bold ? 16 : 14)),
+            Text(v, style: TextStyle(fontWeight: bold ? FontWeight.w900 : FontWeight.w600, fontSize: bold ? 16.5 : 14, color: good ? Brand.veg : Brand.ink)),
           ],
         ),
       );
-}
-
-/// Placed -> Confirmed -> On the way -> Delivered as dots on a line.
-class _Progress extends StatelessWidget {
-  const _Progress({required this.at});
-  final int at;
-
-  @override
-  Widget build(BuildContext context) {
-    const labels = ['Placed', 'Confirmed', 'On the way', 'Delivered'];
-    return Column(children: [
-      Row(children: [
-        for (var i = 0; i < 4; i++) ...[
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: i <= at ? Brand.veg : Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: i <= at ? Brand.veg : Brand.line, width: 2),
-            ),
-            child: i <= at ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null,
-          ),
-          if (i < 3) Expanded(child: Container(height: 3, margin: const EdgeInsets.symmetric(horizontal: 4), decoration: BoxDecoration(color: i < at ? Brand.veg : Brand.line, borderRadius: BorderRadius.circular(2)))),
-        ],
-      ]),
-      const SizedBox(height: 8),
-      Row(children: [
-        for (var i = 0; i < 4; i++)
-          Expanded(
-            child: Text(
-              labels[i],
-              textAlign: i == 0 ? TextAlign.left : (i == 3 ? TextAlign.right : TextAlign.center),
-              style: TextStyle(fontSize: 11.5, fontWeight: i == at ? FontWeight.w800 : FontWeight.w600, color: i <= at ? Brand.ink : Brand.faint),
-            ),
-          ),
-      ]),
-    ]);
-  }
 }

@@ -183,7 +183,7 @@ void main() {
       expect(sentBody!['name'], 'Asha Verma');
 
       // confirmation, and the cart is empty again
-      expect(find.text('Order placed!'), findsOneWidget);
+      expect(find.text('Order placed'), findsOneWidget);
       expect(find.text('GS-000042'), findsOneWidget);
       expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs)]).read(cartProvider).isEmpty, true); // what is saved on the phone
     });

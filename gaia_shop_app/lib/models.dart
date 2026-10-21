@@ -142,6 +142,7 @@ class Order {
     required this.paymentMethod,
     required this.paymentStatus,
     required this.createdAt,
+    this.deliveredAt,
     required this.name,
     required this.phone,
     required this.address,
@@ -176,6 +177,9 @@ class Order {
   final String paymentMethod;
   final String paymentStatus;
   final DateTime createdAt;
+
+  /// When it was handed over (delivered orders only).
+  final DateTime? deliveredAt;
   final String name;
   final String phone;
   final String address;
@@ -196,6 +200,7 @@ class Order {
         paymentMethod: (j['paymentMethod'] as String?) ?? 'cod',
         paymentStatus: (j['paymentStatus'] as String?) ?? 'pending',
         createdAt: DateTime.parse(j['createdAt'] as String).toLocal(),
+        deliveredAt: j['deliveredAt'] == null ? null : DateTime.parse(j['deliveredAt'] as String).toLocal(),
         name: j['name'] as String,
         phone: j['phone'] as String,
         address: j['address'] as String,
