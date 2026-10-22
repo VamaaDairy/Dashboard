@@ -90,13 +90,13 @@ export function ElectricityDay({
         <DateBar date={date} today={today} basePath="/electricity" />
       </div>
 
-      <Section title={`Electricity · ${date}`} description="Enter the units (kWh) used today. The cost is units × the price per unit in force on that day.">
+      <Section title={`Electricity · ${date}`} description="Units are kVAh, worked out from the morning meter readings below (or entered by hand). The cost is units × the price per unit in force on that day.">
         <form className="space-y-4 p-4" onSubmit={(e) => { e.preventDefault(); s.run(() => saveElectricityDay(date, units), () => setDirty(false)); }}>
           <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_1fr]">
             <label>
-              <span className={label}>Units used today</span>
+              <span className={label}>Units used today (kVAh)</span>
               <input inputMode="decimal" value={units} autoFocus onFocus={(e) => e.target.select()}
-                onChange={(e) => { setUnits(e.target.value); setDirty(true); s.clear(); }} className={big} aria-label="Units used" />
+                onChange={(e) => { setUnits(e.target.value); setDirty(true); s.clear(); }} className={big} aria-label="Units used (kVAh)" />
             </label>
             <div className="grid grid-cols-3 gap-3">
               <Stat label="Price per unit" value={rate === null ? "—" : `₹${formatNumber(rate, 2)}`} note={inForce ? fromLabel(inForce.effective_from) : "No price set"} />
@@ -123,7 +123,7 @@ export function ElectricityDay({
             <table className="w-full whitespace-nowrap text-[13px]">
               <THead>
                 <Th align="left">Date</Th>
-                <Th>Units</Th>
+                <Th>Units (kVAh)</Th>
                 <Th>₹ / unit</Th>
                 <Th>Cost ₹</Th>
                 <Th>Milk L</Th>
@@ -371,7 +371,7 @@ function HeadCharts({ history, today, kind }: { history: HeadDay[]; today: strin
   const isE = kind === "electricity";
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title={isE ? "Units used, last 30 days" : "Labourers, last 30 days"} description="Darker = more. Hover a day for its cost.">
+      <Panel title={isE ? "Units (kVAh) used, last 30 days" : "Labourers, last 30 days"} description="Darker = more. Hover a day for its cost.">
         <CalendarHeatmap from={from} to={today} unit={isE ? "units" : "labourers"} emptyLabel="not entered"
           days={history.filter((d) => d.day >= from && d.qty).map((d) => ({
             day: d.day, value: Number(d.qty),
