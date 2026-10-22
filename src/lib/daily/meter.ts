@@ -1,8 +1,6 @@
 /** Electricity meter arithmetic - shared by the server action and the page. */
 
-/** The meter's reading difference is divided by this ... */
-export const METER_DIVISOR = 10;
-/** ... then multiplied by this (the feeder multiplier) to get units. */
+/** The difference between two morning readings is multiplied by this (the feeder multiplier) to get units. */
 export const METER_MULTIPLIER = 600;
 
 export interface MeterReading {
@@ -17,12 +15,12 @@ export interface MeterReading {
 /** A reading with what it works out to: the use from this morning to the next. */
 export interface MeterRow extends MeterReading {
   nextKwh: number | null;     // the next morning's reading
+  nextKvah: number | null;
+  billedUnits: number | null; // the day's kVAh (kWh if no kVAh reading) - what is costed
   kwhDiff: number | null;     // next reading - this reading
-  kwhScaled: number | null;   // diff / 10
-  units: number | null;       // scaled x 600 = the day's kWh
+  units: number | null;       // diff x 600 = the day's kWh
   kvahDiff: number | null;
-  kvahScaled: number | null;
-  kvahUnits: number | null;   // scaled x 600 = the day's kVAh
+  kvahUnits: number | null;   // diff x 600 = the day's kVAh
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -35,7 +33,7 @@ function nextDay(day: string): string {
 
 /** Units for the day from two consecutive morning readings. */
 export function meterUnits(from: number, to: number): number {
-  return round2(((to - from) / METER_DIVISOR) * METER_MULTIPLIER);
+  return round2((to - from) * METER_MULTIPLIER);
 }
 
 /** Newest first, like the other day lists. A day's use needs the next day's reading. */
@@ -47,15 +45,17 @@ export function meterRows(readings: MeterReading[]): MeterRow[] {
       const n = byDay.get(nextDay(r.day));
       const kwhDiff = n ? round2(n.kwh - r.kwh) : null;
       const kvahDiff = n && n.kvah != null && r.kvah != null ? round2(n.kvah - r.kvah) : null;
+      const kvahUnits = n && n.kvah != null && r.kvah != null ? meterUnits(r.kvah, n.kvah) : null;
+      const units = n ? meterUnits(r.kwh, n.kwh) : null;
       return {
         ...r,
         nextKwh: n ? n.kwh : null,
+        nextKvah: n ? n.kvah : null,
         kwhDiff,
-        kwhScaled: kwhDiff === null ? null : round2(kwhDiff / METER_DIVISOR),
-        units: n ? meterUnits(r.kwh, n.kwh) : null,
+        units,
+        billedUnits: kvahUnits ?? units,
         kvahDiff,
-        kvahScaled: kvahDiff === null ? null : round2(kvahDiff / METER_DIVISOR),
-        kvahUnits: n && n.kvah != null && r.kvah != null ? meterUnits(r.kvah, n.kvah) : null,
+        kvahUnits,
       };
     });
 }

@@ -90,8 +90,8 @@ function optional(raw: string, label: string): number | null {
 }
 
 /**
- * Saves a morning meter reading, then re-works the units of the day before and
- * of this day from the readings either side of them.
+ * Saves a morning meter reading, then re-works every day's units from the readings
+ * either side of it and stores them with the readings.
  */
 export async function saveMeterReading(
   date: string,
@@ -108,15 +108,28 @@ export async function saveMeterReading(
          set kwh = excluded.kwh, kvarh = excluded.kvarh, kva = excluded.kva, kvah = excluded.kvah, pf = excluded.pf`,
       [scenario, date, kwh, optional(f.kvarh, "kVArh"), optional(f.kva, "kVA"), optional(f.kvah, "kVAh"), optional(f.pf, "PF")],
     );
-    const pairs = await query<{ day: string; kwh: number; next_kwh: number }>(
-      `select to_char(r.day, 'YYYY-MM-DD') as day, r.kwh, n.kwh as next_kwh
+    // Every pair is re-worked, so days saved under an older formula are corrected too.
+    const pairs = await query<{ day: string; kwh: number; next_kwh: number; kvah: number | null; next_kvah: number | null }>(
+      `select to_char(r.day, 'YYYY-MM-DD') as day, r.kwh, n.kwh as next_kwh, r.kvah, n.kvah as next_kvah
          from electricity_reading r
          join electricity_reading n on n.scenario_id = r.scenario_id and n.day = r.day + 1
-        where r.scenario_id = $1 and r.day between ($2::date - 1) and $2::date`,
-      [scenario, date],
+        where r.scenario_id = $1`,
+      [scenario],
     );
     for (const p of pairs) {
-      const units = meterUnits(Number(p.kwh), Number(p.next_kwh));
+      const kwhUnits = meterUnits(Number(p.kwh), Number(p.next_kwh));
+      const hasKvah = p.kvah !== null && p.next_kvah !== null;
+      // Billed on kVAh; a day with no kVAh reading falls back to its kWh units.
+      const units = hasKvah ? meterUnits(Number(p.kvah), Number(p.next_kvah)) : kwhUnits;
+      await query(
+        `update electricity_reading set kwh_diff = $3, kwh_units = $4, kvah_diff = $5, kvah_units = $6 where scenario_id = $1 and day = $2`,
+        [
+          scenario, p.day,
+          Math.round((Number(p.next_kwh) - Number(p.kwh)) * 100) / 100, kwhUnits,
+          hasKvah ? Math.round((Number(p.next_kvah) - Number(p.kvah)) * 100) / 100 : null,
+          hasKvah ? units : null,
+        ],
+      );
       const rate = await electricityRateOn(scenario, p.day);
       if (rate === null) throw new Error(`No electricity price for ${p.day} yet - set one first`);
       await writeHead(scenario, "electricity", p.day, { qty: units, rate, amount: Math.round(units * rate * 100) / 100 });
