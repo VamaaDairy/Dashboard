@@ -50,7 +50,7 @@ export default async function GrnPage({ searchParams }: PageProps<"/pod">) {
               {[...byDate].map(([d, items]) => (
                 <section key={d} className="p-4">
                   <h3 className="mb-3 text-[13px] font-semibold">
-                    {fmt(d)} <span className="font-normal text-tertiary-foreground">· {items.length} POD{items.length === 1 ? "" : "s"}</span>
+                    {fmt(d)} <span className="font-normal text-tertiary-foreground">Â· {items.length} POD{items.length === 1 ? "" : "s"}</span>
                   </h3>
                   <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                     {items.map((g) => (
@@ -61,7 +61,7 @@ export default async function GrnPage({ searchParams }: PageProps<"/pod">) {
                         </a>
                         <div className="flex items-center justify-between gap-2 px-3 py-2">
                           <div className="min-w-0">
-                            <div className="truncate text-[13px] font-semibold" title={g.customer_name ?? ""}>{g.customer_name || "—"}</div>
+                            <div className="truncate text-[13px] font-semibold" title={g.customer_name ?? ""}>{g.customer_name || "â€”"}</div>
                             <div className="num truncate text-[12px]">{g.invoice_no}</div>
                             <div className="truncate text-[11px] text-tertiary-foreground">{g.created_by ?? ""}</div>
                           </div>
