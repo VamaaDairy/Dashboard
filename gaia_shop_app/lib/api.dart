@@ -300,10 +300,16 @@ class Api {
   }
 
   /// The shop catalogue at [firmUid]'s dealer price.
-  Future<List<Product>> distProducts(String token, String firmUid) async {
-    final j = await _send(() => _http.get(_d('/products', {'firm': firmUid}), headers: _auth(token)));
-    return ((j['products'] as List?) ?? []).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+  /// With the [etag] of the list the phone already has, an unchanged list comes back as `raw == null`.
+  Future<({String? raw, String? etag})> distProducts(String token, String firmUid, {String? etag}) async {
+    http.Response? res;
+    final j = await _send(() async => res = await _http.get(_d('/products', {'firm': firmUid}), headers: {..._auth(token), if (etag != null) 'if-none-match': etag}));
+    if (res!.statusCode == 304) return (raw: null, etag: etag);
+    return (raw: jsonEncode(j), etag: res!.headers['etag']);
   }
+
+  static List<Product> parseProducts(String raw) =>
+      ((jsonDecode(raw) as Map<String, dynamic>)['products'] as List? ?? []).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
 
   Future<List<DistOrder>> distOrders(String token) async {
     final j = await _send(() => _http.get(_d('/orders'), headers: _auth(token)));
@@ -343,6 +349,7 @@ class Api {
     }
 
     if (r.statusCode >= 200 && r.statusCode < 300) return body;
+    if (r.statusCode == 304) return body; // only asked for with If-None-Match: the caller keeps what it has
 
     final fields = <String, String>{};
     final raw = body['fields'];

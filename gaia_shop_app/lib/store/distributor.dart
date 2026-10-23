@@ -123,6 +123,9 @@ class DistributorStore extends Notifier<DistData> {
     await prefs.remove(_kindKey);
     await prefs.remove(_nameKey);
     await prefs.remove(_phoneKey);
+    for (final k in prefs.getKeys().where((k) => k.startsWith('gaia_dist_products_'))) {
+      await prefs.remove(k); // dealer prices belong to the login that was just signed out
+    }
     ref.read(cartProvider.notifier).clear();
     state = const DistData();
   }
@@ -154,30 +157,62 @@ class DistributorStore extends Notifier<DistData> {
   Future<void> selectFirm(DistFirm? f) async {
     final t = _token;
     ref.read(cartProvider.notifier).clear();
-    // one change, so the menu goes straight to "loading" - never a flash of an empty menu
-    state = state.copyWith(firm: f, products: const [], error: null, loading: f != null && t != null);
+    // the last price list for this distributor is on the phone: show it at once and check it quietly;
+    // otherwise one change, so the menu goes straight to "loading" - never a flash of an empty menu
+    final saved = f == null ? null : _savedProducts(f.uid);
+    state = state.copyWith(firm: f, products: saved ?? const [], error: null, loading: f != null && t != null && saved == null);
     if (f == null || t == null) return;
     try {
-      final products = await _api.distProducts(t, f.uid);
+      final products = await _fetchProducts(t, f.uid);
       _pricedAt = DateTime.now();
-      state = state.copyWith(products: products, loading: false);
+      if (state.firm?.uid != f.uid) return;
+      state = state.copyWith(products: _samePrices(state.products, products) ? state.products : products, loading: false);
     } on ApiException catch (e) {
-      await _failed(e);
+      if (saved != null && !e.message.contains('sign in')) {
+        state = state.copyWith(loading: false); // keep the saved prices on screen
+      } else {
+        await _failed(e);
+      }
     } catch (_) {
-      state = state.copyWith(loading: false, error: 'Something went wrong. Please try again.');
+      state = state.copyWith(loading: false, error: saved == null ? 'Something went wrong. Please try again.' : null);
     }
+  }
+
+  String _productsKey(String firmUid) => 'gaia_dist_products_v1_$firmUid';
+  String _etagKey(String firmUid) => 'gaia_dist_products_etag_v1_$firmUid';
+
+  List<Product>? _savedProducts(String firmUid) {
+    final raw = ref.read(prefsProvider).getString(_productsKey(firmUid));
+    if (raw == null) return null;
+    try {
+      return Api.parseProducts(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The dealer price list: with the saved copy's ETag the server answers 304 (a few bytes) when
+  /// nothing changed, and the saved copy is used.
+  Future<List<Product>> _fetchProducts(String token, String firmUid) async {
+    final prefs = ref.read(prefsProvider);
+    final saved = _savedProducts(firmUid);
+    final r = await _api.distProducts(token, firmUid, etag: saved == null ? null : prefs.getString(_etagKey(firmUid)));
+    if (r.raw == null && saved != null) return saved;
+    await prefs.setString(_productsKey(firmUid), r.raw!);
+    if (r.etag != null) await prefs.setString(_etagKey(firmUid), r.etag!);
+    return Api.parseProducts(r.raw!);
   }
 
   /// Fetches the chosen distributor's dealer prices again, in the background: the menu on screen
   /// stays as it is and only changes if a price or an item actually changed. Used when the app is
   /// opened again; [minGap] stops back-to-back calls (a dialog closing also "reopens" the app).
-  Future<void> refreshPrices({Duration minGap = const Duration(seconds: 30)}) async {
+  Future<void> refreshPrices({Duration minGap = const Duration(minutes: 5)}) async {
     final t = _token, f = state.firm;
     if (t == null || f == null || _pricing || state.loading) return;
     if (_pricedAt != null && DateTime.now().difference(_pricedAt!) < minGap) return;
     _pricing = true;
     try {
-      final products = await _api.distProducts(t, f.uid);
+      final products = await _fetchProducts(t, f.uid);
       _pricedAt = DateTime.now();
       if (state.firm?.uid == f.uid && !_samePrices(state.products, products)) state = state.copyWith(products: products);
     } on ApiException catch (e) {
