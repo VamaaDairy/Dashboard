@@ -51,9 +51,14 @@ export default async function OutstandingsPage({ searchParams }: PageProps<"/out
           title="Outstandings"
           subtitle={`Sundry Debtors from the Tally balance sheet${level ? ` · ${level.company}` : ""}.`}
           actions={
+            <div className="flex flex-wrap gap-2">
+            <Link href="/outstandings/statements" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-[13px] hover:bg-muted">
+              <Mail className="h-4 w-4" /> Statements
+            </Link>
             <Link href={href(group, { refresh: "1" })} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-[13px] hover:bg-muted">
               <RefreshCw className="h-4 w-4" /> Refresh from Tally
             </Link>
+            </div>
           }
         />
 

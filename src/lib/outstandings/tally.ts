@@ -39,15 +39,15 @@ const num = (s: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-async function post(xml: string): Promise<string> {
+async function post(xml: string, timeoutMs = 120_000, attempts = 3): Promise<string> {
   let lastErr: unknown;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const res = await fetch(TALLY_URL, {
         method: "POST",
         headers: { "Content-Type": "text/xml" },
         body: xml,
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store",
       });
       if (!res.ok) throw new TallyError(`Tally responded with HTTP ${res.status}.`);
@@ -58,7 +58,7 @@ async function post(xml: string): Promise<string> {
     } catch (e) {
       lastErr = e;
       if (e instanceof TallyError && !/HTTP/.test(e.message)) throw e;
-      if (attempt < 3) await new Promise((r) => setTimeout(r, 700 * attempt));
+      if (attempt < attempts) await new Promise((r) => setTimeout(r, 700 * attempt));
     }
   }
   if (lastErr instanceof TallyError) throw lastErr;
@@ -157,4 +157,65 @@ export async function getTree(force = false): Promise<DebtorTree> {
     if (cache.__osTree?.tree === tree) delete cache.__osTree;
   });
   return tree;
+}
+
+// ------------------------------------------------------------------ ledger vouchers
+
+export interface LedgerVoucher {
+  date: string;
+  voucherType: string;
+  /** The other ledger in that line's entry (the report has no narration or voucher number). */
+  narration: string;
+  /** Raw Tally amount for this ledger's own line: negative is a debit. */
+  amount: number;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const toTallyDate = (d: Date) => `${d.getDate()}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+
+/**
+ * One request per calendar month in [from, to], each spanning the whole month: Tally's Ledger Vouchers
+ * report ignores SVFROMDATE and only honours SVTODATE, so the real start is applied afterwards in JS.
+ */
+function monthRanges(from: Date, to: Date) {
+  const out: { from: Date; to: Date }[] = [];
+  for (let c = new Date(from.getFullYear(), from.getMonth(), 1); c <= to; c = new Date(c.getFullYear(), c.getMonth() + 1, 1)) {
+    const end = new Date(c.getFullYear(), c.getMonth() + 1, 0);
+    out.push({ from: c, to: end < to ? end : to });
+  }
+  return out;
+}
+
+async function vouchersForMonth(ledger: string, from: Date, to: Date): Promise<LedgerVoucher[]> {
+  const xml = `<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Data</TYPE><ID>Ledger Vouchers</ID></HEADER><BODY><DESC><STATICVARIABLES>
+<SVCURRENTCOMPANY>${esc(TALLY_COMPANY)}</SVCURRENTCOMPANY><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+<SVFROMDATE TYPE="Date">${toTallyDate(from)}</SVFROMDATE><SVTODATE TYPE="Date">${toTallyDate(to)}</SVTODATE><LedgerName>${esc(ledger)}</LedgerName>
+</STATICVARIABLES></DESC></BODY></ENVELOPE>`;
+  // interactive path: fail fast rather than leave the page spinning when Tally's gateway is stuck
+  const body = await post(xml, 30_000, 2);
+  // a flat run of sibling tags per line: DSPVCHDATE, DSPVCHLEDACCOUNT, DSPVCHTYPE, DSPVCHDRAMT (already negative), DSPVCHCRAMT
+  const entries = body.match(/<DSPVCHDATE>[\s\S]*?(?=<DSPVCHDATE>|<\/ENVELOPE>)/g) ?? [];
+  return entries.map((c) => {
+    const dr = tag(c, "DSPVCHDRAMT");
+    return {
+      date: tag(c, "DSPVCHDATE"),
+      voucherType: tag(c, "DSPVCHTYPE"),
+      narration: tag(c, "DSPVCHLEDACCOUNT"),
+      amount: dr ? num(dr) : num(tag(c, "DSPVCHCRAMT")),
+    };
+  });
+}
+
+/** A party's ledger lines for an inclusive date range (calendar dates; time of day is ignored). */
+export async function fetchLedgerVouchers(ledger: string, from: Date, to: Date): Promise<LedgerVoucher[]> {
+  const all: LedgerVoucher[] = [];
+  // one at a time: Tally's gateway serves a single request at once
+  for (const r of monthRanges(from, to)) all.push(...(await vouchersForMonth(ledger, r.from, r.to)));
+  return all.filter((v) => {
+    const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{2})$/.exec(v.date.trim());   // the report prints a 2-digit year
+    const mi = m ? MONTHS.indexOf(m[2]) : -1;
+    if (!m || mi < 0) return true;   // unrecognised: keep rather than silently drop real data
+    const d = new Date(2000 + Number(m[3]), mi, Number(m[1]));
+    return d >= from && d <= to;
+  });
 }
