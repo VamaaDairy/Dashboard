@@ -7,7 +7,7 @@ import type { MasterDef } from "../../types";
  * Spec columns: 22; built: 21.
  * Left out (buttons, or no matching data column):
  *   - Scheme Description (spec maps it to the wrong field)
- * The portal filters by month and year; this uses From / To like the other reports. Item lines and the Select / Cancel actions are not built.
+ * The portal filters by month and year; this uses From / To like the other reports. Item lines are not built. Confirm / Cancel are on each pending row and show in the Gaia app at once (see lib/orders/primary.ts).
  */
 export const portalOrder: MasterDef = {
   slug: "portalOrder",
@@ -21,10 +21,13 @@ export const portalOrder: MasterDef = {
     left join fp_staff j4 on j4.uid = j1.sales_contact_uid
     left join fp_channel j5 on j5.uid = j1.channel_uid`,
   baseWhere: "j5.level <= 3",
+  rowKey: "m.uid",
+  orderDecisions: true,
   dateRange: { expr: "m.created_at", days: 30 },
   cols: [
     { key: "no", label: "No", expr: "row_number() over (order by m.booking_time desc)", kind: "num" },
     { key: "status", label: "Status", expr: "m.status" },
+    { key: "reason", label: "Cancel Reason", expr: "m.rejection_reason" },
     { key: "syncStatus", label: "Sync Status", expr: "m.sync_status", kind: "num" },
     { key: "syncRemark", label: "Sync Remark", expr: "m.sync_remark" },
     { key: "currentStatus", label: "Current Status", expr: "m.current_status" },

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,11 +29,17 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
+  Timer? _poll;
+  bool _inForeground = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // a distributor looking at the Orders tab sees the office confirm / cancel an order within seconds
+    _poll = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (_inForeground && _tab == 1 && ref.read(distributorProvider).signedIn) ref.read(distributorProvider.notifier).loadOrders();
+    });
     // the saved menu is already on screen; this only refreshes it if it is stale
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
@@ -49,6 +57,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   void dispose() {
+    _poll?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -57,9 +66,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   /// today's dealer prices, quietly - the menu only changes if a price did.
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
+    _inForeground = s == AppLifecycleState.resumed;
     if (s != AppLifecycleState.resumed) return;
     if (ref.read(distributorProvider).signedIn) {
       ref.read(distributorProvider.notifier).refreshPrices();
+      ref.read(distributorProvider.notifier).loadOrders();
     } else {
       _load();
     }

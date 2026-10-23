@@ -29,7 +29,7 @@ const select = (def: MasterDef) => def.cols.map((c) => `${c.expr} as "${c.key}"`
 /** The list's columns plus, for editable screens, the row id and on / off flag the row buttons need. */
 const selectWithIds = (def: MasterDef) => {
   const e = def.entity;
-  if (!e) return select(def);
+  if (!e) return def.rowKey ? `${select(def)}, ${def.rowKey}::text as "_id"` : select(def);
   return `${select(def)}, ${e.idExpr}::text as "_id"${e.onExpr ? `, (${e.onExpr}) as "_on"` : ""}`;
 };
 

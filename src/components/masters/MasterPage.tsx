@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { Download, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AppLoginActions, CreateMissingLogins } from "@/components/masters/AppLogin";
+import { OrderDecision } from "@/components/masters/OrderDecision";
+import { LiveRefresh } from "@/components/masters/LiveRefresh";
 import { RowActions } from "@/components/masters/RowActions";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
@@ -47,8 +49,10 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
   const req = readRequest(def, params);
   const data = await listMaster(def, req);
   // add / edit / deactivate / delete are shown only to people who may do them
-  const me = def.entity ? await userFromToken((await cookies()).get("session")?.value) : null;
+  const me = def.entity || def.orderDecisions ? await userFromToken((await cookies()).get("session")?.value) : null;
   const canEdit = !!def.entity && !!me && atLeast(levelFor(me, `fp.${slug}`), "edit");
+  // confirm / cancel on the order list
+  const canDecide = !!def.orderDecisions && !!me && atLeast(levelFor(me, `fp.${slug}`), "edit");
   const page = Math.min(req.page, data.pages);
 
   const keep = (over: Record<string, string | number | undefined>) => {
@@ -72,6 +76,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="w-full space-y-4">
+        {def.orderDecisions ? <LiveRefresh /> : null}
         <PageHeader
           icon={def.icon}
           title={def.title}
@@ -152,7 +157,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
                     {c.label}
                   </th>
                 ))}
-                {canEdit ? <th className="px-3 py-2" /> : null}
+                {canEdit || canDecide ? <th className="px-3 py-2" /> : null}
               </tr>
             </thead>
             <tbody>
@@ -168,6 +173,11 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
                       <Cell col={c} value={r[c.key]} />
                     </td>
                   ))}
+                  {canDecide ? (
+                    <td className="px-3 py-1.5">
+                      {String(r.status ?? "").toLowerCase() === "pending" ? <OrderDecision id={String(r._id)} orderId={String(r.orderId ?? "")} /> : null}
+                    </td>
+                  ) : null}
                   {canEdit ? (
                     <td className="px-3 py-1.5">
                       <div className="flex items-center justify-end">
@@ -186,7 +196,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
               ))}
               {data.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={def.cols.length + (canEdit ? 1 : 0)} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={def.cols.length + (canEdit || canDecide ? 1 : 0)} className="px-3 py-10 text-center text-muted-foreground">
                     {filtered ? "Nothing matches these filters." : def.emptyNote ?? (def.dateRange ? "Nothing in this period." : "No data yet - load the exports with npm run db:import:masters.")}
                   </td>
                 </tr>

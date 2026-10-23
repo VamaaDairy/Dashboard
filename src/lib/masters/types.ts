@@ -104,6 +104,10 @@ export interface MasterDef {
   /** shown instead of the generic message when the list is empty */
   emptyNote?: string;
   entity?: EntityDef;
+  /** SQL for the row id of screens that have no editable `entity` but still need row buttons */
+  rowKey?: string;
+  /** rows still pending can be confirmed or cancelled from the list (primary orders) */
+  orderDecisions?: boolean;
   /** the rows can sign in to the Gaia app: shows each row's app login and lets it be created, reset or switched off */
   appLogin?: "distributor" | "salesman";
 }

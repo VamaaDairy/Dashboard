@@ -394,6 +394,7 @@ class DistOrderScreen extends ConsumerWidget {
           line('Placed on', Text(orderDate(o.date), style: value)),
           line('Distributor', Text(o.distributor, style: value)),
           line('Status', Text(status, style: value)),
+          if (o.reason != null) line('Reason', Text(o.reason!, style: value)),
           const SizedBox(height: 28),
         ],
       ),

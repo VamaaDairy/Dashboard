@@ -256,7 +256,10 @@ class DistributorStore extends Notifier<DistData> {
     final t = _token;
     if (t == null) return;
     try {
-      state = state.copyWith(orders: await _api.distOrders(t));
+      final orders = await _api.distOrders(t);
+      // polled every few seconds on the Orders tab: only touch the screen when an order changed
+      String sig(List<DistOrder> l) => [for (final o in l) '${o.orderId}|${o.status}|${o.total}|${o.lines.length}'].join(';');
+      if (sig(orders) != sig(state.orders)) state = state.copyWith(orders: orders);
     } on ApiException catch (e) {
       await _failed(e);
     } catch (_) {}

@@ -487,7 +487,7 @@ class DistOrderLine {
 
 /// A primary order the signed-in distributor / salesman placed.
 class DistOrder {
-  const DistOrder({required this.orderId, required this.date, required this.distributor, required this.status, required this.qty, required this.total, required this.lines});
+  const DistOrder({required this.orderId, required this.date, required this.distributor, required this.status, required this.qty, required this.total, required this.lines, this.reason});
   final int orderId;
   final DateTime date;
   final String distributor;
@@ -496,6 +496,9 @@ class DistOrder {
   final double total;
   final List<DistOrderLine> lines;
 
+  /// Why the office cancelled the order.
+  final String? reason;
+
   factory DistOrder.fromJson(Map<String, dynamic> j) => DistOrder(
         orderId: (j['orderId'] as num).toInt(),
         date: DateTime.parse(j['date'] as String).toLocal(),
@@ -503,6 +506,7 @@ class DistOrder {
         status: (j['status'] as String?) ?? '',
         qty: _num(j['qty']),
         total: _num(j['total']),
+        reason: j['reason'] as String?,
         lines: [
           for (final l in (j['lines'] as List?) ?? const [])
             DistOrderLine(sku: (l['sku'] as String?) ?? '', name: (l['name'] as String?) ?? '', qty: _num(l['qty']), rate: _num(l['rate']), amount: _num(l['amount'])),

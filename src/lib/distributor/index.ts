@@ -241,13 +241,16 @@ export interface DistOrderRow {
   items: number;
   qty: number;
   total: number;
+  /** why the office cancelled it */
+  reason: string | null;
   lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number }>;
 }
 
 export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> {
   const rows = await query<Omit<DistOrderRow, "lines"> & { uid: string }>(
     `select b.uid, b.order_id as "orderId", b.booking_time as date, f.name as distributor, b.status,
-            b.total_item as items, b.total_quantity as qty, b.total_cost as total
+            b.total_item as items, b.total_quantity as qty, b.total_cost as total,
+            nullif(trim(b.rejection_reason), '') as reason
      from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid
      where ${login.kind === "distributor" ? "b.from_firm_uid = $1" : "b.staff_uid = $1"}
      order by b.booking_time desc limit 100`,
