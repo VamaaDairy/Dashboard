@@ -34,8 +34,8 @@ export async function decideOrder(uid: string, action: Decision, who: string, re
       action === "confirm" ? [uid, status] : [uid, status, why],
     );
     await c.query(
-      `insert into master_audit (actor, slug, record_id, action, summary, before, after) values ($1, 'portalOrder', $2, $3, $4, $5, $6)`,
-      [who, uid, action, `${status} order ${o.order_id}${why ? ` - ${why}` : ""}`, JSON.stringify({ status: o.status }), JSON.stringify({ status })],
+      `insert into master_audit (actor, slug, record_id, action, summary, before, after) values ($1, 'portalOrder', $2, 'update', $3, $4, $5)`,
+      [who, uid, `${status} order ${o.order_id}${why ? ` - ${why}` : ""}`, JSON.stringify({ status: o.status }), JSON.stringify({ status })],
     );
     return { ok: true, status };
   });
