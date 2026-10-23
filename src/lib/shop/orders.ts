@@ -1,6 +1,7 @@
 import "server-only";
 import { one, query, tx } from "@/lib/db";
 import { shop } from "@/lib/whatsapp/config";
+import { notifyOrderStatus, notifyRiderAssigned } from "@/lib/push";
 import { pricesFor } from "./catalog";
 import { deliveryFor, MAX_LINE_QTY, MAX_LINES, type DeliveryRule } from "./pricing";
 
@@ -48,7 +49,7 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
   const subtotal = Math.round(items.reduce((s, i) => s + i.total, 0) * 100) / 100;
   const fee = deliveryFor(subtotal, deliveryRule);
 
-  const key = await tx(async (c) => {
+  const placed = await tx(async (c) => {
     const o = await c.query(
       `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, customer_id)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id, access_key`,
@@ -64,9 +65,10 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
         [o.rows[0].id, i.sku, i.name, i.image, i.qty, i.unit, i.total],
       );
     }
-    return o.rows[0].access_key as string;
+    return { id: o.rows[0].id as number, key: o.rows[0].access_key as string };
   });
-  return { ok: true, accessKey: key };
+  await notifyOrderStatus(placed.id, "placed");
+  return { ok: true, accessKey: placed.key };
 }
 
 export interface ShopOrder {
@@ -116,23 +118,31 @@ export const listOrders = (status?: string, kind?: "regular" | "subscription") =
 };
 
 export async function setOrderStatus(id: number, status: string): Promise<boolean> {
-  const r = await query(
-    `update shop_order set status = $2, updated_at = now(),
-       payment_status = case when $2 = 'delivered' then 'paid' else payment_status end
-     where id = $1 returning id`,
+  const r = await query<{ changed: boolean }>(
+    `update shop_order o set status = $2, updated_at = now(),
+       payment_status = case when $2 = 'delivered' then 'paid' else o.payment_status end
+     from (select id, status as was from shop_order where id = $1) p
+     where o.id = p.id returning p.was is distinct from $2 as changed`,
     [id, status],
   );
+  if (r[0]?.changed) await notifyOrderStatus(id, status);
   return r.length > 0;
 }
 
 /** Staff give an order to a rider (or take it back with null). A placed order becomes confirmed. */
 export async function assignRider(orderId: number, riderId: number | null): Promise<boolean> {
-  const r = await query(
-    `update shop_order set rider_id = $2, assigned_at = case when $2::int is null then null else now() end,
-       status = case when $2::int is not null and status = 'placed' then 'confirmed' else status end, updated_at = now()
-     where id = $1 and status in ('placed', 'confirmed', 'out_for_delivery') returning id`,
+  const r = await query<{ status: string; was_status: string; was_rider: number | null }>(
+    `update shop_order o set rider_id = $2, assigned_at = case when $2::int is null then null else now() end,
+       status = case when $2::int is not null and o.status = 'placed' then 'confirmed' else o.status end, updated_at = now()
+     from (select id, status as was_status, rider_id as was_rider from shop_order where id = $1) p
+     where o.id = p.id and o.status in ('placed', 'confirmed', 'out_for_delivery')
+     returning o.status, p.was_status, p.was_rider`,
     [orderId, riderId],
   );
+  if (r[0]) {
+    if (riderId != null && r[0].was_rider !== riderId) await notifyRiderAssigned(orderId, riderId);
+    if (r[0].status !== r[0].was_status) await notifyOrderStatus(orderId, r[0].status);
+  }
   return r.length > 0;
 }
 
@@ -144,11 +154,13 @@ export const riderOrder = (riderId: number, id: number) =>
   one<ShopOrder>(`${WITH_ITEMS} where o.rider_id = $1 and o.id = $2`, [riderId, id]);
 
 export async function riderPickup(riderId: number, id: number): Promise<boolean> {
-  const r = await query(
-    `update shop_order set status = 'out_for_delivery', picked_up_at = coalesce(picked_up_at, now()), updated_at = now()
-     where id = $1 and rider_id = $2 and status in ('confirmed', 'out_for_delivery') returning id`,
+  const r = await query<{ changed: boolean }>(
+    `update shop_order o set status = 'out_for_delivery', picked_up_at = coalesce(o.picked_up_at, now()), updated_at = now()
+     from (select id, status as was from shop_order where id = $1) p
+     where o.id = p.id and o.rider_id = $2 and o.status in ('confirmed', 'out_for_delivery') returning p.was <> 'out_for_delivery' as changed`,
     [id, riderId],
   );
+  if (r[0]?.changed) await notifyOrderStatus(id, "out_for_delivery");
   return r.length > 0;
 }
 
@@ -158,6 +170,7 @@ export async function riderDeliver(riderId: number, id: number, otp: string): Pr
   if (!o) return "not_found";
   if (o.delivery_otp !== otp) return "wrong_otp";
   await query(`update shop_order set status = 'delivered', delivered_at = now(), payment_status = 'paid', updated_at = now() where id = $1`, [id]);
+  await notifyOrderStatus(id, "delivered");
   return "ok";
 }
 

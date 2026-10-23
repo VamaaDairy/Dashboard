@@ -37,7 +37,7 @@ flutter build appbundle --release --dart-define=API_BASE=https://production.vama
 flutter build ipa --release --dart-define=API_BASE=https://production.vamadairy.in      # needs a Mac
 ```
 
-App name is **Gaia**, id `com.vamaadairy.gaia_shop`. The icon is still Flutter's default - replace it
+App name is **Gaia**, id `com.vamaadairy.gaia`. The icon is still Flutter's default - replace it
 (e.g. with the `flutter_launcher_icons` package) before publishing.
 
 ## Where things are

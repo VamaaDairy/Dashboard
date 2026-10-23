@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'config.dart';
+import 'push.dart';
 import 'screens/home_screen.dart';
 import 'screens/rider_home_screen.dart';
 import 'store/core.dart';
+import 'store/push.dart';
 import 'store/rider.dart';
 import 'theme.dart';
 
@@ -19,6 +23,8 @@ Future<void> main() async {
     yield LicenseEntryWithLineBreaks(['Plus Jakarta Sans'], await rootBundle.loadString('assets/fonts/PlusJakartaSans-OFL.txt'));
   });
   runApp(const SplashScreen());
+  // notifications come up alongside; the permission prompt must not hold the app up
+  unawaited(Push.init());
   // keep the opening screen up for a beat even when startup is instant
   final minSplash = Future<void>.delayed(const Duration(milliseconds: 1500));
   // a startup failure should say what broke instead of leaving the launch logo up
@@ -67,6 +73,11 @@ class GaiaApp extends StatelessWidget {
         title: appName,
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
+        // registers this phone's push token for whoever is signed in
+        builder: (context, child) => Consumer(builder: (_, ref, __) {
+          ref.watch(pushSyncProvider);
+          return child ?? const SizedBox.shrink();
+        }),
         // a signed-in delivery partner opens straight on their deliveries
         home: Consumer(builder: (_, ref, __) {
           if (ref.watch(riderProvider.select((r) => r.signedIn))) return const RiderHomeScreen();

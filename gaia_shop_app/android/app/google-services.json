@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "479665134869",
+    "project_id": "gaia-458cb",
+    "storage_bucket": "gaia-458cb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:479665134869:android:f1ae7d29fbbc5b6b721d1c",
+        "android_client_info": {
+          "package_name": "com.vamaadairy.gaia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoecfkUlCwZhVPzrzkOPhdunARR_K_jrs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

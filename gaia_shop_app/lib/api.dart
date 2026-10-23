@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:http/http.dart' as http;
 
 import 'config.dart';
@@ -119,6 +120,16 @@ class Api {
   }
 
   // ---- subscriptions (signed-in customer) ----
+
+  /// Tells the backend which phone to push to for this signed-in session ([token] is a customer,
+  /// rider or distributor sign-in token; the server knows which). Best effort.
+  Future<void> registerPushToken(String token, String pushToken) async {
+    try {
+      await _http
+          .post(_u('/push/register'), headers: _bearer(token), body: jsonEncode({'token': pushToken, 'platform': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android'}))
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
 
   Map<String, String> _bearer(String token) => {..._json, 'authorization': 'Bearer $token'};
 
