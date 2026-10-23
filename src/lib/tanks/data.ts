@@ -194,12 +194,21 @@ export async function getTankDays(tankId: string, limit = 90): Promise<TankDay[]
   );
 }
 
-/** Which tank each Milk in collection on `date` was put into, keyed by its collection ref. */
-export async function getCollectionTanks(date: string): Promise<Record<string, string>> {
-  const rows = await query<{ source_ref: string; tank_id: string }>(
-    `select source_ref, tank_id from tank_movement
-      where scenario_id = $1 and source = 'vamaa' and movement_date = $2::date`,
+/**
+ * Which tank(s) each Milk in collection on `date` was put into, keyed by its collection ref.
+ * A split collection has two parts (the second is stored as `ref#s2`), first part first.
+ */
+export async function getCollectionTanks(date: string): Promise<Record<string, { tankId: string; litres: number }[]>> {
+  const rows = await query<{ source_ref: string; tank_id: string; qty_litre: string }>(
+    `select source_ref, tank_id, qty_litre from tank_movement
+      where scenario_id = $1 and source = 'vamaa' and movement_date = $2::date
+      order by source_ref`,
     [await activeScenarioId(), date],
   );
-  return Object.fromEntries(rows.map((r) => [r.source_ref, r.tank_id]));
+  const out: Record<string, { tankId: string; litres: number }[]> = {};
+  for (const r of rows) {
+    const ref = r.source_ref.replace(/#s2$/, "");
+    (out[ref] ??= []).push({ tankId: r.tank_id, litres: Number(r.qty_litre) });
+  }
+  return out;
 }

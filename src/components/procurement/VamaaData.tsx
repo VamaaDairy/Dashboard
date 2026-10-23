@@ -17,7 +17,7 @@ export function VamaaCollectionsTable({
   rows: VamaaCollection[];
   kgPerLitre: number;
   tanks: { id: string; name: string }[];
-  inTank: Record<string, string>;   // collection ref -> tank id
+  inTank: Record<string, { tankId: string; litres: number }[]>;   // collection ref -> its tank(s)
   prices: Record<string, CollectionPrice>;   // collection ref -> price
   chartFrom: string | null;   // first day prices are calculated from the chart
   names: Record<string, string>;   // "centre|code" -> farmer or supplier name
@@ -31,7 +31,7 @@ export function VamaaCollectionsTable({
 
   const totalQty = rows.reduce((t, r) => t + qty(r), 0);
   const totalKg = litresToKg(totalQty, kgPerLitre);
-  const inTanks = rows.filter((r) => inTank[collectionRef(r, date)]).reduce((t, r) => t + qty(r), 0);
+  const inTanks = rows.reduce((t, r) => t + (inTank[collectionRef(r, date)] ?? []).reduce((u, p) => u + p.litres, 0), 0);
   const price = (r: VamaaCollection) => prices[collectionRef(r, date)];
   const totalAmount = rows.reduce((t, r) => t + (price(r)?.amount ?? 0), 0);
   const pricedLitres = rows.filter((r) => price(r)?.rate).reduce((t, r) => t + qty(r), 0);
@@ -45,7 +45,7 @@ export function VamaaCollectionsTable({
         `${fromChart
           ? `Price ₹/L is calculated from the rate chart (fat and CLR); ₹/kg is the same price per kg (₹/L ÷ ${formatNumber(kgPerLitre, 2)} kg/L), and Amount = price × litres.${unpriced ? ` ${unpriced} collection(s) have fat or CLR outside the chart, so no price.` : ""}`
           : "Price ₹/L and Amount are as the Vamaa app sent them - prices are only calculated from the rate chart from " + (chartFrom ?? "the first chart") + "."} ` +
-        `Pick a tank on each row to put that milk into it - its litres, fat, SNF and price go into the tank on ${date} and blend in by volume. Change the tank to move it, or pick "—" to take it back out. SNF is calculated from CLR and Fat (CLR/4 + 0.20×Fat + 0.70), or taken as sent where no CLR is recorded (tankers). Kg = litres × ${formatNumber(kgPerLitre, 2)} kg/L; kg fat and kg SNF = kg × the percentage.`
+        `Pick a tank on each row to put that milk into it - its litres, fat, SNF and price go into the tank on ${date} and blend in by volume. Change the tank to move it, or pick "—" to take it back out. Choose "Split into 2 tanks" to divide one collection between two tanks. SNF is calculated from CLR and Fat (CLR/4 + 0.20×Fat + 0.70), or taken as sent where no CLR is recorded (tankers). Kg = litres × ${formatNumber(kgPerLitre, 2)} kg/L; kg fat and kg SNF = kg × the percentage.`
       }
     >
       <div className="overflow-x-auto">
@@ -97,7 +97,8 @@ export function VamaaCollectionsTable({
                   <TankPicker
                     date={date}
                     collectionRef={collectionRef(r, date)}
-                    current={inTank[collectionRef(r, date)]}
+                    current={inTank[collectionRef(r, date)] ?? []}
+                    quantity={qty(r)}
                     tanks={tanks}
                   />
                 </td>
