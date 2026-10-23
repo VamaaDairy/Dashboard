@@ -108,7 +108,13 @@ const DAILY: NavItem[] = [
       { href: "/whatsapp/reviews", key: "whatsapp", label: "Reviews" },
     ],
   },
-  { href: "/shop-orders", key: "shop", label: "Shop orders", icon: Store },
+  {
+    href: "/shop-orders", key: "shop", label: "Shop orders", icon: Store,
+    children: [
+      { href: "/shop-orders", key: "shop", label: "Orders", exact: true },
+      { href: "/shop-orders/notifications", key: "shop", label: "Notifications" },
+    ],
+  },
   { href: "/labour", key: "labour", label: "Labour", icon: Users },
   { href: "/electricity", key: "electricity", label: "Electricity", icon: Zap },
   {

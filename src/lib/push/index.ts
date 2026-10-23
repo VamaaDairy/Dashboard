@@ -25,34 +25,45 @@ export const unregisterDevice = (role: PushRole, token: string) => query(`delete
 const LIVE: Record<PushRole, string> = {
   customer: `select d.token from push_device d
                join shop_customer_session s on encode(sha256(convert_to(s.token, 'UTF8')), 'hex') = d.session_hash and s.customer_id = d.owner_id
-              where d.role = 'customer' and d.owner_id = $1`,
+              where d.role = 'customer' and ($1::int is null or d.owner_id = $1)`,
   rider: `select d.token from push_device d
             join shop_rider r on r.id = d.owner_id and r.active and encode(sha256(convert_to(r.token, 'UTF8')), 'hex') = d.session_hash
-           where d.role = 'rider' and d.owner_id = $1`,
+           where d.role = 'rider' and ($1::int is null or d.owner_id = $1)`,
   distributor: `select d.token from push_device d
                   join dist_login l on l.id = d.owner_id and l.active and encode(sha256(convert_to(l.token, 'UTF8')), 'hex') = d.session_hash
-                 where d.role = 'distributor' and d.owner_id = $1`,
+                 where d.role = 'distributor' and ($1::int is null or d.owner_id = $1)`,
 };
 
-/** Pushes to every live phone of one account. Never throws: a failed notification must not fail the action behind it. */
-export async function notify(role: PushRole, ownerId: number | null | undefined, m: PushMessage): Promise<void> {
-  if (ownerId == null || !pushConfigured()) return;
+/** Pushes to every live phone of one account, or - with a null owner - of every account of that role. Never throws. */
+export async function pushToRole(role: PushRole, ownerId: number | null, m: PushMessage): Promise<{ sent: number; failed: number }> {
+  const out = { sent: 0, failed: 0 };
+  if (!pushConfigured()) return out;
   try {
     const rows = await query<{ token: string }>(LIVE[role], [ownerId]);
     await Promise.all(
       [...new Set(rows.map((r) => r.token))].map(async (token) => {
-        if ((await sendPush({ token }, m)) === "gone") await unregisterDevice(role, token);
+        const r = await sendPush({ token }, m);
+        if (r === "sent") out.sent++;
+        else out.failed++;
+        if (r === "gone") await unregisterDevice(role, token);
       }),
     );
   } catch (e) {
     console.error("[push] notify failed:", e);
   }
+  return out;
+}
+
+/** Pushes to every live phone of one account. Never throws: a failed notification must not fail the action behind it. */
+export async function notify(role: PushRole, ownerId: number | null | undefined, m: PushMessage): Promise<void> {
+  if (ownerId == null) return;
+  await pushToRole(role, ownerId, m);
 }
 
 /** Pushes to everyone subscribed to a topic (every phone is on "all"). */
-export async function notifyTopic(topic: string, m: PushMessage): Promise<void> {
-  if (!pushConfigured()) return;
-  await sendPush({ topic }, m);
+export async function notifyTopic(topic: string, m: PushMessage): Promise<boolean> {
+  if (!pushConfigured()) return false;
+  return (await sendPush({ topic }, m)) === "sent";
 }
 
 // ---- shop orders ----
