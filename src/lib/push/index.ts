@@ -74,6 +74,8 @@ const FOR_CUSTOMER: Record<string, (no: string, otp: string) => PushMessage> = {
   out_for_delivery: (no, otp) => ({ title: "On its way", body: `Your order ${no} is out for delivery. Delivery code: ${otp}` }),
   delivered: (no) => ({ title: "Delivered", body: `Your order ${no} was delivered. Thank you for choosing Gaia!` }),
   cancelled: (no) => ({ title: "Order cancelled", body: `Your order ${no} was cancelled.` }),
+  // made each day for a customer's subscription, already confirmed
+  subscription: (no) => ({ title: "Subscription delivery", body: `Your subscription order ${no} is confirmed and will be delivered soon.` }),
 };
 
 /** Tells the customer an order reached a new status (nothing for orders placed without an account). */
@@ -99,4 +101,16 @@ export async function notifyRiderAssigned(orderId: number, riderId: number): Pro
   } catch (e) {
     console.error("[push] rider notification failed:", e);
   }
+}
+
+const FOR_SUBSCRIPTION = {
+  created: { title: "Subscription started", body: "Your subscription is active. We will deliver as per your plan." },
+  paused: { title: "Subscription paused", body: "Your subscription is paused. No deliveries until you resume it." },
+  resumed: { title: "Subscription resumed", body: "Your subscription is active again." },
+  cancelled: { title: "Subscription cancelled", body: "Your subscription was cancelled." },
+} as const;
+
+/** Tells the customer their subscription was started, paused, resumed or cancelled. */
+export async function notifySubscription(customerId: number, event: keyof typeof FOR_SUBSCRIPTION): Promise<void> {
+  await notify("customer", customerId, { ...FOR_SUBSCRIPTION[event], data: { type: "subscription", event } });
 }

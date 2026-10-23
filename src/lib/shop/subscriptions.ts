@@ -1,5 +1,6 @@
 import "server-only";
 import { query, tx } from "@/lib/db";
+import { notifyOrderStatus, notifySubscription } from "@/lib/push";
 import { pricesFor } from "./catalog";
 import { deliveryRule } from "./orders";
 import { deliveryFor } from "./pricing";
@@ -220,6 +221,7 @@ export async function createSubscription(
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) returning id`,
     [customerId, plan.sku, plan.qty, plan.frequency, plan.weekdays, plan.everyN, plan.startDate, plan.endDate, to.name, to.phone, to.address, to.pincode, to.lat, to.lng],
   );
+  await notifySubscription(customerId, "created");
   return { ok: true, id: row.id };
 }
 
@@ -245,6 +247,7 @@ export async function updateSubscription(
   if (patch.status !== undefined) put("status", patch.status);
   if (!sets.length) return true;
   const r = await query(`update shop_subscription set ${sets.join(", ")}, updated_at = now() where id = $1 and customer_id = $2 and status <> 'cancelled' returning id`, vals);
+  if (r.length > 0 && patch.status) await notifySubscription(customerId, patch.status === "active" ? "resumed" : patch.status);
   return r.length > 0;
 }
 
@@ -346,16 +349,17 @@ export async function generateOrders(day: string): Promise<{ created: number; it
          on conflict do nothing returning id`,
         [to.name, to.phone, to.address, to.pincode, to.lat, to.lng, subtotal, fee, subtotal + fee, customerId, day],
       );
-      if (!o.rows.length) return false;
+      if (!o.rows.length) return 0;
       for (const r of rows) {
         await c.query(
           `insert into shop_order_item (order_id, sku_code, name, image_url, qty, unit_price, line_total) values ($1, $2, $3, $4, $5, $6, $7)`,
           [o.rows[0].id, r.sku, r.name, r.image, r.qty, r.unit, r.total],
         );
       }
-      return true;
+      return o.rows[0].id as number;
     });
     if (made) {
+      await notifyOrderStatus(made, "subscription");
       created++;
       items += rows.reduce((n, r) => n + r.qty, 0);
     }
