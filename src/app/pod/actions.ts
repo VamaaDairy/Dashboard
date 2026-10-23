@@ -26,6 +26,13 @@ export async function addGrn(form: FormData): Promise<GrnResult> {
   if (!invoice) return { ok: false, error: "Invoice number is required." };
   if (invoice.length > 60) return { ok: false, error: "Invoice number is too long." };
 
+  const customer = String(form.get("customer_name") ?? "").trim();
+  if (!customer) return { ok: false, error: "Customer name is required." };
+  if (customer.length > 120) return { ok: false, error: "Customer name is too long." };
+
+  const date = String(form.get("pod_date") ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Choose the POD date." };
+
   const file = form.get("image");
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose the POD image." };
   if (!TYPES.has(file.type)) return { ok: false, error: "The image must be a JPG, PNG or WebP." };
@@ -34,8 +41,8 @@ export async function addGrn(form: FormData): Promise<GrnResult> {
   let up: { url: string; publicId: string };
   try { up = await uploadGrnImage(file); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Could not upload the image." }; }
   await query(
-    `insert into grn (invoice_no, image_url, public_id, created_by) values ($1, $2, $3, $4)`,
-    [invoice, up.url, up.publicId, me.name ?? me.email],
+    `insert into grn (invoice_no, customer_name, pod_date, image_url, public_id, created_by) values ($1, $2, $3, $4, $5, $6)`,
+    [invoice, customer, date, up.url, up.publicId, me.name ?? me.email],
   );
   revalidatePath("/pod");
   return { ok: true };

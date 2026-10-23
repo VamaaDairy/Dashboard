@@ -10,8 +10,8 @@ import { FormRow, Panel } from "@/components/cn/ui";
 
 const ctl = "h-9 border-border-control-hover bg-card md:h-8";
 
-/** Invoice number plus the GRN photo. */
-export function GrnForm() {
+/** Date, invoice number, customer and the POD photo. */
+export function GrnForm({ today }: { today: string }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export function GrnForm() {
     <form ref={formRef} onSubmit={submit}>
       <Panel
         title="Add POD"
-        description="Enter the invoice number and attach the POD image."
+        description="Enter the date, invoice number and customer, and attach the POD image."
         flush
         footer={
           <div className="flex items-center justify-between gap-3">
@@ -45,8 +45,14 @@ export function GrnForm() {
         }
       >
         <div className="divide-y divide-border">
+          <FormRow label="POD date" required>
+            <Input name="pod_date" type="date" defaultValue={today} className={`${ctl} sm:max-w-72`} required />
+          </FormRow>
           <FormRow label="Invoice no." required>
             <Input name="invoice_no" className={`${ctl} sm:max-w-72`} maxLength={60} required />
+          </FormRow>
+          <FormRow label="Customer name" required>
+            <Input name="customer_name" className={`${ctl} sm:max-w-72`} maxLength={120} required />
           </FormRow>
           <FormRow label="POD image" required hint="JPG, PNG or WebP, up to 3 MB.">
             <Input name="image" type="file" accept="image/jpeg,image/png,image/webp" className={`${ctl} sm:max-w-72`} required />
