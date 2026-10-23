@@ -13,6 +13,7 @@ class DistData {
   const DistData({
     this.profile,
     this.firms = const [],
+    this.states = const [],
     this.firm,
     this.products = const [],
     this.orders = const [],
@@ -23,6 +24,9 @@ class DistData {
 
   final DistProfile? profile;
   final List<DistFirm> firms;
+
+  /// The states a distributor's profile can be set to (as in Customer Masters).
+  final List<String> states;
   final DistFirm? firm;
 
   /// The menu at [firm]'s dealer price.
@@ -37,6 +41,7 @@ class DistData {
   DistData copyWith({
     Object? profile = keep,
     List<DistFirm>? firms,
+    List<String>? states,
     Object? firm = keep,
     List<Product>? products,
     List<DistOrder>? orders,
@@ -47,6 +52,7 @@ class DistData {
       DistData(
         profile: identical(profile, keep) ? this.profile : profile as DistProfile?,
         firms: firms ?? this.firms,
+        states: states ?? this.states,
         firm: identical(firm, keep) ? this.firm : firm as DistFirm?,
         products: products ?? this.products,
         orders: orders ?? this.orders,
@@ -133,8 +139,9 @@ class DistributorStore extends Notifier<DistData> {
     if (t == null || state.loading) return;
     state = state.copyWith(loading: true, error: null);
     try {
-      final firms = await _api.distFirms(t);
-      state = state.copyWith(firms: firms, loading: false);
+      final r = await _api.distFirms(t);
+      final firms = r.firms;
+      state = state.copyWith(firms: firms, states: r.states, loading: false);
       if (firms.length == 1 && state.firm == null) await selectFirm(firms.first);
     } on ApiException catch (e) {
       await _failed(e);
@@ -218,5 +225,26 @@ class DistributorStore extends Notifier<DistData> {
     } on ApiException catch (e) {
       await _failed(e);
     } catch (_) {}
+  }
+
+  /// Saves changed details of [firmUid] to the dashboard's masters. Throws an [ApiException] with the
+  /// server's message (and per-field messages) when something is not acceptable.
+  Future<void> saveFirm(String firmUid, Map<String, Object?> changes) async {
+    final t = _token;
+    if (t == null) throw ApiException('Please sign in again.');
+    try {
+      final r = await _api.distSaveFirm(t, firmUid, changes);
+      final prefs = ref.read(prefsProvider);
+      await prefs.setString(_nameKey, r.name);
+      await prefs.setString(_phoneKey, r.phone);
+      state = state.copyWith(
+        firms: [for (final f in state.firms) f.uid == r.firm.uid ? r.firm : f],
+        firm: state.firm?.uid == r.firm.uid ? r.firm : state.firm,
+        profile: DistProfile(kind: state.profile?.kind ?? 'distributor', name: r.name, phone: r.phone),
+      );
+    } on ApiException catch (e) {
+      if (e.message.contains('sign in')) await logout();
+      rethrow;
+    }
   }
 }

@@ -92,13 +92,25 @@ const nameOf = (e: EntityDef, row: Record<string, unknown> | Values | null) => {
   return f ? String(row?.[f.name]) : "";
 };
 
+export interface SaveOptions {
+  /** Update only these fields; `form` must still carry the whole row so the screen's rules see every value. */
+  only?: string[];
+  /** Who the change came from, stamped on the row (default: the dashboard). */
+  from?: string;
+}
+
 /** Adds (id = null) or updates a row from the submitted form. */
-export async function saveRecord(def: MasterDef, id: string | null, form: FormData, who: string): Promise<Result> {
+export async function saveRecord(def: MasterDef, id: string | null, form: FormData, who: string, opts: SaveOptions = {}): Promise<Result> {
   const e = entityOf(def);
   const isNew = id === null;
   if (!isNew && !validId(e, id)) return { ok: false, error: `That ${e.noun} no longer exists.` };
 
-  const { values, errors } = readForm(e, form, isNew);
+  const only = opts.only ? new Set(opts.only) : null;
+  const touched = (f: Field) => !only || only.has(f.name);
+
+  const read = readForm(e, form, isNew);
+  const values = read.values;
+  const errors = only ? Object.fromEntries(Object.entries(read.errors).filter(([k]) => only.has(k))) : read.errors;
   if (Object.keys(errors).length) return { ok: false, error: "Please fix the highlighted fields.", fieldErrors: errors };
 
   try {
@@ -110,7 +122,7 @@ export async function saveRecord(def: MasterDef, id: string | null, form: FormDa
       const bad: FieldErrors = {};
       for (const f of editableFields(e, isNew)) {
         const v = values[f.name];
-        if (f.type !== "ref" || v === null || v === undefined) continue;
+        if (!touched(f) || f.type !== "ref" || v === null || v === undefined) continue;
         const hit = await client.query(`select 1 from (${f.ref}) t where t.value = $1 limit 1`, [v]);
         if (!hit.rowCount) bad[f.name] = `${f.label}: pick one from the list`;
       }
@@ -124,11 +136,11 @@ export async function saveRecord(def: MasterDef, id: string | null, form: FormDa
 
       const have = await columnsOf(client, e.table);
       const cols: Array<{ name: string; field?: Field; value: unknown }> = [];
-      for (const f of editableFields(e, isNew)) if (!f.virtual) cols.push({ name: f.name, field: f, value: written[f.name] });
+      for (const f of editableFields(e, isNew)) if (!f.virtual && touched(f)) cols.push({ name: f.name, field: f, value: written[f.name] });
       for (const [name, value] of Object.entries(extra)) if (!cols.some((c) => c.name === name)) cols.push({ name, field: e.fields.find((f) => f.name === name), value });
       if (isNew) for (const [name, value] of Object.entries(e.defaults ?? {})) if (!cols.some((c) => c.name === name)) cols.push({ name, value });
       if (e.actorCols) {
-        const stamp = { name: who, from: "Dashboard" };
+        const stamp = { name: who, from: opts.from ?? "Dashboard" };
         if (have.has("updated_by")) cols.push({ name: "updated_by", value: JSON.stringify(stamp) });
         if (isNew && have.has("created_by")) cols.push({ name: "created_by", value: JSON.stringify({ name: who }) });
       }

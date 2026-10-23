@@ -3,6 +3,9 @@ import type { MasterDef } from "../types";
 import { REF_BEATS, REF_CHANNELS, REF_PARENT_FIRMS, REF_STAFF, REF_STATES, SUGGEST_CUSTOMER_CLASS, SUGGEST_CUSTOMER_TYPE } from "../refs";
 import { person, active } from "./fragments";
 
+/** Whether the customer can sign in to the Gaia app: a distributor needs an enabled login and an active customer record. */
+const APP_LOGIN = `case when dl.id is null then 'No login' when not dl.active then 'Disabled' when f.active = 1 then 'Active' else 'Customer inactive' end`;
+
 /** Route: /orders/distribution */
 export const customers: MasterDef = {
   slug: "distribution",
@@ -13,7 +16,8 @@ export const customers: MasterDef = {
     left join fp_channel ch on ch.uid = f.channel_uid
     left join fp_firm p on p.uid = f.parent_firm_uid
     left join fp_staff s on s.uid = f.sales_contact_uid
-    left join fp_beat b on b.uid = f.beat_uid`,
+    left join fp_beat b on b.uid = f.beat_uid
+    left join dist_login dl on dl.firm_uid = f.uid`,
   cols: [
     { key: "code", label: "Code", expr: "f.firm_code", kind: "mono" },
     { key: "name", label: "Name", expr: "f.name" },
@@ -31,6 +35,8 @@ export const customers: MasterDef = {
     { key: "credit", label: "Credit limit", expr: "f.credit_limit", kind: "money" },
     { key: "gstin", label: "GSTIN", expr: "f.gstin", kind: "mono" },
     { key: "created", label: "Created", expr: "f.created_at", kind: "date" },
+    { key: "applogin", label: "App login", expr: APP_LOGIN, kind: "status" },
+    { key: "appmobile", label: "App mobile", expr: "dl.phone", kind: "mono" },
   ],
   search: ["f.firm_code", "f.name", "f.phone", "f.city", "f.gstin", "p.name", "b.beat_name"],
   filters: [
@@ -39,6 +45,7 @@ export const customers: MasterDef = {
     { key: "state", label: "State", expr: "f.state_state" },
     { key: "type", label: "Type", expr: "f.firm_type" },
     { key: "salesman", label: "Sales contact", expr: person("s") },
+    { key: "applogin", label: "App login", expr: APP_LOGIN },
   ],
   stats: [
     { label: "Active", where: "f.active = 1" },
@@ -46,8 +53,11 @@ export const customers: MasterDef = {
     { label: "Distributors", where: "ch.channel_code = 'DB'" },
     { label: "Retailers", where: "ch.channel_code = 'RT'" },
     { label: "On a route", where: "b.uid is not null" },
+    { label: "Distributors with app login", where: "ch.channel_code = 'DB' and dl.id is not null" },
+    { label: "Distributors without", where: "ch.channel_code = 'DB' and dl.id is null" },
   ],
   order: "f.firm_code",
+  appLogin: "distributor",
 
   entity: {
     table: "fp_firm", idCol: "uid", idExpr: "f.uid", onExpr: "f.active = 1", noun: "customer", actorCols: true,

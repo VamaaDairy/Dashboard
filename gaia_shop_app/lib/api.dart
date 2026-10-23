@@ -282,10 +282,21 @@ class Api {
     return (token: j['token'] as String, profile: DistProfile(kind: l['kind'] as String, name: l['name'] as String, phone: l['phone'] as String));
   }
 
-  /// The distributors this login can order for.
-  Future<List<DistFirm>> distFirms(String token) async {
+  /// The distributors this login can order for, and the states a profile can be set to.
+  Future<({List<DistFirm> firms, List<String> states})> distFirms(String token) async {
     final j = await _send(() => _http.get(_d('/me'), headers: _auth(token)));
-    return ((j['distributors'] as List?) ?? []).map((e) => DistFirm.fromJson(e as Map<String, dynamic>)).toList();
+    return (
+      firms: ((j['distributors'] as List?) ?? []).map((e) => DistFirm.fromJson(e as Map<String, dynamic>)).toList(),
+      states: ((j['states'] as List?) ?? []).map((e) => '$e').toList(),
+    );
+  }
+
+  /// Saves changed details of a distributor into the dashboard's Customer Masters; returns the saved profile
+  /// and the (possibly new) sign-in number. Only the keys in [changes] are touched.
+  Future<({DistFirm firm, String name, String phone})> distSaveFirm(String token, String firmUid, Map<String, Object?> changes) async {
+    final j = await _send(() => _http.patch(_d('/me'), headers: {..._json, ..._auth(token)}, body: jsonEncode({'firmUid': firmUid, ...changes})));
+    final l = j['login'] as Map<String, dynamic>;
+    return (firm: DistFirm.fromJson(j['firm'] as Map<String, dynamic>), name: l['name'] as String, phone: l['phone'] as String);
   }
 
   /// The shop catalogue at [firmUid]'s dealer price.

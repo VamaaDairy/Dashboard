@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
 import 'cart_screen.dart';
+import 'distributor_edit_screen.dart';
 import 'orders_screen.dart' show orderDate;
 
 /// The signed-in distributor's / sales officer's side of the normal app: which distributor the order
@@ -459,6 +460,11 @@ class PartnerAccountScreen extends ConsumerWidget {
             ),
           );
     void call(String n) => launchUrl(Uri(scheme: 'tel', path: n));
+    // details are edited into the office's masters; the name, route and credit limit stay with the office
+    Widget editButton(DistFirm firm) => TextButton(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DistributorEditScreen(firm: firm))),
+          child: const Text('Edit'),
+        );
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -538,24 +544,25 @@ class PartnerAccountScreen extends ConsumerWidget {
               line('Customer since', f.createdAt == null ? null : niceDate(f.createdAt!)),
               const SizedBox(height: 8),
               band(),
-              heading('Contact & address'),
+              heading('Contact & address', action: editButton(f)),
               line('Contact person', f.contactPerson),
               line('Phone', f.phone, onTap: f.phone == null ? null : () => call(f.phone!)),
+              line('Landline', f.landline, onTap: f.landline == null ? null : () => call(f.landline!)),
               line('Email', f.email, onTap: f.email == null ? null : () => launchUrl(Uri(scheme: 'mailto', path: f.email))),
               line('Address', f.fullAddress),
               if (f.hasLocation)
                 line('Location', 'Open in Maps',
                     onTap: () => launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=${f.lat},${f.lng}'), mode: LaunchMode.externalApplication)),
               const SizedBox(height: 8),
-              if ([f.gstin, f.pan, f.licenceNo, f.creditLimit].any((x) => x != null)) ...[
-                band(),
-                heading('Tax & credit'),
-                line('GSTIN', f.gstin),
-                line('PAN', f.pan),
-                line('Licence no.', f.licenceNo),
-                line('Credit limit', f.creditLimit == null ? null : rupees(f.creditLimit!)),
-                const SizedBox(height: 8),
-              ],
+              band(),
+              heading('Tax & credit', action: editButton(f)),
+              line('GSTIN', f.gstin),
+              line('PAN', f.pan),
+              line('Licence no.', f.licenceNo),
+              line('Credit limit', f.creditLimit == null ? null : rupees(f.creditLimit!)),
+              if (f.gstin == null && f.pan == null && f.licenceNo == null && f.creditLimit == null)
+                const Padding(padding: EdgeInsets.fromLTRB(20, 4, 20, 8), child: Text('Not added yet.', style: TextStyle(color: Brand.muted))),
+              const SizedBox(height: 8),
               if (f.salesOfficer != null) ...[
                 band(),
                 heading(p.isSalesman ? 'Sales contact' : 'Your sales officer'),

@@ -3,6 +3,9 @@ import type { MasterDef } from "../types";
 import { REF_DESIGNATIONS, REF_STAFF, REF_STATES } from "../refs";
 import { person, active } from "./fragments";
 
+/** Whether the employee (a sales officer booking for distributors) can sign in to the Gaia app. */
+const APP_LOGIN = `case when dl.id is null then 'No login' when dl.active then 'Active' else 'Disabled' end`;
+
 /** Route: /orders/staffs */
 export const employees: MasterDef = {
   slug: "staffs",
@@ -11,7 +14,8 @@ export const employees: MasterDef = {
   icon: Users,
   from: `fp_staff s
     left join fp_designation d on d.uid = s.designation_uid
-    left join fp_staff m on m.uid = s.reporting_manager_uid`,
+    left join fp_staff m on m.uid = s.reporting_manager_uid
+    left join dist_login dl on dl.staff_uid = s.uid`,
   cols: [
     { key: "code", label: "Code", expr: "s.employee_code", kind: "mono" },
     { key: "name", label: "Name", expr: person("s") },
@@ -25,6 +29,8 @@ export const employees: MasterDef = {
     { key: "customers", label: "Customers", expr: "(select count(*) from fp_firm x where x.sales_contact_uid = s.uid)::int", kind: "num" },
     { key: "joined", label: "Joined", expr: "s.date_of_joining", kind: "date" },
     { key: "left", label: "Left", expr: "coalesce(s.resignation_date, s.deactivation_date)", kind: "date" },
+    { key: "applogin", label: "App login", expr: APP_LOGIN, kind: "status" },
+    { key: "appmobile", label: "App mobile", expr: "dl.phone", kind: "mono" },
   ],
   search: ["s.employee_code", "s.first_name", "s.last_name", "s.phone", "s.email", "s.city"],
   filters: [
@@ -32,6 +38,7 @@ export const employees: MasterDef = {
     { key: "status", label: "Status", expr: active("s") },
     { key: "state", label: "State", expr: "s.state_state" },
     { key: "manager", label: "Reports to", expr: person("m") },
+    { key: "applogin", label: "App login", expr: APP_LOGIN },
   ],
   stats: [
     { label: "Active", where: "s.active = 1" },
@@ -39,6 +46,7 @@ export const employees: MasterDef = {
     { label: "Field sales", where: "d.sales = 1 and s.active = 1" },
   ],
   order: "s.active desc, s.employee_code nulls last, s.first_name",
+  appLogin: "salesman",
 
   entity: {
     table: "fp_staff", idCol: "uid", idExpr: "s.uid", onExpr: "s.active = 1", noun: "employee", actorCols: true,

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { Download, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AppLoginActions, CreateMissingLogins } from "@/components/masters/AppLogin";
 import { RowActions } from "@/components/masters/RowActions";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
@@ -73,6 +74,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
           subtitle={def.subtitle}
           actions={
             <>
+            {canEdit && def.appLogin ? <CreateMissingLogins kind={def.appLogin} /> : null}
             {canEdit ? (
               <Link
                 href={`/orders/${slug}/new`}
@@ -164,6 +166,8 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
                   ))}
                   {canEdit ? (
                     <td className="px-3 py-1.5">
+                      <div className="flex items-center justify-end">
+                      {def.appLogin ? <AppLoginActions kind={def.appLogin} uid={String(r._id)} status={String(r.applogin ?? "No login")} /> : null}
                       <RowActions
                         slug={slug}
                         id={String(r._id)}
@@ -171,6 +175,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
                         label={String(r[def.cols.find((c) => c.kind !== "mono" && c.kind !== "status" && c.kind !== "num" && c.kind !== "money")?.key ?? def.cols[0].key] ?? "")}
                         on={def.entity!.active ? Boolean(r._on) : null}
                       />
+                      </div>
                     </td>
                   ) : null}
                 </tr>

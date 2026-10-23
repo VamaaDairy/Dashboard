@@ -14,5 +14,6 @@ export async function POST(req: NextRequest) {
   const kind = b?.kind === "distributor" || b?.kind === "salesman" ? b.kind : undefined;
   const r = await distLogin(phone, pin, kind);
   if (!r) return fail(401, "Wrong number or PIN.");
+  if (r === "inactive") return fail(403, "This account is inactive. Please contact Gaia to get it switched on.");
   return NextResponse.json({ token: r.token, login: { kind: r.login.kind, name: r.login.name, phone: r.login.phone } });
 }

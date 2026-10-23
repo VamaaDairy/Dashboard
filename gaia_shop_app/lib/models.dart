@@ -375,6 +375,7 @@ class DistFirm {
     this.createdAt,
     this.contactPerson,
     this.phone,
+    this.landline,
     this.email,
     this.address,
     this.area,
@@ -404,6 +405,7 @@ class DistFirm {
   final DateTime? createdAt;
   final String? contactPerson;
   final String? phone;
+  final String? landline;
   final String? email;
   final String? address;
   final String? area;
@@ -455,6 +457,7 @@ class DistFirm {
       createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '')?.toLocal(),
       contactPerson: s('contactPerson'),
       phone: s('phone'),
+      landline: s('landline'),
       email: s('email'),
       address: s('address'),
       area: s('area'),

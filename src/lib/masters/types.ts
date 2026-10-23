@@ -103,6 +103,8 @@ export interface MasterDef {
   /** shown instead of the generic message when the list is empty */
   emptyNote?: string;
   entity?: EntityDef;
+  /** the rows can sign in to the Gaia app: shows each row's app login and lets it be created, reset or switched off */
+  appLogin?: "distributor" | "salesman";
 }
 
 export type SearchParams = Record<string, string | string[] | undefined>;

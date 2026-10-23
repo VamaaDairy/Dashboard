@@ -19,6 +19,9 @@ interface Hooks {
   after?: (ctx: HookContext & { id: string }, values: Values) => Promise<void>;
 }
 
+/** The 10-digit mobile number inside whatever was typed ("+91 98765 43210" -> "9876543210"). */
+const mobileOf = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(-10);
+
 async function scalar<T>(client: PoolClient, sql: string, args: unknown[] = []): Promise<T | undefined> {
   const r = await client.query(sql, args);
   return r.rows[0] ? (Object.values(r.rows[0])[0] as T) : undefined;
@@ -48,9 +51,24 @@ const HOOKS: Record<string, Hooks> = {
         parents: parent ? (await scalar<string>(ctx.client, `select firm_code from fp_firm where uid = $1`, [parent])) ?? "" : "",
       };
       if (ctx.isNew) extra.company_uid = (await companyFirmId(ctx.client)) ?? null;
+
+      // a distributor with an app login signs in with this number, so it has to stay a usable, unshared mobile number
+      if (!ctx.isNew && ctx.id && mobileOf(v.phone) !== mobileOf(ctx.before?.phone)) {
+        const login = await scalar<number>(ctx.client, `select id from dist_login where firm_uid = $1`, [ctx.id]);
+        if (login !== undefined) {
+          const m = mobileOf(v.phone);
+          if (!/^[6-9]\d{9}$/.test(m)) throw new FormError("This customer signs in to the app with this number - enter a valid 10-digit mobile number", "phone");
+          if (await scalar<number>(ctx.client, `select id from dist_login where phone = $1 and id <> $2`, [m, login]))
+            throw new FormError("Another app login already uses this mobile number", "phone");
+        }
+      }
       return extra;
     },
     async after(ctx, v) {
+      if (!ctx.isNew && mobileOf(v.phone) !== mobileOf(ctx.before?.phone)) {
+        // keep the app sign-in number the same as the master's
+        await ctx.client.query(`update dist_login set phone = $2 where firm_uid = $1`, [ctx.id, mobileOf(v.phone)]);
+      }
       const parent = (v.parent_firm_uid as string | null) ?? null;
       if (!ctx.isNew && (ctx.before?.parent_firm_uid ?? null) === parent) return;
       await ctx.client.query(`delete from fp_firm_mapping where firm_uid = $1`, [ctx.id]);
@@ -79,7 +97,23 @@ const HOOKS: Record<string, Hooks> = {
         : null;
       extra.managers = m?.name ?? null;
       extra.reporting = m?.email ?? null;
+
+      // a sales officer with an app login signs in with this number, so it has to stay a usable, unshared mobile number
+      if (!ctx.isNew && ctx.id && mobileOf(v.phone) !== mobileOf(ctx.before?.phone)) {
+        const login = await scalar<number>(ctx.client, `select id from dist_login where staff_uid = $1`, [ctx.id]);
+        if (login !== undefined) {
+          const n = mobileOf(v.phone);
+          if (!/^[6-9]\d{9}$/.test(n)) throw new FormError("This employee signs in to the app with this number - enter a valid 10-digit mobile number", "phone");
+          if (await scalar<number>(ctx.client, `select id from dist_login where phone = $1 and id <> $2`, [n, login]))
+            throw new FormError("Another app login already uses this mobile number", "phone");
+        }
+      }
       return extra;
+    },
+    async after(ctx, v) {
+      if (!ctx.isNew && mobileOf(v.phone) !== mobileOf(ctx.before?.phone)) {
+        await ctx.client.query(`update dist_login set phone = $2 where staff_uid = $1`, [ctx.id, mobileOf(v.phone)]);
+      }
     },
   },
 

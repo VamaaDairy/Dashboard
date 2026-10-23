@@ -1,9 +1,11 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { one, query, tx } from "@/lib/db";
 import { listProducts, type ShopProduct } from "@/lib/shop/catalog";
 import { hashPin, pinMatches } from "@/lib/shop/rider";
+import { loadRecord, saveRecord } from "@/lib/masters/entity/service";
+import { MASTERS } from "@/lib/masters/schemas";
 
 export { hashPin };
 
@@ -35,6 +37,7 @@ export interface DistFirm {
   createdAt: string | null;
   contactPerson: string | null;
   phone: string | null;
+  landline: string | null;
   email: string | null;
   address: string | null;
   area: string | null;
@@ -55,7 +58,7 @@ export interface DistFirm {
 const FIRM_SELECT = `
   select f.uid, f.name, f.firm_code as code, f.city, ch.channel, f.firm_type as type, f.firm_class as class,
          f.active = 1 as active, p.name as "servedBy", b.beat_name as route, f.erp_code as "erpCode", f.created_at as "createdAt",
-         f.contact_person as "contactPerson", f.phone, f.email, f.address, f.place as area, f.district, f.state_state as state, f.pincode,
+         f.contact_person as "contactPerson", f.phone, f.landline, f.email, f.address, f.place as area, f.district, f.state_state as state, f.pincode,
          f.latitude as lat, f.longitude as lng, f.gstin, f.pan, f.license_no as "licenceNo", f.credit_limit as "creditLimit",
          nullif(trim(so.first_name || ' ' || coalesce(so.last_name, '')), '') as "salesOfficer", so.phone as "salesOfficerPhone"
   from fp_firm f
@@ -71,14 +74,23 @@ const LOGIN_SELECT = `
   left join fp_firm f on f.uid = l.firm_uid
   left join fp_staff s on s.uid = l.staff_uid`;
 
-/** Phone + PIN -> a fresh session token (replaces any earlier one), or null. */
-export async function distLogin(phone: string, pin: string, kind?: DistLogin["kind"]): Promise<{ token: string; login: DistLogin } | null> {
+/** A distributor can use the app only while its customer record is active; a sales officer's login is not tied to one. */
+const FIRM_ACTIVE = `(l.kind <> 'distributor' or f.active = 1)`;
+
+/**
+ * Phone + PIN -> a fresh session token (replaces any earlier one), null for a wrong number or PIN, or "inactive"
+ * when the details are right but the customer is switched off in Customer Masters.
+ */
+export async function distLogin(phone: string, pin: string, kind?: DistLogin["kind"]): Promise<{ token: string; login: DistLogin } | "inactive" | null> {
   // the distributor and sales-officer sign-ins are separate screens: each only opens its own kind of login
-  const r = await one<{ id: number; pin_hash: string }>(
-    `select id, pin_hash from dist_login where phone = $1 and active and ($2::text is null or kind = $2)`,
+  const r = await one<{ id: number; pin_hash: string; open: boolean }>(
+    `select l.id, l.pin_hash, ${FIRM_ACTIVE} as open
+       from dist_login l left join fp_firm f on f.uid = l.firm_uid
+      where l.phone = $1 and l.active and ($2::text is null or l.kind = $2)`,
     [phone, kind ?? null],
   );
   if (!r || !pinMatches(pin, r.pin_hash)) return null;
+  if (!r.open) return "inactive";
   const token = randomBytes(32).toString("hex");
   await query(`update dist_login set token = $2 where id = $1`, [r.id, token]);
   const login = await one<DistLogin>(`${LOGIN_SELECT} where l.id = $1`, [r.id]);
@@ -88,7 +100,8 @@ export async function distLogin(phone: string, pin: string, kind?: DistLogin["ki
 export async function distFromRequest(req: NextRequest): Promise<DistLogin | null> {
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;
-  return one<DistLogin>(`${LOGIN_SELECT} where l.token = $1 and l.active`, [t]);
+  // checked on every call, so switching a customer off in the masters signs its phone out at once
+  return one<DistLogin>(`${LOGIN_SELECT} where l.token = $1 and l.active and ${FIRM_ACTIVE}`, [t]);
 }
 
 /** The distributors this login may order for: its own firm, or (sales officer) the firms they are the sales contact of; a sales officer with none mapped can book for any distributor. */
@@ -252,4 +265,106 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
     date: new Date(r.date).toISOString(),
     lines: items.filter((i) => i.b === uid).map(({ b: _b, ...l }) => l),
   }));
+}
+
+
+// ---- editing the distributor's own details from the app ----
+
+/** App field -> Customer Masters field. Only these can be changed from the phone; code, name, channel, route, credit limit etc. stay with the office. */
+const EDITABLE: Record<string, string> = {
+  contactPerson: "contact_person", phone: "phone", email: "email", address: "address", area: "place", city: "city",
+  state: "state_state", pincode: "pincode", gstin: "gstin", pan: "pan", licenceNo: "license_no", lat: "latitude", lng: "longitude",
+};
+
+/** Checks what the app sent; returns the cleaned text for each master field, or the problems by app field name. */
+function cleanChanges(input: Record<string, unknown>): { ok: true; set: Record<string, string> } | { ok: false; fields: Record<string, string> } {
+  const set: Record<string, string> = {};
+  const fields: Record<string, string> = {};
+  for (const [key, col] of Object.entries(EDITABLE)) {
+    if (!(key in input)) continue;
+    const raw = input[key];
+    let v = raw === null || raw === undefined ? "" : String(raw).trim().replace(/\s+/g, " ");
+    if (key === "gstin" || key === "pan") v = v.toUpperCase();
+    const bad = (m: string) => (fields[key] = m);
+    if (v.length > 300) bad("That is too long.");
+    else if (key === "phone") {
+      v = v.replace(/\D/g, "").slice(-10);
+      if (!/^[6-9]\d{9}$/.test(v)) bad("Enter a valid 10-digit mobile number.");
+    } else if (key === "email" && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) bad("Enter a valid e-mail address.");
+    else if (key === "pincode" && v && !/^\d{6}$/.test(v)) bad("Pincode must be 6 digits.");
+    else if (key === "gstin" && v && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/.test(v)) bad("GSTIN should be 15 characters, like 22AAAAA0000A1Z5.");
+    else if (key === "pan" && v && !/^[A-Z]{5}\d{4}[A-Z]$/.test(v)) bad("PAN should be 10 characters, like ABCDE1234F.");
+    else if ((key === "lat" || key === "lng") && v && !(Number.isFinite(Number(v)) && Math.abs(Number(v)) <= (key === "lat" ? 90 : 180))) bad("Not a valid location.");
+    set[col] = v;
+  }
+  if (!Object.keys(set).length && !Object.keys(fields).length) fields.form = "Nothing to change.";
+  return Object.keys(fields).length ? { ok: false, fields } : { ok: true, set };
+}
+
+export type SaveFirmResult = { ok: true; firm: DistFirm; login: { kind: string; name: string; phone: string } } | { ok: false; error: string; fields?: Record<string, string> };
+
+/**
+ * Saves a distributor's details through the Customer Masters' own save (same checks, same history,
+ * same parent links), so a change made in the app lands exactly where the office would have put it.
+ * A distributor edits its own firm; a sales officer the firms he may order for.
+ */
+export async function saveFirmDetails(login: DistLogin, firmUid: string | undefined, input: Record<string, unknown>): Promise<SaveFirmResult> {
+  const firm = await firmAllowed(login, firmUid);
+  if (!firm) return { ok: false, error: "Choose the distributor first." };
+  const cleaned = cleanChanges(input);
+  if (!cleaned.ok) return { ok: false, error: Object.values(cleaned.fields)[0], fields: cleaned.fields };
+
+  const def = MASTERS.distribution;
+  const current = await loadRecord(def, firm.uid);
+  if (!current) return { ok: false, error: "This distributor no longer exists." };
+  // the whole row goes in so the screen's rules see every value; only the changed fields are written
+  const form = new FormData();
+  for (const [k, v] of Object.entries({ ...current, ...cleaned.set })) form.set(k, v ?? "");
+
+  const who = `${login.kind === "salesman" ? "Sales officer" : "Distributor"} ${login.name} (Gaia app)`;
+  const r = await saveRecord(def, firm.uid, form, who, { only: Object.keys(cleaned.set), from: "Gaia app" });
+  if (!r.ok) {
+    const back = Object.fromEntries(Object.entries(EDITABLE).map(([k, col]) => [col, k]));
+    const fields = Object.fromEntries(Object.entries(r.fieldErrors ?? {}).map(([c, m]) => [back[c] ?? c, m]));
+    return { ok: false, error: Object.values(fields)[0] ?? r.error, fields };
+  }
+  const fresh = await query<DistFirm>(`${FIRM_SELECT} where f.uid = $1`, [firm.uid]);
+  const me = await one<DistLogin>(`${LOGIN_SELECT} where l.id = $1`, [login.id]);
+  return { ok: true, firm: fresh[0], login: { kind: login.kind, name: me?.name ?? login.name, phone: me?.phone ?? login.phone } };
+}
+
+/**
+ * Gives every distributor (level 3 - active or not) and every active employee that has no app login one, on their
+ * registered mobile number with a random 6-digit PIN. The PINs are stored hashed, so the returned CSV is the only
+ * time they can be handed out. Numbers missing, invalid or already used are skipped and listed.
+ */
+export async function createMissingDistLogins(only?: DistLogin["kind"]): Promise<{ csv: string; created: number; skipped: string[] }> {
+  const everyone = await query<{ kind: "distributor" | "salesman"; uid: string; name: string; code: string | null; phone: string | null; status: string }>(
+    `select 'distributor' as kind, f.uid, f.name, f.firm_code as code, f.phone, case when f.active = 1 then 'Active' else 'Inactive' end as status
+       from fp_firm f join fp_channel c on c.uid = f.channel_uid
+       where c.level = 3 and not exists (select 1 from dist_login l where l.firm_uid = f.uid)
+     union all
+     select 'salesman', s.uid, trim(concat_ws(' ', s.first_name, s.last_name)), s.employee_code, s.phone, 'Active'
+       from fp_staff s where s.active = 1 and not exists (select 1 from dist_login l where l.staff_uid = s.uid)
+     order by 1, 3`,
+  );
+  const people = everyone.filter((p) => !only || p.kind === only);
+  const taken = new Set((await query<{ phone: string }>(`select phone from dist_login`)).map((r) => r.phone));
+  const rows: string[] = ["Type,Name,Code,Customer status,Mobile,PIN"];
+  const skipped: string[] = [];
+  let created = 0;
+  for (const p of people) {
+    const phone = (p.phone ?? "").replace(/\D/g, "").slice(-10);
+    if (!/^[6-9]\d{9}$/.test(phone)) { skipped.push(`${p.name} (${p.code ?? "-"}, ${p.status}): no valid mobile number`); continue; }
+    if (taken.has(phone)) { skipped.push(`${p.name} (${p.code ?? "-"}, ${p.status}): ${phone} is already used by another login`); continue; }
+    const pin = String(randomInt(100000, 1000000));
+    await query(
+      `insert into dist_login (kind, firm_uid, staff_uid, phone, pin_hash) values ($1, $2, $3, $4, $5)`,
+      [p.kind, p.kind === "distributor" ? p.uid : null, p.kind === "salesman" ? p.uid : null, phone, hashPin(pin)],
+    );
+    taken.add(phone);
+    created++;
+    rows.push([p.kind === "distributor" ? "Distributor" : "Sales officer", p.name, p.code ?? "", p.status, phone, pin].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+  }
+  return { csv: rows.join("\r\n"), created, skipped };
 }
