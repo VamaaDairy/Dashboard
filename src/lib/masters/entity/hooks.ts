@@ -1,7 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { FormError } from "./errors";
-import type { Values } from "./validate";
+import type { PhotoChanges, Values } from "./validate";
 
 /** Per-screen rules that don't fit a plain field list. Keyed by the screen's slug. */
 export interface HookContext {
@@ -127,6 +127,22 @@ const HOOKS: Record<string, Hooks> = {
     async after(ctx, v) {
       await ctx.client.query(`insert into fp_category (category) select $1::text where not exists (select 1 from fp_category where category = $1::text)`, [v.category]);
       await ctx.client.query(`insert into fp_sub_category (sub_category) select $1::text where not exists (select 1 from fp_sub_category where sub_category = $1::text)`, [v.sub_category]);
+
+      // photos: removed ones go, new ones are kept in the database after the existing ones
+      const ph = v.photos as PhotoChanges | undefined;
+      if (ph?.remove.length) await ctx.client.query(`delete from fp_product_image where product_uid = $1 and uid = any($2::uuid[])`, [ctx.id, ph.remove]);
+      if (ph?.add.length) {
+        const owner = await adminStaffId(ctx.client);
+        if (!owner) throw new FormError("There are no employees yet to own a photo - import the employees first.", "photos");
+        let next = (await scalar<number>(ctx.client, `select coalesce(max(imagesno), 0) + 1 from fp_product_image where product_uid = $1`, [ctx.id])) ?? 1;
+        for (const file of ph.add) {
+          const id = crypto.randomUUID();
+          await ctx.client.query(
+            `insert into fp_product_image (uid, image_url, data, mime, imagesno, product_uid, staff_uid) values ($1, $2, $3, $4, $5, $6, $7)`,
+            [id, `/api/shop/product-image/${id}`, Buffer.from(await file.arrayBuffer()), file.type, next++, ctx.id, owner],
+          );
+        }
+      }
     },
   },
 

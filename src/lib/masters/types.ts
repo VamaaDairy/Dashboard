@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
-export type Kind = "text" | "num" | "money" | "date" | "datetime" | "status" | "mono";
+export type Kind = "text" | "num" | "money" | "date" | "datetime" | "status" | "mono" | "image";
 
 export interface Col {
   key: string;
@@ -26,7 +26,7 @@ export interface Stat {
 
 // ---- editing
 
-export type FieldType = "text" | "textarea" | "number" | "date" | "select" | "ref" | "bool" | "suggest";
+export type FieldType = "text" | "textarea" | "number" | "date" | "select" | "ref" | "bool" | "suggest" | "photos";
 
 /** One input of the add / edit form; `name` is also the column it is stored in unless `virtual`. */
 export interface Field {
@@ -36,6 +36,7 @@ export interface Field {
   required?: boolean;
   /** `select`: the allowed values */
   options?: string[];
+  /** `photos`: pictures to add (files) and to remove (ids of the ones already held), read by the save hook */
   /** `ref`: SQL returning `value, label` rows to pick from */
   ref?: string;
   /** `suggest`: SQL returning `value` rows offered as hints (any text is still accepted) */

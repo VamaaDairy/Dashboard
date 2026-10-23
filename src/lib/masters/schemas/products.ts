@@ -7,10 +7,15 @@ import { active } from "./fragments";
 export const products: MasterDef = {
   slug: "fpproducts",
   title: "Product Master",
-  subtitle: "All SKUs with category, pack, MRP and dealer price.",
+  subtitle: "All SKUs with photo, category, pack, MRP and dealer price. Active products are the ones the Gaia app shows.",
   icon: Package,
   from: `fp_product p left join fp_tax_configuration t on t.uid = p.tax_configuration_uid`,
   cols: [
+    {
+      key: "photo", label: "Photo", kind: "image",
+      expr: `(select case when i.data is not null then '/api/shop/product-image/' || i.uid || '?v=' || extract(epoch from i.updated_at)::bigint else i.image_url end
+              from fp_product_image i where i.product_uid = p.uid order by i.imagesno nulls last limit 1)`,
+    },
     { key: "sku", label: "SKU", expr: "p.sku_code", kind: "mono" },
     { key: "name", label: "Product", expr: "p.sku_name" },
     { key: "category", label: "Category", expr: "p.category" },
@@ -57,6 +62,7 @@ export const products: MasterDef = {
       { name: "position", label: "Position", type: "number", help: "Order in product lists." },
       { name: "focus_product", label: "Focus product", type: "bool" },
       { name: "description", label: "Description", type: "textarea", wide: true },
+      { name: "photos", label: "Photos", type: "photos", virtual: true, wide: true, help: "Shown in the Gaia app, first photo first. JPG, PNG or WebP." },
     ],
   },
 };

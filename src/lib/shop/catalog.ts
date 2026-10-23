@@ -16,11 +16,17 @@ export interface ShopProduct {
   images: string[];
 }
 
+/** Where the app reaches this server: stored photos are given to it as full links. */
+const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy.in").replace(/\/+$/, "").replace(/'/g, "");
+
+/** A photo's link: our own copy when we hold the picture (versioned, so a new upload is not served from cache), else the imported link. */
+const photoUrl = `case when i.data is not null then '${PUBLIC_URL}/api/shop/product-image/' || i.uid || '?v=' || extract(epoch from i.updated_at)::bigint else i.image_url end`;
+
 const SELECT = `
   select p.sku_code as sku, p.sku_name as name, p.category, p.sub_category as "subCategory", p.sku_size as size,
          p.mrp, coalesce(si.price, p.mrp) as price, nullif(trim(p.description), '') as description,
-         (select i.image_url from fp_product_image i where i.product_uid = p.uid order by i.imagesno nulls last limit 1) as image,
-         coalesce((select array_agg(i.image_url order by i.imagesno nulls last) from fp_product_image i where i.product_uid = p.uid), '{}') as images
+         (select ${photoUrl} from fp_product_image i where i.product_uid = p.uid order by i.imagesno nulls last limit 1) as image,
+         coalesce((select array_agg(${photoUrl} order by i.imagesno nulls last) from fp_product_image i where i.product_uid = p.uid), '{}') as images
   from fp_product p
   left join shop_item si on si.sku_code = p.sku_code
   where p.active = 1 and p.mrp > 0 and coalesce(si.visible, true)`;
@@ -43,4 +49,10 @@ export async function pricesFor(skus: string[]): Promise<Map<string, ShopProduct
   if (!skus.length) return new Map();
   const rows = await query<ShopProduct>(`${SELECT} and p.sku_code = any($1)`, [skus]);
   return new Map(rows.map((r) => [r.sku, clean(r)]));
+}
+
+export async function productImage(uid: string): Promise<{ bytes: Buffer; mime: string } | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(uid)) return null;
+  const rows = await query<{ data: Buffer; mime: string | null }>(`select data, mime from fp_product_image where uid = $1 and data is not null`, [uid]);
+  return rows[0] ? { bytes: rows[0].data, mime: rows[0].mime ?? "image/jpeg" } : null;
 }

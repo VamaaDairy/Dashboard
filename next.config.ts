@@ -14,8 +14,8 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["103.171.96.225"],
   // the public domain reaches the app through a proxy that forwards host as localhost:3001,
   // which Next otherwise rejects as a cross-origin Server Action
-  // bodySizeLimit: shop banner posters (up to 3 MB) are uploaded through a Server Action
-  experimental: { serverActions: { allowedOrigins: ["production.vamadairy.in", "localhost:3001"], bodySizeLimit: "4mb" } },
+  // bodySizeLimit: shop banner posters (up to 3 MB) and product photos are uploaded through a Server Action
+  experimental: { serverActions: { allowedOrigins: ["production.vamadairy.in", "localhost:3001"], bodySizeLimit: "10mb" } },
 };
 
 export default nextConfig;

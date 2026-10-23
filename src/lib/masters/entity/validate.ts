@@ -12,6 +12,17 @@ export const validId = (entity: EntityDef, id: string) => (entity.idCol === "uid
 /** Fields that are saved: virtual ones are read by hooks, locked ones only when adding. */
 export const editableFields = (entity: EntityDef, isNew: boolean) => entity.fields.filter((f) => isNew || !f.lockOnEdit);
 
+export const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+export const PHOTO_MAX = 3 * 1024 * 1024;
+export interface PhotoChanges { add: File[]; remove: string[] }
+
+function photos(f: Field, form: FormData): { value: PhotoChanges; error?: string } {
+  const add = form.getAll(f.name).filter((x): x is File => x instanceof File && x.size > 0);
+  const remove = form.getAll(`${f.name}_remove`).map(String).filter((x) => UUID.test(x));
+  const bad = add.find((x) => !PHOTO_TYPES.has(x.type) || x.size > PHOTO_MAX);
+  return { value: { add, remove }, error: bad ? `${bad.name}: photos must be JPG, PNG or WebP, up to 3 MB each` : undefined };
+}
+
 function one(f: Field, raw: FormDataEntryValue | null): { value: unknown; error?: string } {
   if (f.type === "bool") return { value: raw === "on" || raw === "1" ? 1 : 0 };
 
@@ -45,7 +56,7 @@ export function readForm(entity: EntityDef, form: FormData, isNew: boolean): { v
   const values: Values = {};
   const errors: FieldErrors = {};
   for (const f of editableFields(entity, isNew)) {
-    const r = one(f, form.get(f.name));
+    const r = f.type === "photos" ? photos(f, form) : one(f, form.get(f.name));
     values[f.name] = r.value;
     if (r.error) errors[f.name] = r.error;
   }

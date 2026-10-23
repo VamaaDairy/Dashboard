@@ -20,6 +20,10 @@ const field =
 function Cell({ col, value }: { col: Col; value: unknown }) {
   const text = cellText(col.kind, value);
   if (!text) return <span className="text-muted-foreground/50">-</span>;
+  if (col.kind === "image") {
+    // eslint-disable-next-line @next/next/no-img-element -- small thumbnails of stored photos
+    return <img src={text} alt="" loading="lazy" className="h-10 w-10 rounded-md border border-border object-cover" />;
+  }
   if (col.kind === "status") {
     const on = text === "Active";
     return (

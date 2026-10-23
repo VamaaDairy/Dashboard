@@ -143,7 +143,7 @@ export async function catalogFor(login: DistLogin, firmUid: string | undefined):
 /** sku -> the distributor channel's dealer price, falling back to the product's DP. */
 async function dealerPrices(firmUid: string, skus?: string[]): Promise<Map<string, number>> {
   const rows = await query<{ sku: string; dp: number | null }>(
-    `select p.sku_code as sku, coalesce(cr.dealer_price, p.dp) as dp
+    `select p.sku_code as sku, case when cr.dealer_price > 0 then cr.dealer_price else p.dp end as dp
      from fp_product p
      left join lateral (
        select r.dealer_price from fp_channel_rate r
