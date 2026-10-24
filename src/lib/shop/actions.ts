@@ -15,7 +15,10 @@ export async function setStatusAction(id: number, status: string): Promise<{ ok:
   if (!me || !atLeast(levelFor(me, "shop"), "edit")) return { ok: false, error: "You do not have permission to change this." };
   if (!(status in STATUS_LABEL)) return { ok: false, error: "Unknown status." };
   const ok = await setOrderStatus(id, status);
-  if (ok) revalidatePath("/shop-orders");
+  if (ok) {
+    revalidatePath("/shop-orders");
+    revalidatePath("/app-orders", "layout");
+  }
   return ok ? { ok: true } : { ok: false, error: "That order no longer exists." };
 }
 
@@ -29,7 +32,10 @@ const NO = { ok: false as const, error: "You do not have permission to change th
 export async function assignRiderAction(orderId: number, riderId: number | null): Promise<{ ok: boolean; error?: string }> {
   if (!(await canEdit())) return NO;
   const ok = await assignRider(orderId, riderId);
-  if (ok) revalidatePath("/shop-orders");
+  if (ok) {
+    revalidatePath("/shop-orders");
+    revalidatePath("/app-orders", "layout");
+  }
   return ok ? { ok: true } : { ok: false, error: "This order can no longer be given to a rider." };
 }
 

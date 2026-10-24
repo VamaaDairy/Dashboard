@@ -211,16 +211,20 @@ export async function placeDistOrder(
     )).rows[0]?.uid ?? null;
 
     const now = new Date();
+    const notes = (input.notes ?? "").trim().slice(0, 300);
     const ins = await c.query<{ uid: string }>(
       `insert into fp_booking_order
          (order_uid, order_id, order_type, booking_time, booking_date, total_item, week_of_month, total_quantity,
-          total_cost, dealer_cost, status, current_status, reference, from_firm_uid, to_firm_uid, staff_uid)
-       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9, $10, $11, $12, $13)
+          total_cost, dealer_cost, status, current_status, reference, from_firm_uid, to_firm_uid, staff_uid,
+          app_kind, app_login_id, app_notes)
+       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9, $10, $11, $12, $13, $14, $15, $16)
        returning uid`,
       [
         n, type, now, now.toISOString().slice(0, 10), lines.length, Math.ceil(now.getDate() / 7), totalQty,
-        total, status, (input.notes ?? "").trim().slice(0, 300) || `Gaia app (${login.kind}: ${login.name})`,
+        total, status, notes || `Gaia app (${login.kind}: ${login.name})`,
         firm.uid, to, login.kind === "salesman" ? login.staffUid : null,
+        // marks it as an app order for the dashboard's App orders section
+        login.kind, login.id, notes || null,
       ],
     );
     const orderUid = ins.rows[0].uid;

@@ -50,6 +50,7 @@ export const RESOURCES: Resource[] = [
   { key: "orders", label: "Orders - overview", group: "Orders", path: "/orders" },
   { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
   { key: "shop", label: "Online shop orders", group: "Everyday", path: "/shop-orders" },
+  { key: "apporders", label: "App orders (D2C, retailers, distributors)", group: "Everyday", path: "/app-orders" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
   { key: "grn", label: "POD", group: "Everyday", path: "/pod" },
   // every Orders screen is its own resource

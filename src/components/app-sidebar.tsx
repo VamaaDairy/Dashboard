@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Database, Droplets, FileClock, Fuel, Home, LogOut,
-  MapPinned, MessageCircle, Package, PackageCheck, Store, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
+  MapPinned, MessageCircle, Package, PackageCheck, Smartphone, Store, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -106,6 +106,15 @@ const DAILY: NavItem[] = [
       { href: "/whatsapp/orders", key: "whatsapp", label: "Orders" },
       { href: "/whatsapp/products", key: "whatsapp", label: "Catalog & setup" },
       { href: "/whatsapp/reviews", key: "whatsapp", label: "Reviews" },
+    ],
+  },
+  {
+    href: "/app-orders", key: "apporders", label: "App orders", icon: Smartphone,
+    children: [
+      { href: "/app-orders", key: "apporders", label: "Overview", exact: true },
+      { href: "/app-orders/d2c", key: "apporders", label: "D2C" },
+      { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
+      { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },
     ],
   },
   {

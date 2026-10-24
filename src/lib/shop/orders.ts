@@ -112,9 +112,23 @@ const WITH_ITEMS = `
 export const getOrderByKey = (key: string) =>
   /^[0-9a-f]{32}$/.test(key) ? one<ShopOrder>(`${WITH_ITEMS} where o.access_key = $1`, [key]) : Promise.resolve(null);
 
-export const listOrders = (status?: string, kind?: "regular" | "subscription") => {
-  const where = [status ? "o.status = $1" : "", kind === "subscription" ? "o.subscription_day is not null" : kind === "regular" ? "o.subscription_day is null" : ""].filter(Boolean);
-  return query<ShopOrder>(`${WITH_ITEMS} ${where.length ? `where ${where.join(" and ")}` : ""} order by o.created_at desc limit 200`, status ? [status] : []);
+export const getOrderById = (id: number) =>
+  Number.isInteger(id) && id > 0 ? one<ShopOrder>(`${WITH_ITEMS} where o.id = $1`, [id]) : Promise.resolve(null);
+
+/** [q] matches the order number, customer name or phone, or the address. */
+export const listOrders = (status?: string, kind?: "regular" | "subscription", q?: string) => {
+  const params: unknown[] = [];
+  const where = [kind === "subscription" ? "o.subscription_day is not null" : kind === "regular" ? "o.subscription_day is null" : ""].filter(Boolean);
+  if (status) {
+    params.push(status);
+    where.push(`o.status = $${params.length}`);
+  }
+  if (q?.trim()) {
+    params.push(`%${q.trim()}%`);
+    const p = `$${params.length}`;
+    where.push(`(o.order_no ilike ${p} or o.name ilike ${p} or o.phone ilike ${p} or o.address ilike ${p})`);
+  }
+  return query<ShopOrder>(`${WITH_ITEMS} ${where.length ? `where ${where.join(" and ")}` : ""} order by o.created_at desc limit 200`, params);
 };
 
 export async function setOrderStatus(id: number, status: string): Promise<boolean> {
