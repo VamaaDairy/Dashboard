@@ -8,10 +8,10 @@ import { Panel, Pill } from "@/components/cn/ui";
 import { OrderDecision } from "@/components/masters/OrderDecision";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { getTradeOrder, listTradeOrders, summaries, tradeStatuses, type TradeKind } from "@/lib/app-orders";
+import { getTradeOrder, listTradeOrders, tradeStatuses, type TradeKind } from "@/lib/app-orders";
 import { rupees } from "@/lib/shop/pricing";
 import { decideAppOrderAction } from "./actions";
-import { Field, Filters, KindTabs, TradeStatus, placedVia, qty, when } from "./parts";
+import { Field, Filters, TradeStatus, placedVia, qty, when } from "./parts";
 
 /** The Retailers and Distributors pages are the same apart from who the buyer is. */
 
@@ -32,14 +32,13 @@ async function canDecide() {
 
 export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; searchParams: Promise<{ status?: string; q?: string }> }) {
   const { status, q } = await searchParams;
-  const [orders, statuses, sum, decide] = await Promise.all([listTradeOrders(kind, { status, q }), tradeStatuses(kind), summaries(), canDecide()]);
+  const [orders, statuses, decide] = await Promise.all([listTradeOrders(kind, { status, q }), tradeStatuses(kind), canDecide()]);
   const t = TITLE[kind];
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="w-full space-y-4">
         <PageHeader icon={Smartphone} title={t.title} subtitle={t.subtitle} />
-        <KindTabs active={kind} counts={{ d2c: sum.d2c.open, retailers: sum.retailers.open, distributors: sum.distributors.open }} />
         <Filters
           base={`/app-orders/${kind}`}
           statuses={statuses.map((s) => ({ value: s.status, label: s.status, n: s.n }))}

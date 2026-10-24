@@ -111,7 +111,6 @@ const DAILY: NavItem[] = [
   {
     href: "/app-orders", key: "apporders", label: "App orders", icon: Smartphone,
     children: [
-      { href: "/app-orders", key: "apporders", label: "Overview", exact: true },
       { href: "/app-orders/d2c", key: "apporders", label: "D2C" },
       { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
       { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },

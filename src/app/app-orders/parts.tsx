@@ -20,30 +20,6 @@ export const dateOnly = (d: Date | string) =>
 
 export const qty = (n: number) => (Number.isInteger(Number(n)) ? String(Number(n)) : Number(n).toFixed(2));
 
-/** Overview / D2C / Retailers / Distributors, as tabs under the page header. */
-export function KindTabs({ active, counts }: { active: KindKey | "overview"; counts?: Partial<Record<KindKey, number>> }) {
-  const tabs = [{ key: "overview", href: "/app-orders", label: "Overview" }, ...KINDS];
-  return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-border">
-      {tabs.map((t) => (
-        <Link
-          key={t.key}
-          href={t.href}
-          className={cn(
-            "-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-sm",
-            active === t.key ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {t.label}
-          {counts && t.key !== "overview" && counts[t.key as KindKey] ? (
-            <span className="rounded-full bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">{counts[t.key as KindKey]}</span>
-          ) : null}
-        </Link>
-      ))}
-    </nav>
-  );
-}
-
 export const D2cStatus = ({ status }: { status: string }) => <Pill tone="neutral">{STATUS_LABEL[status] ?? status}</Pill>;
 
 export function TradeStatus({ status }: { status: string }) {

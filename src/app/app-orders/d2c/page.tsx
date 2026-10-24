@@ -9,8 +9,7 @@ import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { listOrders } from "@/lib/shop/orders";
 import { rupees, STATUS_LABEL } from "@/lib/shop/pricing";
-import { summaries } from "@/lib/app-orders";
-import { D2cStatus, Filters, KindTabs, when } from "../parts";
+import { D2cStatus, Filters, when } from "../parts";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +17,9 @@ export const dynamic = "force-dynamic";
 export default async function D2cOrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
   const { status: st, q } = await searchParams;
   const status = st && st in STATUS_LABEL ? st : undefined;
-  const [orders, riders, sum, me] = await Promise.all([
+  const [orders, riders, me] = await Promise.all([
     listOrders(status, undefined, q),
     query<{ id: number; name: string }>(`select id, name from shop_rider where active order by name`),
-    summaries(),
     userFromToken((await cookies()).get("session")?.value),
   ]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
@@ -30,7 +28,6 @@ export default async function D2cOrdersPage({ searchParams }: { searchParams: Pr
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="w-full space-y-4">
         <PageHeader icon={Smartphone} title="D2C orders" subtitle="Home-delivery orders from customers in the Gaia app." />
-        <KindTabs active="d2c" counts={{ d2c: sum.d2c.open, retailers: sum.retailers.open, distributors: sum.distributors.open }} />
         <Filters
           base="/app-orders/d2c"
           statuses={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
