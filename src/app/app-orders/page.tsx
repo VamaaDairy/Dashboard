@@ -34,7 +34,7 @@ export default async function AppOrdersPage() {
               >
                 <div className="grid grid-cols-3 gap-3">
                   <Stat label="Today" value={s.today} />
-                  <Stat label={k.key === "d2c" ? "In progress" : "Waiting"} value={<span className={s.open ? "text-amber-700" : undefined}>{s.open}</span>} sub={k.key === "d2c" ? "not delivered yet" : "to confirm"} />
+                  <Stat label={k.key === "d2c" ? "In progress" : "Waiting"} value={s.open} sub={k.key === "d2c" ? "not delivered yet" : "to confirm"} />
                   <Stat label="This month" value={s.monthCount} sub={rupees(s.monthValue)} />
                 </div>
               </Panel>

@@ -107,7 +107,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
           title={`Order #${o.orderId}`}
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
-              <Pill tone="brand" dot={false}>{t.one}</Pill>
+              <Pill tone="neutral" dot={false}>{t.one}</Pill>
               <TradeStatus status={o.status} />
               <span className="text-[12px]">Placed {when(o.placedAt)} · {placedVia(o)}</span>
             </span>
@@ -154,7 +154,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                   </tbody>
                   <tfoot className="border-t border-border text-[13px]">
                     <tr><td colSpan={4} className="px-4 pt-3 text-right text-muted-foreground">Value at MRP</td><td className="num px-4 pt-3 text-right">{rupees(mrpValue)}</td></tr>
-                    <tr><td colSpan={4} className="px-4 py-1 text-right text-muted-foreground">{t.one} margin</td><td className="num px-4 py-1 text-right text-emerald-700">{rupees(margin)}</td></tr>
+                    <tr><td colSpan={4} className="px-4 py-1 text-right text-muted-foreground">{t.one} margin</td><td className="num px-4 py-1 text-right">{rupees(margin)}</td></tr>
                     <tr className="font-semibold"><td colSpan={4} className="px-4 pb-3 text-right">Order value</td><td className="num px-4 pb-3 text-right">{rupees(o.total)}</td></tr>
                   </tfoot>
                 </table>

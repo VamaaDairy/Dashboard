@@ -4,8 +4,8 @@ import { one, query } from "@/lib/db";
 /**
  * Every order placed from the Gaia app, in three kinds:
  *  - D2C: home-delivery orders from customers (shop_order),
- *  - Retailers and Distributors: orders a retailer, distributor or sales officer placed from the app,
- *    which go into the portal's order book (fp_booking_order, marked by app_kind - db/063).
+ *  - Retailers and Distributors: orders in the portal's order book (fp_booking_order). All primary orders are
+ *    distributors'; the ones a retailer, distributor or sales officer placed from the app are marked by app_kind (db/063).
  * A trade order is a retailer's when the buyer is in the retail (RT) channel, else a distributor's.
  */
 
@@ -26,7 +26,9 @@ const TRADE_FROM = `fp_booking_order b
   left join dist_login dl on dl.id = b.app_login_id`;
 
 const IS_RETAIL = `(b.app_kind = 'retailer' or ch.channel_code = 'RT')`;
-const tradeWhere = (kind: TradeKind) => `b.app_kind is not null and ${kind === "retailers" ? IS_RETAIL : `not ${IS_RETAIL}`}`;
+// every primary order is a distributor's (whether placed from the app or the portal); retailer orders are the app's
+const IS_TRADE = `(b.app_kind is not null or b.order_type = 'PRIMARY')`;
+const tradeWhere = (kind: TradeKind) => `${IS_TRADE} and ${kind === "retailers" ? IS_RETAIL : `not ${IS_RETAIL}`}`;
 const person = (a: string) => `nullif(trim(${a}.first_name || ' ' || coalesce(${a}.last_name, '')), '')`;
 
 export interface TradeOrderRow {
@@ -38,7 +40,7 @@ export interface TradeOrderRow {
   items: number;
   qty: number;
   total: number;
-  appKind: "distributor" | "retailer" | "salesman";
+  appKind: "distributor" | "retailer" | "salesman" | null;
   notes: string | null;
   buyer: string;
   buyerCode: string;
@@ -127,7 +129,7 @@ export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
               'servedBy', par.name, 'salesContact', ${person("sc")}, 'salesContactPhone', sc.phone
             ) as "buyerProfile",
             sup.firm_code as "supplierCode", sup.city as "supplierCity"
-     from ${TRADE_FROM} where b.uid = $1 and b.app_kind is not null`,
+     from ${TRADE_FROM} where b.uid = $1 and ${IS_TRADE}`,
     [uid],
   );
   if (!o) return null;
@@ -167,7 +169,7 @@ export async function summaries(): Promise<Record<"d2c" | TradeKind, KindSummary
             count(*) filter (where lower(b.status) = 'pending')::int as open,
             count(*) filter (where date_trunc('month', b.booking_time at time zone 'Asia/Kolkata') = date_trunc('month', now() at time zone 'Asia/Kolkata') and lower(b.status) <> 'cancelled')::int as "monthCount",
             coalesce(sum(b.total_cost) filter (where date_trunc('month', b.booking_time at time zone 'Asia/Kolkata') = date_trunc('month', now() at time zone 'Asia/Kolkata') and lower(b.status) <> 'cancelled'), 0)::float as "monthValue"
-     from ${TRADE_FROM} where b.app_kind is not null group by 1`,
+     from ${TRADE_FROM} where ${IS_TRADE} group by 1`,
   );
   const zero: KindSummary = { today: 0, open: 0, monthCount: 0, monthValue: 0 };
   const by = Object.fromEntries(trade.map(({ kind, ...s }) => [kind, s])) as Partial<Record<TradeKind, KindSummary>>;
@@ -181,7 +183,7 @@ export async function latestOrders(limit = 12): Promise<Array<{ kind: "d2c" | Tr
       from shop_order o order by o.created_at desc limit $1)
      union all
      (select case when ${IS_RETAIL} then 'retailers' else 'distributors' end, b.uid::text, b.order_id::text, f.name, b.booking_time, b.status, b.total_cost
-      from ${TRADE_FROM} where b.app_kind is not null order by b.booking_time desc limit $1)
+      from ${TRADE_FROM} where ${IS_TRADE} order by b.booking_time desc limit $1)
      order by "placedAt" desc limit $1`,
     [limit],
   );

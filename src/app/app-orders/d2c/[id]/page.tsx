@@ -39,9 +39,9 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
           title={`Order ${o.order_no}`}
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
-              <Pill tone="brand" dot={false}>D2C</Pill>
+              <Pill tone="neutral" dot={false}>D2C</Pill>
               <D2cStatus status={o.status} />
-              {o.subscription_day ? <Pill tone="info" dot={false}>Subscription · {dateOnly(o.subscription_day)}</Pill> : null}
+              {o.subscription_day ? <Pill tone="neutral" dot={false}>Subscription · {dateOnly(o.subscription_day)}</Pill> : null}
               <span className="text-[12px]">Placed {when(o.created_at)}</span>
             </span>
           }
@@ -89,7 +89,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                 <Field label="Deliver to">{o.name}</Field>
                 <Field label="Address">{o.address}{o.pincode ? ` - ${o.pincode}` : ""}</Field>
                 <Field label="Map">
-                  {map ? <a href={map} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><MapPin className="size-3.5" /> Open pin in Google Maps</a> : <span className="text-amber-700">No map pin</span>}
+                  {map ? <a href={map} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><MapPin className="size-3.5" /> Open pin in Google Maps</a> : <span className="text-muted-foreground">No map pin</span>}
                 </Field>
                 <Field label="Note">{o.notes}</Field>
                 <Field label="Rider">{o.rider ? `${o.rider.name} · ${o.rider.phone}` : null}</Field>

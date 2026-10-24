@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { Pill, type Tone } from "@/components/cn/ui";
+import { Pill } from "@/components/cn/ui";
 import { cn } from "@/lib/utils";
 import { STATUS_LABEL } from "@/lib/shop/pricing";
 
@@ -36,7 +36,7 @@ export function KindTabs({ active, counts }: { active: KindKey | "overview"; cou
         >
           {t.label}
           {counts && t.key !== "overview" && counts[t.key as KindKey] ? (
-            <span className="rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700">{counts[t.key as KindKey]}</span>
+            <span className="rounded-full bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">{counts[t.key as KindKey]}</span>
           ) : null}
         </Link>
       ))}
@@ -44,17 +44,15 @@ export function KindTabs({ active, counts }: { active: KindKey | "overview"; cou
   );
 }
 
-const D2C_TONE: Record<string, Tone> = { placed: "warning", confirmed: "info", out_for_delivery: "brand", delivered: "success", cancelled: "danger" };
-export const D2cStatus = ({ status }: { status: string }) => <Pill tone={D2C_TONE[status] ?? "neutral"}>{STATUS_LABEL[status] ?? status}</Pill>;
+export const D2cStatus = ({ status }: { status: string }) => <Pill tone="neutral">{STATUS_LABEL[status] ?? status}</Pill>;
 
 export function TradeStatus({ status }: { status: string }) {
-  const s = status.toLowerCase();
-  const tone: Tone = s === "pending" ? "warning" : s.startsWith("cancel") || s.startsWith("reject") ? "danger" : s.startsWith("confirm") || s.startsWith("accept") ? "success" : s.includes("invoice") || s.includes("dispatch") || s.includes("deliver") ? "info" : "neutral";
-  return <Pill tone={tone}>{status}</Pill>;
+  return <Pill tone="neutral">{status}</Pill>;
 }
 
 /** "Retailer app" / "Distributor app" / "Sales officer <name>": how a trade order came in. */
-export function placedVia(o: { appKind: string; bookedBy: string | null }) {
+export function placedVia(o: { appKind: string | null; bookedBy: string | null }) {
+  if (!o.appKind) return "Portal";
   if (o.appKind === "salesman") return `Sales officer${o.bookedBy ? ` ${o.bookedBy}` : ""}`;
   return o.appKind === "retailer" ? "Retailer app" : "Distributor app";
 }

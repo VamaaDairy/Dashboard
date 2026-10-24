@@ -53,13 +53,13 @@ export default async function D2cOrdersPage({ searchParams }: { searchParams: Pr
                 <tr key={o.id} className="border-t border-border align-top hover:bg-muted/40">
                   <td className="whitespace-nowrap px-3 py-2">
                     <Link href={`/app-orders/d2c/${o.id}`} className="font-mono text-xs font-semibold text-primary hover:underline">{o.order_no}</Link>
-                    {o.subscription_day ? <div className="mt-0.5 w-fit rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">SUBSCRIPTION</div> : null}
+                    {o.subscription_day ? <div className="mt-0.5 w-fit rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">SUBSCRIPTION</div> : null}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{when(o.created_at)}</td>
                   <td className="px-3 py-2"><div className="font-medium">{o.name}</div><div className="font-mono text-xs text-muted-foreground">{o.phone}</div></td>
                   <td className="min-w-56 max-w-80 px-3 py-2 text-muted-foreground">
                     <div className="line-clamp-2">{o.address}{o.pincode ? ` - ${o.pincode}` : ""}</div>
-                    {o.lat === null ? <div className="text-xs text-amber-600">No map pin</div> : null}
+                    {o.lat === null ? <div className="text-xs text-muted-foreground">No map pin</div> : null}
                   </td>
                   <td className="min-w-48 px-3 py-2">{o.items.map((i) => `${i.name} × ${i.qty}`).join(", ")}</td>
                   <td className="num whitespace-nowrap px-3 py-2 text-right font-medium">{rupees(o.total)}</td>
