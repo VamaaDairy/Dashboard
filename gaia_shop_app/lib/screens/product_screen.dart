@@ -128,7 +128,8 @@ class _GalleryState extends ConsumerState<_Gallery> {
         );
 
     return Container(
-      color: Brand.surface,
+      // white, like the pack shots, with a hairline where the details start
+      decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Brand.line))),
       padding: EdgeInsets.only(top: top),
       child: Stack(
         children: [

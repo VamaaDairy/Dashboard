@@ -12,7 +12,7 @@ import 'theme.dart';
 
 /// A product photo, or a soft placeholder when there isn't one (or it can't load).
 class ProductImage extends StatelessWidget {
-  const ProductImage({super.key, required this.url, this.size, this.radius = 16, this.circle = false, this.fit = BoxFit.cover});
+  const ProductImage({super.key, required this.url, this.size, this.radius = 16, this.circle = false, this.fit = BoxFit.cover, this.outlined = false});
 
   final String? url;
   final double? size;
@@ -20,9 +20,13 @@ class ProductImage extends StatelessWidget {
   final bool circle;
   final BoxFit fit;
 
+  /// A hairline round a small thumbnail, so a white pack shot still reads as a picture on a white page.
+  final bool outlined;
+
   Widget _placeholder() => Container(
+        // white, like the pack shots themselves
         decoration: const BoxDecoration(
-          color: Brand.surface,
+          color: Colors.white,
         ),
         alignment: Alignment.center,
         // the logo stays small whatever the box: half a small box, at most 110 px wide
@@ -46,12 +50,19 @@ class ProductImage extends StatelessWidget {
               fit: fit,
               memCacheWidth: px,
               fadeInDuration: const Duration(milliseconds: 150),
-              placeholder: (_, __) => Container(color: Brand.surface),
+              placeholder: (_, __) => Container(color: Colors.white),
               errorWidget: (_, __, ___) => _placeholder(),
             );
           });
-    final sized = SizedBox(width: size, height: size, child: img);
-    return circle ? ClipOval(child: sized) : ClipRRect(borderRadius: BorderRadius.circular(radius), child: sized);
+    final sized = SizedBox(width: size, height: size, child: ColoredBox(color: Colors.white, child: img));
+    if (circle) return ClipOval(child: sized);
+    final clipped = ClipRRect(borderRadius: BorderRadius.circular(radius), child: sized);
+    if (!outlined) return clipped;
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(radius)),
+      child: clipped,
+    );
   }
 }
 
@@ -261,7 +272,7 @@ class ProductTile extends ConsumerWidget {
                   children: [
                     Positioned.fill(
                       child: Container(
-                        decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
                         padding: const EdgeInsets.fromLTRB(10, 10, 10, 18),
                         child: Hero(tag: 'p-${p.sku}', child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
                       ),

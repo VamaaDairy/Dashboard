@@ -48,7 +48,7 @@ Future<void> pickProductToSubscribe(BuildContext context, WidgetRef ref) async {
           for (final p in products)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: ProductImage(url: p.image, size: 48, radius: 10, fit: BoxFit.contain),
+              leading: ProductImage(url: p.image, size: 48, radius: 10, fit: BoxFit.contain, outlined: true),
               title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(rupees(p.price)),
               trailing: const Icon(Icons.chevron_right),
@@ -137,7 +137,7 @@ class _DaySheetState extends ConsumerState<_DaySheet> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(children: [
-                ProductImage(url: i.image, size: 46, radius: 10, fit: BoxFit.contain),
+                ProductImage(url: i.image, size: 46, radius: 10, fit: BoxFit.contain, outlined: true),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -312,7 +312,7 @@ class _QuickCalendarState extends ConsumerState<QuickCalendar> {
                 padding: const EdgeInsets.all(12),
                 child: Row(children: [
                   for (final i in sel.items.where((i) => i.qty > 0).take(3))
-                    Padding(padding: const EdgeInsets.only(right: 6), child: ProductImage(url: i.image, size: 38, radius: 8, fit: BoxFit.contain)),
+                    Padding(padding: const EdgeInsets.only(right: 6), child: ProductImage(url: i.image, size: 38, radius: 8, fit: BoxFit.contain, outlined: true)),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -538,7 +538,7 @@ class _MyCalendarScreenState extends ConsumerState<MyCalendarScreen> {
                       width: 56,
                       height: 56,
                       padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(12)),
+                      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(12)),
                       child: ProductImage(url: s.image, radius: 0, fit: BoxFit.contain),
                     ),
                     const SizedBox(width: 14),

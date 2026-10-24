@@ -57,7 +57,7 @@ class CartScreen extends ConsumerWidget {
                     decoration: BoxDecoration(border: i == cart.lines.length - 1 ? null : const Border(bottom: BorderSide(color: Brand.line))),
                     child: Row(
                       children: [
-                        ProductImage(url: l.image, size: 56, radius: 12),
+                        ProductImage(url: l.image, size: 56, radius: 12, fit: BoxFit.contain, outlined: true),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(

@@ -253,7 +253,7 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
                 child: Row(children: [
-                  SizedBox(width: 44, height: 44, child: ProductImage(url: i.image, radius: 10, fit: BoxFit.contain)),
+                  SizedBox(width: 44, height: 44, child: ProductImage(url: i.image, radius: 10, fit: BoxFit.contain, outlined: true)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

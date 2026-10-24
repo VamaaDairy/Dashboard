@@ -246,7 +246,7 @@ class _RiderOrderScreenState extends ConsumerState<RiderOrderScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(children: [
-                        ProductImage(url: i.image, size: 44, radius: 10),
+                        ProductImage(url: i.image, size: 44, radius: 10, fit: BoxFit.contain, outlined: true),
                         const SizedBox(width: 12),
                         Expanded(child: Text(i.name, style: const TextStyle(fontWeight: FontWeight.w600))),
                         Container(

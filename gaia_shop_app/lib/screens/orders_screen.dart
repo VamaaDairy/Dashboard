@@ -127,7 +127,7 @@ class _OrderCard extends StatelessWidget {
               width: 48,
               height: 48,
               padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(12)),
               child: ProductImage(url: it.image, radius: 0, fit: BoxFit.contain),
             ),
           if (o.items.length > 3)

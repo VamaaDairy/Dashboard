@@ -236,7 +236,7 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
                 width: 76,
                 height: 76,
                 padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(14)),
                 child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain),
               ),
               const SizedBox(width: 14),

@@ -249,7 +249,7 @@ class _DistOrderCard extends ConsumerWidget {
                 width: 40,
                 height: 40,
                 padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(10)),
                 child: ProductImage(url: menu.bySku(l.sku)?.image, radius: 0, fit: BoxFit.contain),
               ),
               const SizedBox(width: 12),
@@ -352,7 +352,7 @@ class DistOrderScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
               child: Row(children: [
-                SizedBox(width: 44, height: 44, child: ProductImage(url: menu.bySku(l.sku)?.image, radius: 10, fit: BoxFit.contain)),
+                SizedBox(width: 44, height: 44, child: ProductImage(url: menu.bySku(l.sku)?.image, radius: 10, fit: BoxFit.contain, outlined: true)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
