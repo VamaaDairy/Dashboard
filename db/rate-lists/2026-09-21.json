@@ -5,7 +5,7 @@
  "products": [
   {
    "sku": "1003",
-   "name": "Gaia Doodh Toned 500 ML",
+   "name": "Gaia Toned Milk 500 ml",
    "mrp": 30.0,
    "retailer": 28.4,
    "distributor": 27.75,
@@ -49,11 +49,12 @@
     "Chartered Hotels": 27.5,
     "Jalaram Marketing": 27.75,
     "Ashapura Kitchen Novelty": 27.75
-   }
+   },
+   "sheetName": "Gaia Doodh Toned 500 ML"
   },
   {
    "sku": "999",
-   "name": "Gaia Cow Milk 500ML",
+   "name": "Gaia Cow Milk 500 ml",
    "mrp": 30.0,
    "retailer": 28.4,
    "distributor": 27.75,
@@ -97,7 +98,8 @@
     "Chartered Hotels": 27.75,
     "Jalaram Marketing": 27.75,
     "Ashapura Kitchen Novelty": 27.75
-   }
+   },
+   "sheetName": "Gaia Cow Milk 500ML"
   },
   {
    "sku": "1044",
@@ -145,11 +147,12 @@
     "Chartered Hotels": 14.75,
     "Jalaram Marketing": 14.75,
     "Ashapura Kitchen Novelty": 14.75
-   }
+   },
+   "sheetName": "Gaia Mishti Doi 80g"
   },
   {
    "sku": "1056",
-   "name": "Gaia Dahi Cup 200g",
+   "name": "Gaia Dahi cup 200 Gms Box 6Pc",
    "mrp": 25.0,
    "retailer": 22.0,
    "distributor": 21.0,
@@ -201,11 +204,12 @@
     "1 Dollarmoffee": 21.0,
     "Jalaram Marketing": 21.0,
     "Ashapura Kitchen Novelty": 21.0
-   }
+   },
+   "sheetName": "Gaia Dahi Cup 200g"
   },
   {
    "sku": "1012",
-   "name": "Gaia Dahi Pouch 200g",
+   "name": "GAIA DAHI POUCH 200 G",
    "mrp": 20.0,
    "retailer": 18.0,
    "distributor": 17.25,
@@ -257,11 +261,12 @@
     "1 Dollarmoffee": 17.25,
     "Jalaram Marketing": 17.25,
     "Ashapura Kitchen Novelty": 17.25
-   }
+   },
+   "sheetName": "Gaia Dahi Pouch 200g"
   },
   {
    "sku": "1013",
-   "name": "Gaia Dahi Pouch 400g",
+   "name": "GAIA DAHI POUCH 400 G",
    "mrp": 35.0,
    "retailer": 30.5,
    "distributor": 29.0,
@@ -313,11 +318,12 @@
     "1 Dollarmoffee": 29.0,
     "Jalaram Marketing": 29.0,
     "Ashapura Kitchen Novelty": 29.0
-   }
+   },
+   "sheetName": "Gaia Dahi Pouch 400g"
   },
   {
    "sku": "1014",
-   "name": "Gaia Dahi Pouch 1 Kg",
+   "name": "GAIA DAHI POUCH 1 KG",
    "mrp": 85.0,
    "retailer": 75.0,
    "distributor": 72.0,
@@ -369,11 +375,12 @@
     "1 Dollarmoffee": 72.0,
     "Jalaram Marketing": 72.0,
     "Ashapura Kitchen Novelty": 72.0
-   }
+   },
+   "sheetName": "Gaia Dahi Pouch 1 Kg"
   },
   {
    "sku": "1015",
-   "name": "Gaia Dahi Pouch 5 Kg",
+   "name": "GAIA DAHI POUCH 5 KG",
    "mrp": 380.0,
    "retailer": 350.0,
    "distributor": 335.0,
@@ -412,11 +419,12 @@
     "Chartered Hotels": 350.0,
     "Jalaram Marketing": 335.0,
     "Ashapura Kitchen Novelty": 335.0
-   }
+   },
+   "sheetName": "Gaia Dahi Pouch 5 Kg"
   },
   {
    "sku": "1047",
-   "name": "Gaia Dahi Bucket 5 Kg",
+   "name": "GAIA DAHI BUCKET 5 KG",
    "mrp": 430.0,
    "retailer": 390.0,
    "distributor": 375.0,
@@ -455,11 +463,12 @@
     "Chartered Hotels": 390.0,
     "Jalaram Marketing": 375.0,
     "Ashapura Kitchen Novelty": 375.0
-   }
+   },
+   "sheetName": "Gaia Dahi Bucket 5 Kg"
   },
   {
    "sku": "1016",
-   "name": "Gaia Dahi Bucket 15 Kg",
+   "name": "GAIA DAHI BUCKET 15 KG",
    "mrp": 1200.0,
    "retailer": 1095.0,
    "distributor": 1050.0,
@@ -506,11 +515,12 @@
     "1 Dollarmoffee": 1050.0,
     "Jalaram Marketing": 1050.0,
     "Ashapura Kitchen Novelty": 1050.0
-   }
+   },
+   "sheetName": "Gaia Dahi Bucket 15 Kg"
   },
   {
    "sku": "1020",
-   "name": "Gaia Kadhi Dahi Pouch 200g",
+   "name": "GAIA KADHI DAHI POUCH 200 G",
    "mrp": 16.0,
    "retailer": 13.95,
    "distributor": 12.95,
@@ -562,11 +572,12 @@
     "1 Dollarmoffee": 12.95,
     "Jalaram Marketing": 12.95,
     "Ashapura Kitchen Novelty": 12.95
-   }
+   },
+   "sheetName": "Gaia Kadhi Dahi Pouch 200g"
   },
   {
    "sku": "1019",
-   "name": "Gaia Kadhi Dahi Pouch 1 Kg",
+   "name": "GAIA KADHI DAHI POUCH 1 KG",
    "mrp": 60.0,
    "retailer": 53.0,
    "distributor": 51.0,
@@ -610,11 +621,12 @@
     "Chartered Hotels": 60.0,
     "Jalaram Marketing": 51.0,
     "Ashapura Kitchen Novelty": 51.0
-   }
+   },
+   "sheetName": "Gaia Kadhi Dahi Pouch 1 Kg"
   },
   {
    "sku": "1021",
-   "name": "Gaia Kadhi Dahi Pouch 5 Kg",
+   "name": "GAIA KADHI DAHI POUCH 5 KG",
    "mrp": 290.0,
    "retailer": 260.0,
    "distributor": 250.0,
@@ -661,11 +673,12 @@
     "1 Dollarmoffee": 250.0,
     "Jalaram Marketing": 250.0,
     "Ashapura Kitchen Novelty": 250.0
-   }
+   },
+   "sheetName": "Gaia Kadhi Dahi Pouch 5 Kg"
   },
   {
    "sku": "1022",
-   "name": "Gaia Kadhi Dahi Bucket 15 Kg",
+   "name": "GAIA KADHI DAHI BUCKET 15 KG",
    "mrp": 1050.0,
    "retailer": 920.0,
    "distributor": 875.0,
@@ -704,11 +717,12 @@
     "Chartered Hotels": 920.0,
     "Jalaram Marketing": 875.0,
     "Ashapura Kitchen Novelty": 875.0
-   }
+   },
+   "sheetName": "Gaia Kadhi Dahi Bucket 15 Kg"
   },
   {
    "sku": "1017",
-   "name": "Gaia Lychee Dahi Cup 90g",
+   "name": "GAIA LYCHEE DAHI 90 G",
    "mrp": 30.0,
    "retailer": 26.0,
    "distributor": 25.0,
@@ -752,11 +766,12 @@
     "Chartered Hotels": 25.0,
     "Jalaram Marketing": 25.0,
     "Ashapura Kitchen Novelty": 25.0
-   }
+   },
+   "sheetName": "Gaia Lychee Dahi Cup 90g"
   },
   {
    "sku": "1018",
-   "name": "Gaia Muskmelon Dahi Cup 90g",
+   "name": "GAIA MUSKMELON DAHI 90 G",
    "mrp": 30.0,
    "retailer": 26.0,
    "distributor": 25.0,
@@ -800,11 +815,12 @@
     "Chartered Hotels": 25.0,
     "Jalaram Marketing": 25.0,
     "Ashapura Kitchen Novelty": 25.0
-   }
+   },
+   "sheetName": "Gaia Muskmelon Dahi Cup 90g"
   },
   {
    "sku": "1023",
-   "name": "Gaia Sweet Lassi Glass 180 ml",
+   "name": "GAIA LASSI GLASS 180 ML",
    "mrp": 28.0,
    "retailer": 23.0,
    "distributor": 21.0,
@@ -848,11 +864,12 @@
     "Chartered Hotels": 21.0,
     "Jalaram Marketing": 21.0,
     "Ashapura Kitchen Novelty": 21.0
-   }
+   },
+   "sheetName": "Gaia Sweet Lassi Glass 180 ml"
   },
   {
    "sku": "1024",
-   "name": "Gaia Mango Lassi Glass 180 ml",
+   "name": "GAIA MANGO LASSI 180 ML",
    "mrp": 35.0,
    "retailer": 30.0,
    "distributor": 28.0,
@@ -896,11 +913,12 @@
     "Chartered Hotels": 28.0,
     "Jalaram Marketing": 28.0,
     "Ashapura Kitchen Novelty": 28.0
-   }
+   },
+   "sheetName": "Gaia Mango Lassi Glass 180 ml"
   },
   {
    "sku": "1046",
-   "name": "Gaia Masala Chaas Glass 180 ml",
+   "name": "GAIA MASALA CHAAS 180 ML GLASS",
    "mrp": 18.0,
    "retailer": 14.5,
    "distributor": 13.13,
@@ -944,11 +962,12 @@
     "Chartered Hotels": 13.13,
     "Jalaram Marketing": 13.13,
     "Ashapura Kitchen Novelty": 13.13
-   }
+   },
+   "sheetName": "Gaia Masala Chaas Glass 180 ml"
   },
   {
    "sku": "1057",
-   "name": "Gaia Shahi Rabdi Box",
+   "name": "Gaia Shahi Rabdi 80g-Box 6Pc",
    "mrp": 40.0,
    "retailer": 35.0,
    "distributor": 32.0,
@@ -992,11 +1011,12 @@
     "Chartered Hotels": 32.0,
     "Jalaram Marketing": 32.0,
     "Ashapura Kitchen Novelty": 32.0
-   }
+   },
+   "sheetName": "Gaia Shahi Rabdi Box"
   },
   {
    "sku": "1048",
-   "name": "Gaia Shahi Rabdi Tray",
+   "name": "GAIA SHAHI RABDI TRAY",
    "mrp": 40.0,
    "retailer": 35.0,
    "distributor": 32.0,
@@ -1040,11 +1060,12 @@
     "Chartered Hotels": 32.0,
     "Jalaram Marketing": 32.0,
     "Ashapura Kitchen Novelty": 32.0
-   }
+   },
+   "sheetName": "Gaia Shahi Rabdi Tray"
   },
   {
    "sku": "1034",
-   "name": "Gaia Milk Peda 200g",
+   "name": "Gaia Milk Peda 200 g",
    "mrp": 130.0,
    "retailer": 113.1,
    "distributor": 104.0,
@@ -1096,11 +1117,12 @@
     "1 Dollarmoffee": 104.0,
     "Jalaram Marketing": 104.0,
     "Ashapura Kitchen Novelty": 104.0
-   }
+   },
+   "sheetName": "Gaia Milk Peda 200g"
   },
   {
    "sku": "1049",
-   "name": "Gaia Kesar Peda 200g",
+   "name": "FGB2C_126 GAIA KESAR PEDA 200 G",
    "mrp": 150.0,
    "retailer": 130.5,
    "distributor": 120.0,
@@ -1152,11 +1174,12 @@
     "1 Dollarmoffee": 120.0,
     "Jalaram Marketing": 120.0,
     "Ashapura Kitchen Novelty": 120.0
-   }
+   },
+   "sheetName": "Gaia Kesar Peda 200g"
   },
   {
    "sku": "1058",
-   "name": "Gaia Shrikhand KE 80g",
+   "name": "Shrikhand KE 80g-BOX 6 pc",
    "mrp": 30.0,
    "retailer": 27.0,
    "distributor": 25.0,
@@ -1200,11 +1223,12 @@
     "Chartered Hotels": 25.0,
     "Jalaram Marketing": 25.0,
     "Ashapura Kitchen Novelty": 25.0
-   }
+   },
+   "sheetName": "Gaia Shrikhand KE 80g"
   },
   {
    "sku": "1005",
-   "name": "Gaia Malai Paneer 200g",
+   "name": "Gaia Paneer 200 g",
    "mrp": 100.0,
    "retailer": 86.45,
    "distributor": 82.95,
@@ -1256,11 +1280,12 @@
     "1 Dollarmoffee": 82.0,
     "Jalaram Marketing": 82.0,
     "Ashapura Kitchen Novelty": 82.0
-   }
+   },
+   "sheetName": "Gaia Malai Paneer 200g"
   },
   {
    "sku": "1006",
-   "name": "Gaia Malai Paneer 500g",
+   "name": "Gaia Paneer 500 g",
    "mrp": 230.0,
    "retailer": 193.0,
    "distributor": 184.0,
@@ -1304,11 +1329,12 @@
     "Chartered Hotels": 184.0,
     "Jalaram Marketing": 184.0,
     "Ashapura Kitchen Novelty": 184.0
-   }
+   },
+   "sheetName": "Gaia Malai Paneer 500g"
   },
   {
    "sku": "1007",
-   "name": "Gaia Malai Paneer 1 Kg",
+   "name": "Gaia Paneer 1 Kg",
    "mrp": 445.0,
    "retailer": 378.0,
    "distributor": 355.0,
@@ -1354,11 +1380,12 @@
     "Chartered Hotels": 356.0,
     "Jalaram Marketing": 335.0,
     "Ashapura Kitchen Novelty": 340.0
-   }
+   },
+   "sheetName": "Gaia Malai Paneer 1 Kg"
   },
   {
    "sku": "1035",
-   "name": "Gaia Brown Khowa Unsweetend",
+   "name": "GAIA BROWN KHOWA UNSWEETEND",
    "mrp": 395.0,
    "retailer": 355.0,
    "distributor": 340.0,
@@ -1397,11 +1424,12 @@
     "Chartered Hotels": 340.0,
     "Jalaram Marketing": 340.0,
     "Ashapura Kitchen Novelty": 340.0
-   }
+   },
+   "sheetName": "Gaia Brown Khowa Unsweetend"
   },
   {
    "sku": "1029",
-   "name": "Gaia Ghee 200 ML JAR",
+   "name": "Gaia Premium Desi Ghee 200 ML JAR",
    "mrp": 183.0,
    "retailer": 167.5,
    "distributor": 161.04,
@@ -1452,11 +1480,12 @@
     "1 Dollarmoffee": 161.04,
     "Jalaram Marketing": 161.04,
     "Ashapura Kitchen Novelty": 161.04
-   }
+   },
+   "sheetName": "Gaia Ghee 200 ML JAR"
   },
   {
    "sku": "1030",
-   "name": "Gaia Ghee 500 ML JAR",
+   "name": "Gaia Premium Desi Ghee 500 ML JAR",
    "mrp": 440.0,
    "retailer": 402.73,
    "distributor": 387.2,
@@ -1507,11 +1536,12 @@
     "1 Dollarmoffee": 387.2,
     "Jalaram Marketing": 387.2,
     "Ashapura Kitchen Novelty": 387.2
-   }
+   },
+   "sheetName": "Gaia Ghee 500 ML JAR"
   },
   {
    "sku": "1038",
-   "name": "Gaia Ghee Desi CEKA 1Ltr",
+   "name": "GAIA GHEE CEKA PACK 1 LTR",
    "mrp": 855.0,
    "retailer": 782.59,
    "distributor": 752.4,
@@ -1560,11 +1590,12 @@
     "1 Dollarmoffee": 752.4,
     "Jalaram Marketing": 752.4,
     "Ashapura Kitchen Novelty": 752.4
-   }
+   },
+   "sheetName": "Gaia Ghee Desi CEKA 1Ltr"
   },
   {
    "sku": "1031",
-   "name": "Gaia Ghee 1 Ltr JAR",
+   "name": "Gaia Premium Desi Ghee 1 LTR JAR",
    "mrp": 870.0,
    "retailer": 796.32,
    "distributor": 765.6,
@@ -1615,11 +1646,12 @@
     "1 Dollarmoffee": 765.6,
     "Jalaram Marketing": 765.6,
     "Ashapura Kitchen Novelty": 765.6
-   }
+   },
+   "sheetName": "Gaia Ghee 1 Ltr JAR"
   },
   {
    "sku": "1032",
-   "name": "Gaia Ghee 5 LTR JAR",
+   "name": "Gaia Premium Desi Ghee 5 LTR JAR",
    "mrp": 4295.0,
    "retailer": 3931.24,
    "distributor": 3779.6,
@@ -1670,7 +1702,8 @@
     "1 Dollarmoffee": 3779.6,
     "Jalaram Marketing": 3779.6,
     "Ashapura Kitchen Novelty": 3779.6
-   }
+   },
+   "sheetName": "Gaia Ghee 5 LTR JAR"
   },
   {
    "sku": "1039",
@@ -1725,11 +1758,12 @@
     "1 Dollarmoffee": 166.32,
     "Jalaram Marketing": 166.32,
     "Ashapura Kitchen Novelty": 166.32
-   }
+   },
+   "sheetName": "Gaia Cow Ghee 200 ML JAR"
   },
   {
    "sku": "1040",
-   "name": "Gaia Cow Ghee 500 ML JAR",
+   "name": "Gaia Cow Ghee Jar 500 ml",
    "mrp": 455.0,
    "retailer": 416.46,
    "distributor": 400.4,
@@ -1780,11 +1814,12 @@
     "1 Dollarmoffee": 400.4,
     "Jalaram Marketing": 400.4,
     "Ashapura Kitchen Novelty": 400.4
-   }
+   },
+   "sheetName": "Gaia Cow Ghee 500 ML JAR"
   },
   {
    "sku": "1037",
-   "name": "Gaia Cow CEKA 1Ltr",
+   "name": "GAIA COW GHEE CEKA PACK 1 LTR",
    "mrp": 885.0,
    "retailer": 810.05,
    "distributor": 778.8,
@@ -1835,11 +1870,12 @@
     "1 Dollarmoffee": 778.8,
     "Jalaram Marketing": 778.8,
     "Ashapura Kitchen Novelty": 778.8
-   }
+   },
+   "sheetName": "Gaia Cow CEKA 1Ltr"
   },
   {
    "sku": "1041",
-   "name": "Gaia Cow Ghee 1 Ltr JAR",
+   "name": "GAIA COW GHEE JAR 1 LTR",
    "mrp": 899.0,
    "retailer": 822.86,
    "distributor": 791.12,
@@ -1890,7 +1926,8 @@
     "1 Dollarmoffee": 791.12,
     "Jalaram Marketing": 791.12,
     "Ashapura Kitchen Novelty": 791.12
-   }
+   },
+   "sheetName": "Gaia Cow Ghee 1 Ltr JAR"
   },
   {
    "sku": "1055",
@@ -1933,11 +1970,12 @@
     "Chartered Hotels": 750.0,
     "Jalaram Marketing": 750.0,
     "Ashapura Kitchen Novelty": 750.0
-   }
+   },
+   "sheetName": "Gaia Premium Desi Ghee 20 ML Pouch"
   },
   {
    "sku": "1042",
-   "name": "Gaia Maxx UHT 110ml",
+   "name": "Gaia Maxx UHT Milk 110 ml",
    "mrp": 10.0,
    "retailer": 8.85,
    "distributor": 7.5,
@@ -1976,11 +2014,12 @@
     "Chartered Hotels": 7.5,
     "Jalaram Marketing": 7.5,
     "Ashapura Kitchen Novelty": 7.5
-   }
+   },
+   "sheetName": "Gaia Maxx UHT 110ml"
   },
   {
    "sku": "1045",
-   "name": "Gaia Maxx UHT 400ml",
+   "name": "Gaia Maxx UHT Milk 400 ml",
    "mrp": 30.0,
    "retailer": 26.55,
    "distributor": 25.53,
@@ -2021,11 +2060,12 @@
     "Chartered Hotels": 25.53,
     "Jalaram Marketing": 25.53,
     "Ashapura Kitchen Novelty": 25.53
-   }
+   },
+   "sheetName": "Gaia Maxx UHT 400ml"
   },
   {
    "sku": "1051",
-   "name": "Gaia Lite Milk UHT Tetra Pack 1Ltr",
+   "name": "Gaia Lite Milk UHT Tetra Pack 1 Ltr",
    "mrp": 75.0,
    "retailer": 62.0,
    "distributor": 60.0,
@@ -2066,7 +2106,8 @@
     "Chartered Hotels": 60.0,
     "Jalaram Marketing": 60.0,
     "Ashapura Kitchen Novelty": 60.0
-   }
+   },
+   "sheetName": "Gaia Lite Milk UHT Tetra Pack 1Ltr"
   },
   {
    "sku": "1050",
@@ -2111,7 +2152,8 @@
     "Chartered Hotels": 65.0,
     "Jalaram Marketing": 65.0,
     "Ashapura Kitchen Novelty": 65.0
-   }
+   },
+   "sheetName": "Gaia Premium Milk UHT Tetra Pack 1 Ltr"
   },
   {
    "sku": "1052",
@@ -2156,11 +2198,12 @@
     "Chartered Hotels": 73.0,
     "Jalaram Marketing": 73.0,
     "Ashapura Kitchen Novelty": 73.0
-   }
+   },
+   "sheetName": "Gaia Gold Milk UHT Tetra Pack 1 Ltr"
   },
   {
    "sku": "1033",
-   "name": "GHEE 15 KG",
+   "name": "GAIA PREMIUM GHEE TIN 15 KG",
    "mrp": 10780.0,
    "retailer": null,
    "distributor": 8900.0,
@@ -2169,7 +2212,8 @@
     "Anna Da Dhaba": 8900.0,
     "Tipsy Events": 9600.0,
     "Dawoodi Bohra Jamaat Trust": 9000.0
-   }
+   },
+   "sheetName": "GHEE 15 KG"
   }
  ],
  "priceLists": [

@@ -1,5 +1,7 @@
 import "server-only";
 import { one, query, tx } from "@/lib/db";
+import { displayName } from "@/lib/shop/pricing";
+import { firmPrices, type FirmPrice } from "@/lib/distributor";
 
 /**
  * Prices by customer, as the Price list page shows and edits them:
@@ -14,11 +16,14 @@ export const CHANNEL_LABEL: Record<Channel, string> = { RT: "Retailer", DB: "Dis
 export interface PriceRow {
   uid: string;
   sku: string;
+  /** The Product Master name, tidied exactly as the Gaia app shows it. */
   name: string;
   category: string;
   mrp: number;
   rt: number | null;
   db: number | null;
+  /** Shown in the Gaia app (active, has an MRP, not hidden from the shop). */
+  inApp: boolean;
 }
 
 const latestRate = (code: Channel) => `(
@@ -27,13 +32,81 @@ const latestRate = (code: Channel) => `(
   order by r.updated_at desc limit 1)`;
 
 /** Every active product with its MRP and standard retailer / distributor prices. */
-export const standardPrices = () =>
-  query<PriceRow>(
-    `select p.uid, p.sku_code as sku, p.sku_name as name, p.category, p.mrp::float as mrp,
-            ${latestRate("RT")}::float as rt, ${latestRate("DB")}::float as db
-     from fp_product p where p.active = 1
-     order by p.category, p.sku_name`,
+export async function standardPrices(): Promise<PriceRow[]> {
+  const rows = await query<PriceRow>(
+    `select p.uid, p.sku_code as sku, p.sku_name as name, coalesce(nullif(trim(p.category), ''), 'Other') as category, p.mrp::float as mrp,
+            ${latestRate("RT")}::float as rt, ${latestRate("DB")}::float as db,
+            (p.mrp > 0 and coalesce(si.visible, true)) as "inApp"
+     from fp_product p left join shop_item si on si.sku_code = p.sku_code
+     where p.active = 1
+     order by category, p.sku_name`,
   );
+  return rows.map((r) => ({ ...r, name: displayName(r.name) }));
+}
+
+// ---------------------------------------------------------------- overview (every price on one screen)
+
+export interface ChannelCol {
+  uid: string;
+  name: string;
+  code: string;
+}
+
+/** The customer channels (Distributor, Retailer, Super Stockist, MFS, Institution ...), the company itself left out. */
+export const channels = () =>
+  query<ChannelCol>(
+    `select uid, channel as name, upper(channel_code) as code from fp_channel
+     where level > 1 order by level, channel`,
+  );
+
+/** product uid -> channel uid -> that channel's all-states rate. */
+export async function channelRates(): Promise<Map<string, Map<string, number>>> {
+  const rows = await query<{ product: string; channel: string; price: number }>(
+    `select distinct on (product_uid, channel_uid) product_uid as product, channel_uid as channel, dealer_price::float as price
+     from fp_channel_rate where state_state is null and dealer_price > 0 and product_uid is not null and channel_uid is not null
+     order by product_uid, channel_uid, updated_at desc`,
+  );
+  const out = new Map<string, Map<string, number>>();
+  for (const r of rows) out.set(r.product, (out.get(r.product) ?? new Map()).set(r.channel, r.price));
+  return out;
+}
+
+/** product uid -> list uid -> that list's price. */
+export async function allListPrices(): Promise<Map<string, Map<string, number>>> {
+  const rows = await query<{ product: string; list: string; price: number }>(
+    `select distinct on (sr.product_uid, sr.slab_uid) sr.product_uid as product, sr.slab_uid as list, sr.dp::float as price
+     from fp_slab_rate sr join fp_slab sl on sl.uid = sr.slab_uid and coalesce(sl.active, 1) = 1
+     where coalesce(sr.active, 1) = 1 and sr.dp > 0
+     order by sr.product_uid, sr.slab_uid, sr.updated_at desc`,
+  );
+  const out = new Map<string, Map<string, number>>();
+  for (const r of rows) out.set(r.product, (out.get(r.product) ?? new Map()).set(r.list, r.price));
+  return out;
+}
+
+export interface CustomerCheck {
+  uid: string;
+  code: string;
+  name: string;
+  channel: string | null;
+  city: string | null;
+  list: string | null;
+  /** sku -> what the Gaia app charges this customer, and why. */
+  prices: Map<string, FirmPrice>;
+}
+
+/** Exactly what the Gaia app shows one customer - the same code the app and its orders use. */
+export async function customerCheck(firmUid: string): Promise<CustomerCheck | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(firmUid)) return null;
+  const f = await one<Omit<CustomerCheck, "prices">>(
+    `select f.uid, f.firm_code as code, f.name, ch.channel, f.city,
+            (select sl.name from fp_slab_firm_mapping m join fp_slab sl on sl.uid = m.slab_uid and coalesce(sl.active, 1) = 1 where m.firm_uid = f.uid limit 1) as list
+     from fp_firm f left join fp_channel ch on ch.uid = f.channel_uid where f.uid = $1`,
+    [firmUid],
+  );
+  if (!f) return null;
+  return { ...f, prices: new Map((await firmPrices(firmUid)).map((r) => [r.sku, r])) };
+}
 
 export interface PriceList {
   uid: string;

@@ -33,8 +33,10 @@ export async function updateListAction(uid: string, patch: { name?: string; grp?
   return who ? done(await pl.updateList(uid, patch, who)) : NO;
 }
 
+/** Customer search (for adding to a list, or checking a customer's prices) - viewing the page is enough. */
 export async function findCustomersAction(q: string) {
-  if (!(await editor()) || q.trim().length < 2) return [];
+  const me = await userFromToken((await cookies()).get("session")?.value);
+  if (!me || !atLeast(levelFor(me, "pricelist"), "view") || q.trim().length < 2) return [];
   return pl.findCustomers(q);
 }
 

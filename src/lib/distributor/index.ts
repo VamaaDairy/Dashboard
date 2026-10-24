@@ -140,33 +140,59 @@ export async function catalogFor(login: DistLogin, firmUid: string | undefined):
   });
 }
 
-/** sku -> the firm's own price list price, else its channel's dealer price, else the product's channel price (retailers only), else its DP. */
-async function dealerPrices(firmUid: string, skus?: string[]): Promise<Map<string, number>> {
-  const rows = await query<{ sku: string; dp: number | null }>(
-    `select p.sku_code as sku,
-            case when pl.dp > 0 then pl.dp
-                 when cr.dealer_price > 0 then cr.dealer_price
-                 when p.channel_price > 0 and (select c.channel_code from fp_firm x join fp_channel c on c.uid = x.channel_uid where x.uid = $1) = 'RT' then p.channel_price
-                 else p.dp end as dp
+export interface FirmPrice {
+  sku: string;
+  price: number;
+  /** Where the price came from: the customer's own price list, its channel's rate, or the product's own DP. */
+  source: "list" | "channel" | "product";
+  list: string | null;
+}
+
+/**
+ * What a customer pays for each product - the one place this is worked out, used by the app's menu, its
+ * orders and the dashboard's price check. In order: the customer's own price list, else its channel's rate
+ * (one set for the customer's state wins over the all-states one), else the product's channel price
+ * (retailers only), else its DP.
+ */
+export async function firmPrices(firmUid: string, skus?: string[]): Promise<FirmPrice[]> {
+  const rows = await query<{ sku: string; pl: number | null; list: string | null; cr: number | null; cp: number | null; dp: number | null; retail: boolean }>(
+    `select p.sku_code as sku, pl.dp as pl, pl.name as list, cr.dealer_price as cr, p.channel_price as cp, p.dp, f.retail
      from fp_product p
+     cross join (
+       select x.channel_uid, upper(coalesce(x.state_state, '')) as state, coalesce(upper(c.channel_code) = 'RT', false) as retail
+       from fp_firm x left join fp_channel c on c.uid = x.channel_uid where x.uid = $1
+     ) f
      -- the customer's own price list (Price list page), if it prices this product
      left join lateral (
-       select sr.dp from fp_slab_firm_mapping m
+       select sr.dp, sl.name from fp_slab_firm_mapping m
        join fp_slab sl on sl.uid = m.slab_uid and coalesce(sl.active, 1) = 1
        join fp_slab_rate sr on sr.slab_uid = sl.uid and sr.product_uid = p.uid and coalesce(sr.active, 1) = 1
                            and (sr.from_date is null or sr.from_date <= now())
-       where m.firm_uid = $1
+       where m.firm_uid = $1 and sr.dp > 0
        order by sr.from_date desc nulls last, sr.updated_at desc limit 1
      ) pl on true
      left join lateral (
        select r.dealer_price from fp_channel_rate r
-       where r.product_uid = p.uid and r.channel_uid = (select channel_uid from fp_firm where uid = $1)
-       order by r.updated_at desc limit 1
+       where r.product_uid = p.uid and r.channel_uid = f.channel_uid and r.dealer_price > 0
+         and (r.state_state is null or upper(r.state_state) = f.state)
+       order by (r.state_state is not null) desc, r.updated_at desc limit 1
      ) cr on true
      where p.active = 1 and ($2::text[] is null or p.sku_code = any($2))`,
     [firmUid, skus ?? null],
   );
-  return new Map(rows.filter((r) => r.dp != null).map((r) => [r.sku, Number(r.dp)]));
+  const out: FirmPrice[] = [];
+  for (const r of rows) {
+    if (r.pl && r.pl > 0) out.push({ sku: r.sku, price: Number(r.pl), source: "list", list: r.list });
+    else if (r.cr && r.cr > 0) out.push({ sku: r.sku, price: Number(r.cr), source: "channel", list: null });
+    else if (r.retail && r.cp && r.cp > 0) out.push({ sku: r.sku, price: Number(r.cp), source: "channel", list: null });
+    else if (r.dp && r.dp > 0) out.push({ sku: r.sku, price: Number(r.dp), source: "product", list: null });
+  }
+  return out;
+}
+
+/** sku -> what this customer pays (see firmPrices). */
+async function dealerPrices(firmUid: string, skus?: string[]): Promise<Map<string, number>> {
+  return new Map((await firmPrices(firmUid, skus)).map((r) => [r.sku, r.price]));
 }
 
 export type PlaceResult = { ok: true; orderId: number; total: number } | { ok: false; error: string };

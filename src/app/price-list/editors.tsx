@@ -221,3 +221,73 @@ export function ListSettings({ uid, name, grp }: { uid: string; name: string; gr
     </div>
   );
 }
+
+/** Jump between the standard prices and the party lists (grouped), or pick a customer to check. */
+export function ListPicker({ lists, current, q }: { lists: Array<{ uid: string; name: string; grp: string | null; customers: number }>; current?: string; q?: string }) {
+  const router = useRouter();
+  const groups = new Map<string, typeof lists>();
+  for (const l of lists) groups.set(l.grp ?? "Other", [...(groups.get(l.grp ?? "Other") ?? []), l]);
+  return (
+    <select
+      value={current ?? ""}
+      onChange={(e) => {
+        const p = new URLSearchParams();
+        if (e.target.value) p.set("list", e.target.value);
+        if (q) p.set("q", q);
+        router.push(p.size ? `/price-list?${p}` : "/price-list");
+      }}
+      aria-label="Price list"
+      className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm font-medium md:w-80"
+    >
+      <option value="">Standard prices (MRP, Retailer, Distributor)</option>
+      {[...groups].map(([g, ls]) => (
+        <optgroup key={g} label={g}>
+          {ls.map((l) => (
+            <option key={l.uid} value={l.uid}>{l.name} ({l.customers} customer{l.customers === 1 ? "" : "s"})</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+/** Customer search that opens the price check for the one picked. */
+export function CustomerCheckPicker({ current }: { current?: string }) {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<Awaited<ReturnType<typeof findCustomersAction>>>([]);
+  useEffect(() => {
+    if (q.trim().length < 2) return;
+    const t = setTimeout(() => { findCustomersAction(q).then(setHits); }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  return (
+    <div className="relative w-full md:w-96">
+      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        value={q}
+        onChange={(e) => { setQ(e.target.value); if (e.target.value.trim().length < 2) setHits([]); }}
+        placeholder={current ? "Check another customer: code or name" : "Check a customer's prices: code or name"}
+        className="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-primary"
+      />
+      {hits.length > 0 ? (
+        <ul className="absolute z-20 mt-1 max-h-72 w-full divide-y divide-border overflow-y-auto rounded-lg border border-border bg-popover text-[13px] shadow-lg">
+          {hits.map((h) => (
+            <li key={h.uid}>
+              <button
+                type="button"
+                onClick={() => { setQ(""); setHits([]); router.push(`/price-list/overview?customer=${h.uid}`); }}
+                className="block w-full px-3 py-2 text-left hover:bg-muted"
+              >
+                <div className="truncate font-medium">{h.name}</div>
+                <div className="truncate text-[11px] text-tertiary-foreground">
+                  <span className="font-mono">{h.code}</span> · {[h.channel, h.city].filter(Boolean).join(", ")}{h.active ? "" : " · inactive"}{h.list ? ` · ${h.list}` : ""}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
