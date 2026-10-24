@@ -41,7 +41,7 @@ class ProductScreen extends ConsumerWidget {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _Gallery(product: p)),
-          SliverToBoxAdapter(child: _Header(product: p)),
+          SliverToBoxAdapter(child: _Header(product: p, partner: partner)),
           SliverToBoxAdapter(child: _Highlights(items: info.highlights)),
           SliverToBoxAdapter(child: _Details(info: info)),
           if (sameRange.isNotEmpty) SliverToBoxAdapter(child: _Rail(title: 'More in ${p.category}', products: sameRange, onOpen: (o) => _open(context, o))),
@@ -184,8 +184,9 @@ class _GalleryState extends ConsumerState<_Gallery> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.product});
+  const _Header({required this.product, this.partner = false});
   final Product product;
+  final bool partner;
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +227,8 @@ class _Header extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          Text(p.offPercent > 0 ? 'MRP ${rupees(p.mrp)} · Inclusive of all taxes' : 'Inclusive of all taxes', style: const TextStyle(fontSize: 12, color: Brand.faint)),
+          // partners already see the MRP under their price
+          Text(p.offPercent > 0 && !partner ? 'MRP ${rupees(p.mrp)} · Inclusive of all taxes' : 'Inclusive of all taxes', style: const TextStyle(fontSize: 12, color: Brand.faint)),
         ],
       ),
     );

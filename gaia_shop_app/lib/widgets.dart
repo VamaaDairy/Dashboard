@@ -174,7 +174,7 @@ Future<int?> _askQty(BuildContext context, String name, int current) {
 }
 
 /// Selling price, with the MRP struck through and the saving when there is one. A signed-in distributor / retailer
-/// sees the MRP and their own price; a sales officer the MRP.
+/// sees their own price with the MRP on the line below it; a sales officer the MRP.
 class PriceTag extends ConsumerWidget {
   const PriceTag({super.key, required this.product, this.size = 16});
   final Product product;
@@ -186,21 +186,14 @@ class PriceTag extends ConsumerWidget {
     final kind = ref.watch(distributorProvider.select((d) => d.profile?.kind));
     if (kind != null) {
       final salesman = kind == 'salesman';
-      return Row(
+      final big = TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Brand.ink, height: 1.15);
+      // their price on top, the MRP on the line under it - same size and weight, in the brand blue
+      return Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!salesman) ...[
-            Text(rupees(p.price), style: TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Brand.ink, height: 1.1)),
-            const SizedBox(width: 6),
-          ],
-          Flexible(
-            child: Text('MRP ${rupees(p.mrp)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: salesman ? size : size * 0.72, fontWeight: salesman ? FontWeight.w800 : FontWeight.w500, color: salesman ? Brand.ink : Brand.muted, height: 1.2)),
-          ),
+          if (!salesman) Text(rupees(p.price), maxLines: 1, style: big),
+          Text('MRP ${rupees(p.mrp)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: salesman ? big : big.copyWith(color: Brand.accent)),
         ],
       );
     }
