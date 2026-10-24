@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowLeft, Grid3x3, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Pill } from "@/components/cn/ui";
 import { allListPrices, channelRates, channels, customerCheck, priceLists, standardPrices } from "@/lib/price-list";
 import { cn } from "@/lib/utils";
 import { CustomerCheckPicker } from "../editors";
@@ -10,11 +9,7 @@ import { CustomerCheckPicker } from "../editors";
 export const dynamic = "force-dynamic";
 
 const money = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
-const SOURCE: Record<string, { label: string; tone: "brand" | "info" | "neutral" }> = {
-  list: { label: "own list", tone: "brand" },
-  channel: { label: "channel", tone: "info" },
-  product: { label: "base DP", tone: "neutral" },
-};
+const SOURCE: Record<string, string> = { list: "own list", channel: "channel price", product: "base DP" };
 
 /**
  * Every price on one screen, to keep an eye on them: products down the left, every channel (Distributor,
@@ -61,11 +56,11 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
           <form action="/price-list/overview" className="lg:w-72">
             {customer ? <input type="hidden" name="customer" value={customer} /> : null}
             {group ? <input type="hidden" name="group" value={group} /> : null}
-            <input name="q" defaultValue={q} placeholder="Filter products" className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
+            <input name="q" defaultValue={q} placeholder="Filter products" className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-foreground" />
           </form>
           <div className="flex flex-wrap gap-1.5 text-[13px] lg:ml-auto">
             {[["", "All lists"], ...groups.map((g) => [g, g]), ["none", "Channels only"]].map(([v, l]) => (
-              <Link key={v} href={link({ group: v || undefined })} className={cn("rounded-full border px-2.5 py-1", (group ?? "") === v ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}>
+              <Link key={v} href={link({ group: v || undefined })} className={cn("rounded-full border px-2.5 py-1", (group ?? "") === v ? "border-foreground bg-foreground text-background" : "border-border hover:bg-muted")}>
                 {l}
               </Link>
             ))}
@@ -73,7 +68,7 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
         </div>
 
         {check ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-[13px]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-[13px]">
             <div>
               <span className="font-semibold">{check.name}</span> <span className="font-mono text-tertiary-foreground">{check.code}</span>
               <span className="text-tertiary-foreground"> · {[check.channel, check.city].filter(Boolean).join(", ")}</span>
@@ -89,7 +84,7 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
               {/* group headings */}
               <tr>
                 <th rowSpan={2} className={cn(head, "left-0 z-20 min-w-60 border-r border-border text-left")}>Product</th>
-                {check ? <th rowSpan={2} className={cn(head, "border-r border-border bg-primary/10 text-foreground")}>{check.name.length > 18 ? `${check.name.slice(0, 18)}…` : check.name}<div className="font-normal">pays in app</div></th> : null}
+                {check ? <th rowSpan={2} className={cn(head, "border-r border-border text-foreground")}>{check.name.length > 18 ? `${check.name.slice(0, 18)}…` : check.name}<div className="font-normal">pays in app</div></th> : null}
                 <th colSpan={1 + chans.length} className={cn(head, "border-r border-b border-border text-center")}>MRP & channels</th>
                 {[...byGroup].map(([g, ls]) => (
                   <th key={g} colSpan={ls.length} className={cn(head, "border-r border-b border-border text-center")}>{g}</th>
@@ -119,17 +114,17 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                     <td className={cn(stickyLeft, "min-w-60 border-t border-r border-border px-3 py-2")}>
                       {i === 0 || rows[i - 1].category !== p.category ? <div className="pb-0.5 text-[10px] font-semibold tracking-wide text-tertiary-foreground uppercase">{p.category}</div> : null}
                       <div className="font-medium">{p.name}</div>
-                      <div className="text-[11px] text-tertiary-foreground"><span className="font-mono">{p.sku}</span>{p.inApp ? null : <span className="ml-1.5 text-amber-700">not in app</span>}</div>
+                      <div className="text-[11px] text-tertiary-foreground"><span className="font-mono">{p.sku}</span>{p.inApp ? null : <span className="ml-1.5">· not in app</span>}</div>
                     </td>
                     {check ? (
-                      <td className="num border-t border-r border-border bg-primary/5 px-3 py-2 text-right whitespace-nowrap">
+                      <td className="num border-t border-r border-border px-3 py-2 text-right whitespace-nowrap">
                         {mine && p.inApp ? (
                           <>
                             <div className="font-semibold">{money(mine.price)}</div>
-                            <Pill tone={SOURCE[mine.source].tone} dot={false} className="mt-0.5">{SOURCE[mine.source].label}</Pill>
+                            <div className="text-[11px] text-tertiary-foreground">{SOURCE[mine.source]}</div>
                           </>
                         ) : (
-                          <span className="text-[11px] text-amber-700">{p.inApp ? "no price - hidden" : "not in app"}</span>
+                          <span className="text-[11px] text-tertiary-foreground">{p.inApp ? "no price - hidden" : "not in app"}</span>
                         )}
                       </td>
                     ) : null}
@@ -152,8 +147,6 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                             className={cn(
                               "num border-t border-border px-3 py-2 text-right whitespace-nowrap",
                               j === ls.length - 1 && "border-r",
-                              v && db && v < db && "text-emerald-700",
-                              v && db && v > db && "text-amber-700",
                             )}
                             title={v && db ? `${v < db ? "Below" : v > db ? "Above" : "Same as"} the distributor price ${money(db)}` : undefined}
                           >
@@ -172,7 +165,7 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
           </table>
         </div>
         <p className="text-[12px] text-tertiary-foreground">
-          Party prices in green are below the distributor price, amber above it. &quot;-&quot; means the list does not price that product, so its customers pay their channel price.
+          &quot;-&quot; means the list does not price that product, so its customers pay their channel price.
         </p>
       </div>
     </div>

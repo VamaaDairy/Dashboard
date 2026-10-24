@@ -62,7 +62,7 @@ export function PriceCell({ target, productUid, value, fallback, canEdit, cleara
           if (e.key === "Enter") save();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="num h-8 w-24 rounded-md border border-primary bg-background px-2 text-right text-sm outline-none"
+        className="num h-8 w-24 rounded-md border border-foreground bg-background px-2 text-right text-sm outline-none"
         placeholder={clearable ? "empty = off" : ""}
       />
     );
@@ -119,7 +119,7 @@ export function CustomerPicker({ listUid }: { listUid: string }) {
           value={q}
           onChange={(e) => { setQ(e.target.value); setMsg(null); if (e.target.value.trim().length < 2) setHits([]); }}
           placeholder="Add a customer: code or name"
-          className="h-9 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-primary"
+          className="h-9 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-foreground"
         />
       </div>
       {hits.length > 0 ? (
@@ -157,7 +157,7 @@ export function RemoveCustomer({ listUid, firmUid, name }: { listUid: string; fi
         if (!window.confirm(`Take ${name} off this list? They will pay their channel price.`)) return;
         start(async () => { await removeCustomerAction(listUid, firmUid); router.refresh(); });
       }}
-      className="rounded p-1 text-tertiary-foreground hover:bg-muted hover:text-destructive"
+      className="rounded p-1 text-tertiary-foreground hover:bg-muted hover:text-foreground"
     >
       <X className="size-3.5" />
     </button>
@@ -194,7 +194,7 @@ export function NewList({ groups }: { groups: string[] }) {
       <datalist id="price-list-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
       <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="h-8 flex-1 rounded-md bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50">Create</button>
+        <button type="submit" disabled={pending} className="h-8 flex-1 rounded-md bg-foreground text-sm font-semibold text-background disabled:opacity-50">Create</button>
         <button type="button" onClick={() => setOpen(false)} className="h-8 rounded-md border border-border px-3 text-sm">Cancel</button>
       </div>
     </form>
@@ -217,7 +217,7 @@ export function ListSettings({ uid, name, grp }: { uid: string; name: string; gr
     <div className="flex flex-wrap gap-2">
       <button type="button" disabled={pending} className={btn} onClick={() => { const n = window.prompt("Price list name", name); if (n && n !== name) run({ name: n }); }}>Rename</button>
       <button type="button" disabled={pending} className={btn} onClick={() => { const g = window.prompt("Group (MFS, Institution, Admin, OD ...)", grp ?? ""); if (g !== null && g !== grp) run({ grp: g }); }}>Group</button>
-      <button type="button" disabled={pending} className={`${btn} text-destructive`} onClick={() => { if (window.confirm(`Remove ${name}? Its customers go back to their channel price.`)) run({ active: false }); }}>Remove list</button>
+      <button type="button" disabled={pending} className={btn} onClick={() => { if (window.confirm(`Remove ${name}? Its customers go back to their channel price.`)) run({ active: false }); }}>Remove list</button>
     </div>
   );
 }
@@ -268,7 +268,7 @@ export function CustomerCheckPicker({ current }: { current?: string }) {
         value={q}
         onChange={(e) => { setQ(e.target.value); if (e.target.value.trim().length < 2) setHits([]); }}
         placeholder={current ? "Check another customer: code or name" : "Check a customer's prices: code or name"}
-        className="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-primary"
+        className="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-foreground"
       />
       {hits.length > 0 ? (
         <ul className="absolute z-20 mt-1 max-h-72 w-full divide-y divide-border overflow-y-auto rounded-lg border border-border bg-popover text-[13px] shadow-lg">

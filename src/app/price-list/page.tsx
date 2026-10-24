@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { Grid3x3, Search, Tags } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Panel, Pill } from "@/components/cn/ui";
+import { Panel } from "@/components/cn/ui";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { listCustomers, listPrices, priceList, priceLists, standardPrices } from "@/lib/price-list";
@@ -45,7 +45,7 @@ export default async function PriceListPage({ searchParams }: { searchParams: Pr
           <form action="/price-list" className="relative flex-1 md:max-w-sm">
             {list ? <input type="hidden" name="list" value={list.uid} /> : null}
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input name="q" defaultValue={q} placeholder="Search product, SKU or category" className="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-primary" />
+            <input name="q" defaultValue={q} placeholder="Search product, SKU or category" className="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-foreground" />
           </form>
           {canEdit ? <div className="md:ml-auto md:w-56"><NewList groups={groups} /></div> : null}
         </div>
@@ -55,7 +55,7 @@ export default async function PriceListPage({ searchParams }: { searchParams: Pr
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-semibold">{list.name}</h2>
-                {list.grp ? <Pill dot={false}>{list.grp}</Pill> : null}
+                {list.grp ? <span className="text-[13px] text-tertiary-foreground">· {list.grp}</span> : null}
               </div>
               <p className="text-[13px] text-tertiary-foreground">
                 {customers.length} customer{customers.length === 1 ? "" : "s"} pay these prices. Empty price = the product is not on this list; they pay their channel price (grey).
@@ -95,7 +95,7 @@ export default async function PriceListPage({ searchParams }: { searchParams: Pr
                           <div className="font-medium text-foreground">{p.name}</div>
                           <div className="text-[11px] text-tertiary-foreground">
                             <span className="font-mono">{p.sku}</span>
-                            {p.inApp ? null : <span className="ml-2 text-amber-700">not shown in the app</span>}
+                            {p.inApp ? null : <span className="ml-2">· not shown in the app</span>}
                           </div>
                         </td>
                         <td className="px-2 py-2 text-right">
@@ -107,17 +107,17 @@ export default async function PriceListPage({ searchParams }: { searchParams: Pr
                             <td className="px-2 py-2 text-right">
                               <PriceCell target={{ kind: "list", list: list.uid }} productUid={p.uid} value={prices?.get(p.uid) ?? null} fallback={p.db} canEdit={canEdit} clearable />
                             </td>
-                            <td className="num px-4 py-2 text-right text-[12px] text-emerald-700">{pct(prices?.get(p.uid) ?? null, p.mrp)}</td>
+                            <td className="num px-4 py-2 text-right text-[12px] text-tertiary-foreground">{pct(prices?.get(p.uid) ?? null, p.mrp)}</td>
                           </>
                         ) : (
                           <>
                             <td className="px-2 py-2 text-right">
                               <PriceCell target={{ kind: "channel", channel: "RT" }} productUid={p.uid} value={p.rt} canEdit={canEdit} />
-                              <div className="pr-2 text-[11px] text-emerald-700">{pct(p.rt, p.mrp)}</div>
+                              <div className="pr-2 text-[11px] text-tertiary-foreground">{pct(p.rt, p.mrp)}</div>
                             </td>
                             <td className="px-4 py-2 text-right">
                               <PriceCell target={{ kind: "channel", channel: "DB" }} productUid={p.uid} value={p.db} canEdit={canEdit} />
-                              <div className="pr-2 text-[11px] text-emerald-700">{pct(p.db, p.mrp)}</div>
+                              <div className="pr-2 text-[11px] text-tertiary-foreground">{pct(p.db, p.mrp)}</div>
                             </td>
                           </>
                         )}
