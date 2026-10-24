@@ -22,8 +22,10 @@ export interface PriceRow {
   mrp: number;
   rt: number | null;
   db: number | null;
-  /** Shown in the Gaia app (active, has an MRP, not hidden from the shop). */
+  /** Has an MRP, so distributors and retailers see it in the Gaia app (where they have a price). */
   inApp: boolean;
+  /** Also in the customer (D2C) shop - hidden ones are for distributors and retailers only. */
+  inShop: boolean;
 }
 
 const latestRate = (code: Channel) => `(
@@ -36,7 +38,7 @@ export async function standardPrices(): Promise<PriceRow[]> {
   const rows = await query<PriceRow>(
     `select p.uid, p.sku_code as sku, p.sku_name as name, coalesce(nullif(trim(p.category), ''), 'Other') as category, p.mrp::float as mrp,
             ${latestRate("RT")}::float as rt, ${latestRate("DB")}::float as db,
-            (p.mrp > 0 and coalesce(si.visible, true)) as "inApp"
+            p.mrp > 0 as "inApp", (p.mrp > 0 and coalesce(si.visible, true)) as "inShop"
      from fp_product p left join shop_item si on si.sku_code = p.sku_code
      where p.active = 1
      order by category, p.sku_name`,

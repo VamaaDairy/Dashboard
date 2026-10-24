@@ -95,7 +95,7 @@ export default async function PriceListPage({ searchParams }: { searchParams: Pr
                           <div className="font-medium text-foreground">{p.name}</div>
                           <div className="text-[11px] text-tertiary-foreground">
                             <span className="font-mono">{p.sku}</span>
-                            {p.inApp ? null : <span className="ml-2">· not shown in the app</span>}
+                            {!p.inApp ? <span className="ml-2">· no MRP, not in the app</span> : !p.inShop ? <span className="ml-2">· distributors & retailers only (hidden from the shop)</span> : null}
                           </div>
                         </td>
                         <td className="px-2 py-2 text-right">

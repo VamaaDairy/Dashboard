@@ -114,7 +114,7 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                     <td className={cn(stickyLeft, "min-w-60 border-t border-r border-border px-3 py-2")}>
                       {i === 0 || rows[i - 1].category !== p.category ? <div className="pb-0.5 text-[10px] font-semibold tracking-wide text-tertiary-foreground uppercase">{p.category}</div> : null}
                       <div className="font-medium">{p.name}</div>
-                      <div className="text-[11px] text-tertiary-foreground"><span className="font-mono">{p.sku}</span>{p.inApp ? null : <span className="ml-1.5">· not in app</span>}</div>
+                      <div className="text-[11px] text-tertiary-foreground"><span className="font-mono">{p.sku}</span>{!p.inApp ? <span className="ml-1.5">· not in app</span> : !p.inShop ? <span className="ml-1.5">· trade only</span> : null}</div>
                     </td>
                     {check ? (
                       <td className="num border-t border-r border-border px-3 py-2 text-right whitespace-nowrap">

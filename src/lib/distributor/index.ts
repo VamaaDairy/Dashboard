@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes, randomInt } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { one, query, tx } from "@/lib/db";
-import { listProducts, type ShopProduct } from "@/lib/shop/catalog";
+import { listAllProducts, type ShopProduct } from "@/lib/shop/catalog";
 import { hashPin, pinMatches } from "@/lib/shop/rider";
 import { loadRecord, saveRecord } from "@/lib/masters/entity/service";
 import { MASTERS } from "@/lib/masters/schemas";
@@ -133,7 +133,8 @@ async function firmAllowed(login: DistLogin, firmUid: string | undefined): Promi
 export async function catalogFor(login: DistLogin, firmUid: string | undefined): Promise<ShopProduct[] | null> {
   const firm = await firmAllowed(login, firmUid);
   if (!firm) return null;
-  const [products, prices] = await Promise.all([listProducts(), dealerPrices(firm.uid)]);
+  // every active product they have a price for, even ones hidden from the customer shop
+  const [products, prices] = await Promise.all([listAllProducts(), dealerPrices(firm.uid)]);
   return products.flatMap((p) => {
     const dp = prices.get(p.sku);
     return dp && dp > 0 ? [{ ...p, price: dp }] : [];
@@ -210,9 +211,9 @@ export async function placeDistOrder(
   if (merged.size > MAX_LINES) return { ok: false, error: `At most ${MAX_LINES} products per order.` };
 
   const skus = [...merged.keys()];
-  // only what the shop lists (same visibility as the retail app), priced server-side
+  // any active product with an MRP (shop-hidden ones too) that has a price for this customer, priced server-side
   const [listed, prices, prods] = await Promise.all([
-    listProducts(),
+    listAllProducts(),
     dealerPrices(firm.uid, skus),
     query<{ uid: string; sku: string; mrp: number }>(`select uid, sku_code as sku, mrp from fp_product where sku_code = any($1) and active = 1`, [skus]),
   ]);
