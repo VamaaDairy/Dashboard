@@ -140,14 +140,24 @@ export async function catalogFor(login: DistLogin, firmUid: string | undefined):
   });
 }
 
-/** sku -> the firm's channel dealer price, falling back to the product's channel price (retailers only), then its DP. */
+/** sku -> the firm's own price list price, else its channel's dealer price, else the product's channel price (retailers only), else its DP. */
 async function dealerPrices(firmUid: string, skus?: string[]): Promise<Map<string, number>> {
   const rows = await query<{ sku: string; dp: number | null }>(
     `select p.sku_code as sku,
-            case when cr.dealer_price > 0 then cr.dealer_price
+            case when pl.dp > 0 then pl.dp
+                 when cr.dealer_price > 0 then cr.dealer_price
                  when p.channel_price > 0 and (select c.channel_code from fp_firm x join fp_channel c on c.uid = x.channel_uid where x.uid = $1) = 'RT' then p.channel_price
                  else p.dp end as dp
      from fp_product p
+     -- the customer's own price list (Price list page), if it prices this product
+     left join lateral (
+       select sr.dp from fp_slab_firm_mapping m
+       join fp_slab sl on sl.uid = m.slab_uid and coalesce(sl.active, 1) = 1
+       join fp_slab_rate sr on sr.slab_uid = sl.uid and sr.product_uid = p.uid and coalesce(sr.active, 1) = 1
+                           and (sr.from_date is null or sr.from_date <= now())
+       where m.firm_uid = $1
+       order by sr.from_date desc nulls last, sr.updated_at desc limit 1
+     ) pl on true
      left join lateral (
        select r.dealer_price from fp_channel_rate r
        where r.product_uid = p.uid and r.channel_uid = (select channel_uid from fp_firm where uid = $1)

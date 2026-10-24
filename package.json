@@ -22,7 +22,8 @@
     "db:seed:demo": "tsx --conditions=react-server db/seed-demo.ts",
     "db:seed:sku-packing": "tsx --conditions=react-server db/seed-sku-packing.ts",
     "db:seed:sku-pack-rate": "tsx db/seed-sku-pack-rate.ts",
-    "db:product-photos": "tsx db/load-product-photos.ts"
+    "db:product-photos": "tsx db/load-product-photos.ts",
+    "db:rate-list": "tsx db/import-rate-list.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
