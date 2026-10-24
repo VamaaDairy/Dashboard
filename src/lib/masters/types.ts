@@ -109,7 +109,7 @@ export interface MasterDef {
   /** rows still pending can be confirmed or cancelled from the list (primary orders) */
   orderDecisions?: boolean;
   /** the rows can sign in to the Gaia app: shows each row's app login and lets it be created, reset or switched off */
-  appLogin?: "distributor" | "salesman";
+  appLogin?: "distributor" | "salesman" | "retailer";
 }
 
 export type SearchParams = Record<string, string | string[] | undefined>;

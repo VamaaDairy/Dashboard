@@ -14,7 +14,7 @@ export const MAX_LINE_QTY = 100000;
 
 export interface DistLogin {
   id: number;
-  kind: "distributor" | "salesman";
+  kind: "distributor" | "salesman" | "retailer";
   firmUid: string | null;
   staffUid: string | null;
   name: string;
@@ -75,7 +75,7 @@ const LOGIN_SELECT = `
   left join fp_staff s on s.uid = l.staff_uid`;
 
 /** A distributor can use the app only while its customer record is active; a sales officer's login is not tied to one. */
-const FIRM_ACTIVE = `(l.kind <> 'distributor' or f.active = 1)`;
+const FIRM_ACTIVE = `(l.kind = 'salesman' or f.active = 1)`;
 
 /**
  * Phone + PIN -> a fresh session token (replaces any earlier one), null for a wrong number or PIN, or "inactive"
@@ -106,7 +106,7 @@ export async function distFromRequest(req: NextRequest): Promise<DistLogin | nul
 
 /** The distributors this login may order for: its own firm, or (sales officer) the firms they are the sales contact of; a sales officer with none mapped can book for any distributor. */
 export async function firmsFor(login: DistLogin): Promise<DistFirm[]> {
-  if (login.kind === "distributor") {
+  if (login.kind !== "salesman") {
     return query<DistFirm>(`${FIRM_SELECT} where f.uid = $1 and f.active = 1`, [login.firmUid]);
   }
   const mapped = await query<DistFirm>(
@@ -140,10 +140,13 @@ export async function catalogFor(login: DistLogin, firmUid: string | undefined):
   });
 }
 
-/** sku -> the distributor channel's dealer price, falling back to the product's DP. */
+/** sku -> the firm's channel dealer price, falling back to the product's channel price (retailers only), then its DP. */
 async function dealerPrices(firmUid: string, skus?: string[]): Promise<Map<string, number>> {
   const rows = await query<{ sku: string; dp: number | null }>(
-    `select p.sku_code as sku, case when cr.dealer_price > 0 then cr.dealer_price else p.dp end as dp
+    `select p.sku_code as sku,
+            case when cr.dealer_price > 0 then cr.dealer_price
+                 when p.channel_price > 0 and (select c.channel_code from fp_firm x join fp_channel c on c.uid = x.channel_uid where x.uid = $1) = 'RT' then p.channel_price
+                 else p.dp end as dp
      from fp_product p
      left join lateral (
        select r.dealer_price from fp_channel_rate r
@@ -195,11 +198,12 @@ export async function placeDistOrder(
     const [{ n }] = (await c.query<{ n: number }>(`select coalesce(max(order_id), 0) + 1 as n from fp_booking_order`)).rows;
     const statuses = (await c.query<{ status: string }>(`select distinct status from fp_booking_order`)).rows.map((r) => r.status);
     const status = statuses.find((s) => /^(pending|open|new|booked|created|placed)/i.test(s)) ?? "Pending";
+    const retailer = login.kind === "retailer";
     const type = (await c.query<{ t: string | null }>(
       `select mode() within group (order by b.order_type) as t
        from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid join fp_channel ch on ch.uid = f.channel_uid
-       where ch.level <= 3`,
-    )).rows[0]?.t ?? "PRIMARY";
+       where ${retailer ? "ch.channel_code = 'RT'" : "ch.level <= 3"}`,
+    )).rows[0]?.t ?? (retailer ? "SECONDARY" : "PRIMARY");
     const to = (await c.query<{ uid: string | null }>(
       `select coalesce(f.parent_firm_uid, (select x.uid from fp_firm x join fp_channel ch on ch.uid = x.channel_uid where ch.level = 1 and x.active = 1 order by x.name limit 1)) as uid
        from fp_firm f where f.uid = $1`,
@@ -252,9 +256,9 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
             b.total_item as items, b.total_quantity as qty, b.total_cost as total,
             nullif(trim(b.rejection_reason), '') as reason
      from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid
-     where ${login.kind === "distributor" ? "b.from_firm_uid = $1" : "b.staff_uid = $1"}
+     where ${login.kind !== "salesman" ? "b.from_firm_uid = $1" : "b.staff_uid = $1"}
      order by b.booking_time desc limit 100`,
-    [login.kind === "distributor" ? login.firmUid : login.staffUid],
+    [login.kind !== "salesman" ? login.firmUid : login.staffUid],
   );
   if (!rows.length) return [];
   const items = await query<{ b: string; sku: string; name: string; qty: number; rate: number; amount: number }>(
@@ -324,7 +328,7 @@ export async function saveFirmDetails(login: DistLogin, firmUid: string | undefi
   const form = new FormData();
   for (const [k, v] of Object.entries({ ...current, ...cleaned.set })) form.set(k, v ?? "");
 
-  const who = `${login.kind === "salesman" ? "Sales officer" : "Distributor"} ${login.name} (Gaia app)`;
+  const who = `${login.kind === "salesman" ? "Sales officer" : login.kind === "retailer" ? "Retailer" : "Distributor"} ${login.name} (Gaia app)`;
   const r = await saveRecord(def, firm.uid, form, who, { only: Object.keys(cleaned.set), from: "Gaia app" });
   if (!r.ok) {
     const back = Object.fromEntries(Object.entries(EDITABLE).map(([k, col]) => [col, k]));
@@ -342,10 +346,14 @@ export async function saveFirmDetails(login: DistLogin, firmUid: string | undefi
  * time they can be handed out. Numbers missing, invalid or already used are skipped and listed.
  */
 export async function createMissingDistLogins(only?: DistLogin["kind"]): Promise<{ csv: string; created: number; skipped: string[] }> {
-  const everyone = await query<{ kind: "distributor" | "salesman"; uid: string; name: string; code: string | null; phone: string | null; status: string }>(
+  const everyone = await query<{ kind: DistLogin["kind"]; uid: string; name: string; code: string | null; phone: string | null; status: string }>(
     `select 'distributor' as kind, f.uid, f.name, f.firm_code as code, f.phone, case when f.active = 1 then 'Active' else 'Inactive' end as status
        from fp_firm f join fp_channel c on c.uid = f.channel_uid
        where c.level = 3 and not exists (select 1 from dist_login l where l.firm_uid = f.uid)
+     union all
+     select 'retailer', f.uid, f.name, f.firm_code, f.phone, case when f.active = 1 then 'Active' else 'Inactive' end
+       from fp_firm f join fp_channel c on c.uid = f.channel_uid
+       where c.channel_code = 'RT' and not exists (select 1 from dist_login l where l.firm_uid = f.uid)
      union all
      select 'salesman', s.uid, trim(concat_ws(' ', s.first_name, s.last_name)), s.employee_code, s.phone, 'Active'
        from fp_staff s where s.active = 1 and not exists (select 1 from dist_login l where l.staff_uid = s.uid)
@@ -363,11 +371,11 @@ export async function createMissingDistLogins(only?: DistLogin["kind"]): Promise
     const pin = String(randomInt(100000, 1000000));
     await query(
       `insert into dist_login (kind, firm_uid, staff_uid, phone, pin_hash) values ($1, $2, $3, $4, $5)`,
-      [p.kind, p.kind === "distributor" ? p.uid : null, p.kind === "salesman" ? p.uid : null, phone, hashPin(pin)],
+      [p.kind, p.kind !== "salesman" ? p.uid : null, p.kind === "salesman" ? p.uid : null, phone, hashPin(pin)],
     );
     taken.add(phone);
     created++;
-    rows.push([p.kind === "distributor" ? "Distributor" : "Sales officer", p.name, p.code ?? "", p.status, phone, pin].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    rows.push([p.kind === "distributor" ? "Distributor" : p.kind === "retailer" ? "Retailer" : "Sales officer", p.name, p.code ?? "", p.status, phone, pin].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
   }
   return { csv: rows.join("\r\n"), created, skipped };
 }

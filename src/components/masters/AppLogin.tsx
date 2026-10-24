@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { addAppLoginAction, createMissingAppLoginsAction, setAppLoginAction } from "@/lib/distributor/actions";
 
-type Kind = "distributor" | "salesman";
+type Kind = "distributor" | "salesman" | "retailer";
 const btn = "rounded-md px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50";
 
 /** Per-row Gaia app login controls: create one, set a new PIN, switch it off or on. `status` is the row's "App login" value. */
@@ -53,7 +53,7 @@ export function AppLoginActions({ kind, uid, status }: { kind: Kind; uid: string
 /** Creates a login for everyone listed who has none, then downloads the PIN list (the PINs cannot be shown again). */
 export function CreateMissingLogins({ kind }: { kind: Kind }) {
   const [pending, start] = useTransition();
-  const who = kind === "distributor" ? "distributor" : "sales officer";
+  const who = kind === "distributor" ? "distributor" : kind === "retailer" ? "retailer" : "sales officer";
   return (
     <button
       type="button"
@@ -75,7 +75,7 @@ export function CreateMissingLogins({ kind }: { kind: Kind }) {
         })
       }
     >
-      {pending ? "Creating…" : "Create missing app logins"}
+      {pending ? "Creating…" : `Create missing ${who} logins`}
     </button>
   );
 }

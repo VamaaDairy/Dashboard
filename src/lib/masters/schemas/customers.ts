@@ -55,6 +55,7 @@ export const customers: MasterDef = {
     { label: "On a route", where: "b.uid is not null" },
     { label: "Distributors with app login", where: "ch.channel_code = 'DB' and dl.id is not null" },
     { label: "Distributors without", where: "ch.channel_code = 'DB' and dl.id is null" },
+    { label: "Retailers with app login", where: "ch.channel_code = 'RT' and dl.id is not null" },
   ],
   order: "f.firm_code",
   appLogin: "distributor",

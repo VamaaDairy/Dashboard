@@ -173,15 +173,37 @@ Future<int?> _askQty(BuildContext context, String name, int current) {
   );
 }
 
-/// Selling price, with the MRP struck through and the saving when there is one.
-class PriceTag extends StatelessWidget {
+/// Selling price, with the MRP struck through and the saving when there is one. A signed-in distributor / retailer
+/// sees the MRP and their own price; a sales officer the MRP.
+class PriceTag extends ConsumerWidget {
   const PriceTag({super.key, required this.product, this.size = 16});
   final Product product;
   final double size;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = product;
+    final kind = ref.watch(distributorProvider.select((d) => d.profile?.kind));
+    if (kind != null) {
+      final salesman = kind == 'salesman';
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          if (!salesman) ...[
+            Text(rupees(p.price), style: TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Brand.ink, height: 1.1)),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text('MRP ${rupees(p.mrp)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: salesman ? size : size * 0.72, fontWeight: salesman ? FontWeight.w800 : FontWeight.w500, color: salesman ? Brand.ink : Brand.muted, height: 1.2)),
+          ),
+        ],
+      );
+    }
     // one line always: the struck-out MRP gives way before the price ever wraps
     return Row(
       mainAxisSize: MainAxisSize.min,

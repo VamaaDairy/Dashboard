@@ -497,7 +497,7 @@ class PartnerAccountScreen extends ConsumerWidget {
                     Text('+91 ${p.phone}', style: const TextStyle(fontSize: 14.5, color: Brand.muted, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 6),
                     Text(
-                      [p.isSalesman ? 'Sales officer' : 'Distributor', if (!p.isSalesman && f != null && f.code.isNotEmpty) f.code].join(' · '),
+                      [p.label, if (!p.isSalesman && f != null && f.code.isNotEmpty) f.code].join(' · '),
                       style: const TextStyle(fontSize: 13.5, color: Brand.ink, fontWeight: FontWeight.w700),
                     ),
                   ]),

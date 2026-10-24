@@ -5,10 +5,10 @@ import '../api.dart';
 import '../store/distributor.dart';
 import '../theme.dart';
 
-/// Distributors and sales officers each have their own sign-in: [salesOfficer] picks which, with the mobile number and PIN Gaia gave them.
+/// Distributors, retailers and sales officers each have their own sign-in: [kind] picks which, with the mobile number and PIN Gaia gave them.
 class DistributorLoginScreen extends ConsumerStatefulWidget {
-  const DistributorLoginScreen({super.key, this.salesOfficer = false});
-  final bool salesOfficer;
+  const DistributorLoginScreen({super.key, this.kind = 'distributor'});
+  final String kind; // 'distributor' | 'retailer' | 'salesman'
 
   @override
   ConsumerState<DistributorLoginScreen> createState() => _DistributorLoginScreenState();
@@ -35,7 +35,7 @@ class _DistributorLoginScreenState extends ConsumerState<DistributorLoginScreen>
       _error = null;
     });
     try {
-      await store.login(_phone.text.trim(), _pin.text.trim(), widget.salesOfficer ? 'salesman' : 'distributor');
+      await store.login(_phone.text.trim(), _pin.text.trim(), widget.kind);
       nav.popUntil((r) => r.isFirst); // the app now opens on the distributor's order screen
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -54,9 +54,9 @@ class _DistributorLoginScreenState extends ConsumerState<DistributorLoginScreen>
         children: [
           Image.asset('assets/images/gaia-logo.jpg', height: 72, alignment: Alignment.centerLeft, fit: BoxFit.contain),
           const SizedBox(height: 24),
-          Text(widget.salesOfficer ? 'Sales officer sign in' : 'Distributor sign in', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          Text(switch (widget.kind) { 'salesman' => 'Sales officer sign in', 'retailer' => 'Retailer sign in', _ => 'Distributor sign in' }, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text(widget.salesOfficer ? 'Use the mobile number and PIN given to you by Gaia to book orders for distributors.' : 'Use the mobile number and PIN given to you by Gaia to order for your firm.', style: TextStyle(color: Brand.muted)),
+          Text(switch (widget.kind) { 'salesman' => 'Use the mobile number and PIN given to you by Gaia to book orders for distributors.', 'retailer' => 'Use the mobile number and PIN given to you by Gaia to order for your shop.', _ => 'Use the mobile number and PIN given to you by Gaia to order for your firm.' }, style: TextStyle(color: Brand.muted)),
           const SizedBox(height: 24),
           if (_error != null)
             Container(

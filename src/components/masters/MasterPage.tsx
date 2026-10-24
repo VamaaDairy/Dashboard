@@ -84,6 +84,7 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
           actions={
             <>
             {canEdit && def.appLogin ? <CreateMissingLogins kind={def.appLogin} /> : null}
+            {canEdit && def.appLogin === "distributor" ? <CreateMissingLogins kind="retailer" /> : null}
             {canEdit ? (
               <Link
                 href={`/orders/${slug}/new`}

@@ -352,10 +352,14 @@ class RiderProfile {
 /// A distributor (or a salesman booking for distributors) signed in to the app.
 class DistProfile {
   const DistProfile({required this.kind, required this.name, required this.phone});
-  final String kind; // 'distributor' | 'salesman'
+  final String kind; // 'distributor' | 'salesman' | 'retailer'
   final String name;
   final String phone;
   bool get isSalesman => kind == 'salesman';
+  bool get isRetailer => kind == 'retailer';
+
+  /// What the sign-in is called on screen.
+  String get label => isSalesman ? 'Sales officer' : isRetailer ? 'Retailer' : 'Distributor';
 }
 
 /// A distributor an order can be placed for.

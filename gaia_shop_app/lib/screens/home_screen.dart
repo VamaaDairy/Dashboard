@@ -186,7 +186,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(name.isEmpty ? _greeting : '$_greeting, $name', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    Text(dist.signedIn ? (dist.profile!.isSalesman ? 'Sales officer' : 'Distributor') : 'Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
+                    Text(dist.signedIn ? dist.profile!.label : 'Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
                   ]),
                 ),
               ]),
@@ -304,7 +304,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       // subscriptions: the fortnight at a glance
       if (!searching && !ref.read(distributorProvider).signedIn) const SliverToBoxAdapter(child: QuickCalendar()),
       if (!searching && catalog.categories.length > 1) ...[
-        const SliverToBoxAdapter(child: SectionHeader('Shop by category')),
+        const SliverToBoxAdapter(child: SectionHeader('Shop By Category')),
         SliverToBoxAdapter(
           child: SizedBox(
             height: 118,
