@@ -158,7 +158,8 @@ class _GalleryState extends ConsumerState<_Gallery> {
               ],
             ),
           ),
-          if (p.offPercent > 0) Positioned(left: 16, bottom: 16, child: OffBadge(percent: p.offPercent)),
+          if (p.offPercent > 0)
+            Positioned(left: 16, bottom: 16, child: OffBadge(percent: p.offPercent, margin: ref.watch(distributorProvider.select((d) => d.signedIn)))),
           if (photos.length > 1)
             Positioned(
               left: 0,
@@ -216,13 +217,13 @@ class _Header extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              PriceTag(product: p, size: 28),
+              Flexible(child: PriceTag(product: p, size: 28)),
               if (p.offPercent > 0) ...[
                 const SizedBox(width: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(color: Brand.veg.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-                  child: Text('${p.offPercent}% OFF', style: const TextStyle(color: Brand.veg, fontSize: 12, fontWeight: FontWeight.w800)),
+                  child: Text(partner ? '${rupees(p.mrp - p.price)} margin' : '${p.offPercent}% OFF', style: const TextStyle(color: Brand.veg, fontSize: 12, fontWeight: FontWeight.w800)),
                 ),
               ],
             ],

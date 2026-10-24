@@ -196,16 +196,34 @@ class PriceTag extends ConsumerWidget {
     final p = product;
     final kind = ref.watch(distributorProvider.select((d) => d.profile?.kind));
     if (kind != null) {
+      // a dealer's price card: their price and the MRP side by side, both in bold black, each with a
+      // small label under it, split by a hairline - easy to compare at a glance
       final salesman = kind == 'salesman';
-      final big = TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Brand.ink, height: 1.15);
-      // their price on top, the MRP on the line under it - same size and weight, in the brand blue
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!salesman) Text(rupees(p.price), maxLines: 1, style: big),
-          Text('MRP ${rupees(p.mrp)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: salesman ? big : big.copyWith(color: Brand.accent)),
-        ],
+      final value = TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Brand.ink, height: 1.1, letterSpacing: -0.2);
+      final label = TextStyle(fontSize: (size * 0.62).clamp(10, 14).toDouble(), fontWeight: FontWeight.w600, color: Brand.muted, height: 1.3);
+      Widget figure(String v, String l) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [Text(v, maxLines: 1, style: value), Text(l, maxLines: 1, style: label)],
+          );
+      if (salesman) return figure(rupees(p.mrp), 'MRP');
+      // never cut a price off: on a narrow tile or with large phone text the card shrinks to fit
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: IntrinsicHeight(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              figure(rupees(p.price), 'Your price'),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: size * 0.6),
+                child: const VerticalDivider(width: 1, thickness: 1, color: Brand.line),
+              ),
+              figure(rupees(p.mrp), 'MRP'),
+            ],
+          ),
+        ),
       );
     }
     // one line always: the struck-out MRP gives way before the price ever wraps
@@ -229,14 +247,17 @@ class PriceTag extends ConsumerWidget {
 
 /// "12% OFF" ribbon for the corner of a product photo.
 class OffBadge extends StatelessWidget {
-  const OffBadge({super.key, required this.percent});
+  const OffBadge({super.key, required this.percent, this.margin = false});
   final int percent;
+
+  /// For a distributor / retailer the gap to the MRP is their margin, not a discount.
+  final bool margin;
 
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: const BoxDecoration(color: Brand.gaiaGreen, borderRadius: BorderRadius.only(topLeft: Radius.circular(10), bottomRight: Radius.circular(10))),
-        child: Text('$percent% OFF', style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
+        child: Text('$percent% ${margin ? 'MARGIN' : 'OFF'}', style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
       );
 }
 
@@ -277,7 +298,7 @@ class ProductTile extends ConsumerWidget {
                         child: Hero(tag: 'p-${p.sku}', child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
                       ),
                     ),
-                    if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent)),
+                    if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent, margin: partner)),
                     // ADD sits on the photo's corner so it is always in the same place
                     Positioned(right: 6, bottom: -14, child: AddButton(product: p)),
                   ],
@@ -294,7 +315,11 @@ class ProductTile extends ConsumerWidget {
                   ),
                   SizedBox(
                     height: 36,
-                    child: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.3, color: Brand.ink)),
+                    // two lines normally; with large phone text only whole lines, never half of one
+                    child: Text(p.name,
+                        maxLines: (36 / MediaQuery.textScalerOf(context).scale(13.5 * 1.3)).floor().clamp(1, 2),
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.3, color: Brand.ink)),
                   ),
                   const SizedBox(height: 6),
                   PriceTag(product: p),
