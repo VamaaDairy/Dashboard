@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -62,7 +63,8 @@ class _BannerCarouselState extends State<BannerCarousel> {
   Widget build(BuildContext context) {
     final banners = widget.banners;
     if (banners.isEmpty) return const SizedBox.shrink();
-    final height = ((MediaQuery.sizeOf(context).width * 0.92) / 1.9).clamp(160.0, 280.0);
+    // about 1.6 : 1 - the shape of the offer pictures, so they show whole
+    final height = ((MediaQuery.sizeOf(context).width * 0.92) / 1.6).clamp(180.0, 320.0);
     return Column(
       children: [
         SizedBox(
@@ -113,12 +115,23 @@ class _Slide extends ConsumerWidget {
       if (product != null) Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: product)));
     }
 
+    // an uploaded picture is shown whole, never cropped: any strip left over at the sides or top is
+    // filled with a soft, blurred copy of the same picture instead of a bare band
     final Widget body = b.image != null
-        ? CachedNetworkImage(
-            imageUrl: b.image!,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => ColoredBox(color: b.bgColor.withValues(alpha: 0.15)),
-            errorWidget: (_, __, ___) => _Card(banner: b, product: product),
+        ? Stack(
+            fit: StackFit.expand,
+            children: [
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: CachedNetworkImage(imageUrl: b.image!, fit: BoxFit.cover, placeholder: (_, __) => ColoredBox(color: b.bgColor.withValues(alpha: 0.15))),
+              ),
+              CachedNetworkImage(
+                imageUrl: b.image!,
+                fit: BoxFit.contain,
+                placeholder: (_, __) => const SizedBox.shrink(),
+                errorWidget: (_, __, ___) => _Card(banner: b, product: product),
+              ),
+            ],
           )
         : _Card(banner: b, product: product);
 

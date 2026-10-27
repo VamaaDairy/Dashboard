@@ -25,13 +25,20 @@ const label = "text-xs text-muted-foreground";
 /** Roughly what the phone shows (same story-card style as the app), so colour and words can be judged before saving. */
 function Preview({ title, subtitle, cta, bg, poster, product }: { title: string; subtitle: string; cta: string; bg: string; poster: string | null; product: ProductOption | null }) {
   if (poster) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={poster} alt="" className="aspect-[1.9/1] w-80 rounded-2xl object-cover" />;
+    // like the app: the whole picture, never cropped, on a soft blurred copy of itself
+    /* eslint-disable @next/next/no-img-element -- a local preview of the picture being uploaded */
+    return (
+      <div className="relative aspect-[1.6/1] w-80 overflow-hidden rounded-2xl">
+        <img src={poster} alt="" className="absolute inset-0 size-full scale-110 object-cover blur-xl" />
+        <img src={poster} alt="" className="relative size-full object-contain" />
+      </div>
+    );
+    /* eslint-enable @next/next/no-img-element */
   }
   const deep = `color-mix(in oklab, ${bg} 72%, #0b2a66)`;
   const x = product ? 0 : 10;
   return (
-    <div className="relative aspect-[1.9/1] w-80 overflow-hidden rounded-2xl text-white" style={{ background: bg }}>
+    <div className="relative aspect-[1.6/1] w-80 overflow-hidden rounded-2xl text-white" style={{ background: bg }}>
       <div className="absolute inset-0" style={{ background: deep, clipPath: `polygon(100% 22%, ${60 + x}% 52%, ${53 + x}% 62%, ${57 + x}% 72%, ${74 + x}% 100%, 100% 100%)` }} />
       <div className="absolute inset-0" style={{ background: "rgba(255,255,255,0.12)", clipPath: "polygon(0 30%, 10% 0, 15% 0, 0 46%)" }} />
       {product ? (
