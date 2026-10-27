@@ -10,6 +10,7 @@ import '../models.dart';
 import '../store/core.dart';
 import '../store/rider.dart';
 import '../theme.dart';
+import 'rider_ui.dart';
 
 /// Turn-by-turn to the customer on Ola Maps, inside the app: full-screen map that follows the rider,
 /// the next turn on top, time and distance left at the bottom. The route is asked again as the rider moves.
@@ -100,7 +101,7 @@ class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
             follow: _follow ? here : null,
             padding: EdgeInsets.fromLTRB(60, pad.top + 200, 60, pad.bottom + 140),
             markers: [
-              MapMarker.home(_dest, color: const Color(0xFFE8590C)),
+              MapMarker.home(_dest, color: Brand.accent),
               if (here != null) MapMarker.rider(here, heading: rider.heading),
             ],
           ),
@@ -111,8 +112,8 @@ class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
             top: pad.top + 10,
             child: Material(
               color: Brand.accent,
-              borderRadius: BorderRadius.circular(18),
-              elevation: 6,
+              borderRadius: BorderRadius.circular(riderRadius),
+              elevation: 4,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                 child: here == null
@@ -174,7 +175,7 @@ class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
               padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + pad.bottom),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
                 boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 16, offset: Offset(0, -4))],
               ),
               child: Row(
@@ -184,7 +185,7 @@ class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(r?.eta.isNotEmpty == true ? r!.eta : '--', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Brand.veg)),
+                        Text(r?.eta.isNotEmpty == true ? r!.eta : '--', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                         Text(
                           [if (r?.distance.isNotEmpty == true) r!.distance, widget.order.name].join(' · '),
                           maxLines: 1,
@@ -194,16 +195,15 @@ class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
                       ],
                     ),
                   ),
-                  IconButton.filled(
+                  OutlinedButton(
                     onPressed: () => launchUrl(Uri(scheme: 'tel', path: widget.order.phone)),
-                    style: IconButton.styleFrom(backgroundColor: Brand.veg, minimumSize: const Size(52, 52)),
-                    icon: const Icon(Icons.call, color: Colors.white),
-                    tooltip: 'Call customer',
+                    style: riderOutlined(),
+                    child: const Text('Call'),
                   ),
                   const SizedBox(width: 10),
                   FilledButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    style: FilledButton.styleFrom(minimumSize: const Size(100, 52), backgroundColor: Brand.danger),
+                    style: riderFilled().copyWith(minimumSize: const WidgetStatePropertyAll(Size(88, 48))),
                     child: const Text('Exit'),
                   ),
                 ],

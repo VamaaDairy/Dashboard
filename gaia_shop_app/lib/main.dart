@@ -10,7 +10,7 @@ import 'api.dart';
 import 'config.dart';
 import 'push.dart';
 import 'screens/home_screen.dart';
-import 'screens/rider_home_screen.dart';
+import 'screens/rider_shell.dart';
 import 'store/core.dart';
 import 'store/push.dart';
 import 'store/rider.dart';
@@ -80,7 +80,7 @@ class GaiaApp extends StatelessWidget {
         }),
         // a signed-in delivery partner opens straight on their deliveries
         home: Consumer(builder: (_, ref, __) {
-          if (ref.watch(riderProvider.select((r) => r.signedIn))) return const RiderHomeScreen();
+          if (ref.watch(riderProvider.select((r) => r.signedIn))) return const RiderShell();
           return const HomeShell();
         }),
       ),

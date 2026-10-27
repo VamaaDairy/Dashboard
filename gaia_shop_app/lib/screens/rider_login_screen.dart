@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api.dart';
 import '../store/rider.dart';
 import '../theme.dart';
+import 'rider_ui.dart';
 
 /// Delivery partners sign in with the mobile number and PIN the shop gave them.
 class RiderLoginScreen extends ConsumerStatefulWidget {
@@ -53,16 +54,14 @@ class _RiderLoginScreenState extends ConsumerState<RiderLoginScreen> {
         children: [
           Image.asset('assets/images/gaia-logo.jpg', height: 72, alignment: Alignment.centerLeft, fit: BoxFit.contain),
           const SizedBox(height: 24),
-          const Text('Delivery partner sign in', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          const Text('Delivery partner sign in', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           const Text('Use the mobile number and PIN given to you by Gaia.', style: TextStyle(color: Brand.muted)),
           const SizedBox(height: 24),
           if (_error != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 14),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: const Color(0xFFFDECEE), borderRadius: BorderRadius.circular(12)),
-              child: Text(_error!, style: const TextStyle(color: Color(0xFFB3202D), fontWeight: FontWeight.w600)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Text(_error!, style: const TextStyle(color: Brand.danger, fontWeight: FontWeight.w600)),
             ),
           TextField(controller: _phone, keyboardType: TextInputType.phone, maxLength: 10, decoration: const InputDecoration(labelText: 'Mobile number', counterText: '')),
           const SizedBox(height: 14),
@@ -77,6 +76,7 @@ class _RiderLoginScreenState extends ConsumerState<RiderLoginScreen> {
           const SizedBox(height: 22),
           FilledButton(
             onPressed: _busy ? null : _login,
+            style: riderFilled(),
             child: _busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Sign in'),
           ),
         ],
