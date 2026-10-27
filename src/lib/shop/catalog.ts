@@ -1,6 +1,6 @@
 import "server-only";
 import { query } from "@/lib/db";
-import { displayName } from "./pricing";
+import { categoryRank, displayName, shopCategory } from "./pricing";
 
 export interface ShopProduct {
   sku: string;
@@ -34,7 +34,14 @@ const COLUMNS = `
   where p.active = 1 and p.mrp > 0`;
 const SELECT = `${COLUMNS} and coalesce(si.visible, true)`;
 
-const clean = (r: ShopProduct): ShopProduct => ({ ...r, name: displayName(r.name) });
+const clean = (r: ShopProduct): ShopProduct => ({ ...r, name: displayName(r.name), category: shopCategory(r.category) });
+
+/** In the app's category order (Milk, Dahi, Paneer, Ghee, Sweets, Beverages, then the rest); within a category, as listed. */
+const byCategory = (rows: ShopProduct[]) =>
+  rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => categoryRank(a.r.category) - categoryRank(b.r.category) || a.r.category.localeCompare(b.r.category) || a.i - b.i)
+    .map(({ r }) => r);
 
 /**
  * Every active product with an MRP, including the ones hidden from the customer shop - what distributors and
@@ -42,13 +49,13 @@ const clean = (r: ShopProduct): ShopProduct => ({ ...r, name: displayName(r.name
  */
 export async function listAllProducts(): Promise<ShopProduct[]> {
   const rows = await query<ShopProduct>(`${COLUMNS} order by si.sort nulls last, p.position nulls last, p.sku_name`);
-  return rows.map(clean);
+  return byCategory(rows.map(clean));
 }
 
 /** Everything on sale, in the order the shop shows it. */
 export async function listProducts(): Promise<ShopProduct[]> {
   const rows = await query<ShopProduct>(`${SELECT} order by si.sort nulls last, p.position nulls last, p.sku_name`);
-  return rows.map(clean);
+  return byCategory(rows.map(clean));
 }
 
 export async function getProduct(sku: string): Promise<ShopProduct | null> {

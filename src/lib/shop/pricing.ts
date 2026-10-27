@@ -36,3 +36,31 @@ export const STATUS_LABEL: Record<string, string> = {
   delivered: "Delivered",
   cancelled: "Cancelled",
 };
+
+/**
+ * The app's categories, in the order it shows them, and which Product Master categories go into each.
+ * The Product Master keeps its own (finer) categories for the portal's reports; anything not listed
+ * here keeps its own name and comes after these.
+ */
+export const SHOP_CATEGORIES: Array<{ name: string; from: string[] }> = [
+  { name: "Milk", from: ["milk", "uht milk"] },
+  { name: "Dahi", from: ["plain dahi", "kadhi dahi", "dahi"] },
+  { name: "Paneer", from: ["paneer", "low fat paneer"] },
+  { name: "Ghee", from: ["ghee"] },
+  { name: "Sweets", from: ["peda", "shahi rabdi", "rabdi", "shrikhand", "shrikhand 6 pc", "khowa", "sweets"] },
+  { name: "Beverages", from: ["lassi", "masala chaas", "chaas", "beverages"] },
+];
+
+const CATEGORY_OF = new Map(SHOP_CATEGORIES.flatMap((c) => c.from.map((f) => [f, c.name] as const)));
+
+/** The app category a Product Master category belongs to. */
+export const shopCategory = (category: string | null | undefined) => {
+  const c = (category ?? "").trim().replace(/\s+/g, " ");
+  return CATEGORY_OF.get(c.toLowerCase()) ?? (c || "Other");
+};
+
+/** Where a category comes in the app: the grouped ones first, in their order, then the rest by name. */
+export const categoryRank = (name: string) => {
+  const i = SHOP_CATEGORIES.findIndex((c) => c.name === name);
+  return i < 0 ? SHOP_CATEGORIES.length : i;
+};
