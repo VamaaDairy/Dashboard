@@ -20,7 +20,9 @@ export interface ShopProduct {
 const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy.in").replace(/\/+$/, "").replace(/'/g, "");
 
 /** A photo's link: our own copy when we hold the picture (versioned, so a new upload is not served from cache), else the imported link. */
-const photoUrl = `case when i.data is not null then '${PUBLIC_URL}/api/shop/product-image/' || i.uid || '?v=' || extract(epoch from i.updated_at)::bigint else i.image_url end`;
+export const photoUrlOf = (a: string) =>
+  `case when ${a}.data is not null then '${PUBLIC_URL}/api/shop/product-image/' || ${a}.uid || '?v=' || extract(epoch from ${a}.updated_at)::bigint else ${a}.image_url end`;
+const photoUrl = photoUrlOf("i");
 
 const COLUMNS = `
   select p.sku_code as sku, p.sku_name as name, p.category, p.sub_category as "subCategory", p.sku_size as size,
