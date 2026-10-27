@@ -92,18 +92,28 @@ class RiderStore extends Notifier<RiderData> {
     state = const RiderData();
   }
 
-  Future<void> refresh() async {
+  bool _refreshing = false;
+
+  /// Fetches the rider's orders. A [quiet] refresh (the 20 s background poll) shows no spinner and
+  /// keeps what is on screen if it fails; only the rider's own refresh reports a problem.
+  Future<void> refresh({bool quiet = false}) async {
     final t = _token;
-    if (t == null || state.loading) return;
-    state = state.copyWith(loading: true, error: null);
+    if (t == null || _refreshing) return;
+    _refreshing = true;
+    if (!quiet) state = state.copyWith(loading: true, error: null);
     try {
       final orders = await _api.riderOrders(t);
-      state = state.copyWith(orders: orders, loading: false);
+      if (!ref.mounted) return;
+      state = state.copyWith(orders: orders, loading: false, error: null);
     } on ApiException catch (e) {
-      state = state.copyWith(loading: false, error: e.message);
+      if (!ref.mounted) return;
+      state = state.copyWith(loading: false, error: quiet ? keep : e.message);
       if (e.message.contains('sign in')) await logout(); // token replaced by a newer login, or rider deactivated
     } catch (_) {
-      state = state.copyWith(loading: false, error: 'Something went wrong. Please try again.');
+      if (!ref.mounted) return;
+      state = state.copyWith(loading: false, error: quiet ? keep : 'Something went wrong. Please try again.');
+    } finally {
+      _refreshing = false;
     }
   }
 

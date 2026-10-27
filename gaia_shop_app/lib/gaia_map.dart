@@ -67,7 +67,22 @@ class _GaiaMapState extends ConsumerState<GaiaMap> {
   @override
   void didUpdateWidget(GaiaMap old) {
     super.didUpdateWidget(old);
+    // the screen rebuilds on every GPS tick and refresh; only touch the native map when something it shows changed
+    if (_sameContent(old)) return;
     _draw();
+  }
+
+  bool _sameContent(GaiaMap old) {
+    final a = old.markers, b = widget.markers;
+    if (a.length != b.length || old.route.length != widget.route.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].kind != b[i].kind || a[i].point.lat != b[i].point.lat || a[i].point.lng != b[i].point.lng || a[i].heading != b[i].heading || a[i].color != b[i].color) return false;
+    }
+    for (var i = 0; i < widget.route.length; i++) {
+      if (old.route[i].lat != widget.route[i].lat || old.route[i].lng != widget.route[i].lng) return false;
+    }
+    final f = old.follow, g = widget.follow;
+    return (f == null && g == null) || (f != null && g != null && f.lat == g.lat && f.lng == g.lng);
   }
 
   /// Our marker pictures, drawn once in Flutter and handed to the map as images.
@@ -209,14 +224,18 @@ class _GaiaMapState extends ConsumerState<GaiaMap> {
                 onStyleLoadedCallback: () async {
                   final c = _c;
                   if (c == null) return;
-                  await _addImages(c);
-                  // the rider and the door are always drawn, even over street names
-                  await c.setSymbolIconAllowOverlap(true);
-                  await c.setSymbolIconIgnorePlacement(true);
                   // a new style forgets everything that was on it
                   _line = null;
                   _marks.clear();
                   _fitted = false;
+                  try {
+                    await _addImages(c);
+                    // the rider and the door are always drawn, even over street names
+                    await c.setSymbolIconAllowOverlap(true);
+                    await c.setSymbolIconIgnorePlacement(true);
+                  } catch (_) {
+                    // marker pictures failed: still show the map rather than "Loading map…" for ever
+                  }
                   _styleReady = true;
                   if (mounted) setState(() {});
                   await _draw();

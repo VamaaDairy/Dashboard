@@ -268,7 +268,14 @@ class Api {
 
   Future<List<Order>> riderOrders(String token) async {
     final j = await _send(() => _http.get(_r('/orders'), headers: _auth(token)));
-    return ((j['orders'] as List?) ?? []).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();
+    // one odd order must never hide the rest of the rider's list
+    final out = <Order>[];
+    for (final e in (j['orders'] as List?) ?? const []) {
+      try {
+        out.add(Order.fromJson(e as Map<String, dynamic>));
+      } catch (_) {}
+    }
+    return out;
   }
 
   Future<void> riderPickup(String token, int id) async {

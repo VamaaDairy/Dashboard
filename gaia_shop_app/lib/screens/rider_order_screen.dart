@@ -11,7 +11,45 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'rider_navigation_screen.dart';
 
-/// One delivery: the map to the customer, who they are, what to hand over, and the two steps - picked up, delivered.
+const _orange = Color(0xFFE8590C);
+
+void _toast(BuildContext context, String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+/// "Picked up": the order goes out for delivery. Returns true when the server accepted it.
+Future<bool> riderPickupFlow(BuildContext context, WidgetRef ref, Order o) async {
+  try {
+    await ref.read(riderProvider.notifier).pickup(o);
+    return true;
+  } on ApiException catch (e) {
+    if (context.mounted) _toast(context, e.message);
+  } catch (_) {
+    if (context.mounted) _toast(context, 'Something went wrong. Please try again.');
+  }
+  return false;
+}
+
+/// "Delivered": asks for the customer's 4-digit code and completes the order with it.
+Future<bool> riderDeliverFlow(BuildContext context, WidgetRef ref, Order o) async {
+  final otp = await showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => _OtpSheet(amount: o.total),
+  );
+  if (otp == null || !context.mounted) return false;
+  try {
+    await ref.read(riderProvider.notifier).deliver(o, otp);
+    if (context.mounted) _toast(context, 'Delivered. Well done!');
+    return true;
+  } on ApiException catch (e) {
+    if (context.mounted) _toast(context, e.message);
+  } catch (_) {
+    if (context.mounted) _toast(context, 'Something went wrong. Please try again.');
+  }
+  return false;
+}
+
+/// One delivery in full: where, who, what is in the bag, what to collect, and the two steps - picked up, delivered.
 class RiderOrderScreen extends ConsumerStatefulWidget {
   const RiderOrderScreen({super.key, required this.orderNo});
   final String orderNo;
@@ -36,11 +74,7 @@ class _RiderOrderScreenState extends ConsumerState<RiderOrderScreen> {
     if (!o.hasPin || here == null) return;
     // only re-ask for the route once the rider has moved a fair way
     final last = _routedFrom;
-    if (last != null &&
-        (last.lat - here.lat).abs() < 0.0008 &&
-        (last.lng - here.lng).abs() < 0.0008) {
-      return;
-    }
+    if (last != null && (last.lat - here.lat).abs() < 0.0008 && (last.lng - here.lng).abs() < 0.0008) return;
     _routedFrom = here;
     try {
       final r = await ref.read(apiProvider).route(here, GeoPoint(o.lat!, o.lng!));
@@ -50,170 +84,108 @@ class _RiderOrderScreenState extends ConsumerState<RiderOrderScreen> {
     }
   }
 
-  void _toast(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
-  Future<void> _pickup(Order o) async {
+  Future<void> _run(Future<bool> Function() action, {bool closeAfter = false}) async {
     setState(() => _busy = true);
-    try {
-      await ref.read(riderProvider.notifier).pickup(o);
-    } on ApiException catch (e) {
-      _toast(e.message);
-    } catch (_) {
-      _toast('Something went wrong. Please try again.');
+    final ok = await action();
+    if (!mounted) return;
+    if (ok && closeAfter) {
+      Navigator.of(context).pop();
+      return;
     }
-    if (mounted) setState(() => _busy = false);
+    setState(() => _busy = false);
   }
 
-  Future<void> _deliver(Order o) async {
-    final otp = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _OtpSheet(amount: o.total),
-    );
-    if (otp == null || !mounted) return;
-    final rider = ref.read(riderProvider.notifier);
-    final nav = Navigator.of(context);
-    setState(() => _busy = true);
-    try {
-      await rider.deliver(o, otp);
-      if (!mounted) return;
-      _toast('Delivered. Well done!');
-      nav.pop();
-    } on ApiException catch (e) {
-      _toast(e.message);
-    } catch (_) {
-      _toast('Something went wrong. Please try again.');
-    }
-    if (mounted) setState(() => _busy = false);
-  }
-
-  /// Turn-by-turn on Ola Maps inside the app.
-  Future<void> _navigate(Order o) => Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => RiderNavigationScreen(order: o)));
+  Future<void> _call(String phone) => launchUrl(Uri(scheme: 'tel', path: phone));
 
   @override
   Widget build(BuildContext context) {
     final rider = ref.watch(riderProvider);
     final o = _find(rider);
     if (o == null) {
-      return Scaffold(appBar: AppBar(), body: const Center(child: Text('This delivery is no longer on your list.')));
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.orderNo)),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: Text('This delivery is no longer on your list.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: Brand.muted)),
+          ),
+        ),
+      );
     }
     final here = rider.here;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRoute(o, here));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadRoute(o, here);
+    });
     final out = o.status == 'out_for_delivery';
+    final tone = out ? _orange : Brand.veg;
     final r = _route;
-    final size = MediaQuery.sizeOf(context);
-    final top = MediaQuery.paddingOf(context).top;
+    final cash = o.paymentStatus != 'paid';
 
     return Scaffold(
-      body: Stack(
-        children: [
-          // the whole screen is the map; the details slide over it
-          Positioned.fill(
-            child: o.hasPin
-                ? GaiaMap(
-                    height: size.height,
-                    radius: 0,
-                    padding: EdgeInsets.fromLTRB(60, top + 110, 60, size.height * 0.48 + 30),
-                    route: r?.points ?? const [],
-                    markers: [
-                      MapMarker.home(GeoPoint(o.lat!, o.lng!), color: out ? const Color(0xFFE8590C) : const Color(0xFF2E8B3D)),
-                      if (here != null) MapMarker.rider(here, heading: rider.heading),
-                    ],
-                  )
-                : Container(
-                    color: const Color(0xFFFFF4E5),
-                    alignment: Alignment.topLeft,
-                    padding: EdgeInsets.fromLTRB(20, top + 90, 20, 0),
-                    child: const Text('No map pin for this order - use the address and call the customer.',
-                        style: TextStyle(color: Color(0xFF8A5A00), fontWeight: FontWeight.w700, fontSize: 15)),
-                  ),
-          ),
-          // back + order number
-          Positioned(
-            left: 12,
-            top: top + 8,
-            child: Material(
-              color: Colors.white,
-              elevation: 3,
-              shadowColor: Colors.black26,
-              borderRadius: BorderRadius.circular(24),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                IconButton(icon: const Icon(Icons.arrow_back), tooltip: 'Back', onPressed: () => Navigator.of(context).maybePop()),
-                Padding(padding: const EdgeInsets.only(right: 16), child: Text(o.orderNo, style: const TextStyle(fontWeight: FontWeight.w800))),
-              ]),
-            ),
-          ),
-          // full-screen turn-by-turn, at any step
-          if (o.hasPin)
-            Positioned(
-              right: 12,
-              top: top + 8,
-              child: FilledButton.icon(
-                onPressed: () => _navigate(o),
-                style: FilledButton.styleFrom(minimumSize: const Size(0, 48), padding: const EdgeInsets.symmetric(horizontal: 18), elevation: 3),
-                icon: const Icon(Icons.navigation, size: 20),
-                label: const Text('Directions'),
+      appBar: AppBar(
+        title: Text(o.orderNo),
+        actions: [
+          if (o.hasPin) TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RiderNavigationScreen(order: o))), icon: const Icon(Icons.navigation, size: 20), label: const Text('Directions')),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: ref.read(riderProvider.notifier).refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            _Steps(out: out),
+            const SizedBox(height: 16),
+            if (o.hasPin)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: GaiaMap(
+                  height: 230,
+                  route: r?.points ?? const [],
+                  markers: [
+                    MapMarker.home(GeoPoint(o.lat!, o.lng!), color: tone),
+                    if (here != null) MapMarker.rider(here, heading: rider.heading),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: const Color(0xFFFFF4E5), borderRadius: BorderRadius.circular(14)),
+                child: const Text('No map pin for this order - use the address and call the customer.', style: TextStyle(color: Color(0xFF8A5A00), fontWeight: FontWeight.w700)),
               ),
-            ),
-          // details: drag up for everything, down to see more map
-          DraggableScrollableSheet(
-            initialChildSize: 0.48,
-            minChildSize: 0.2,
-            maxChildSize: 0.9,
-            snap: true,
-            snapSizes: const [0.48],
-            builder: (context, scroll) => Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [BoxShadow(color: Color(0x26000000), blurRadius: 16, offset: Offset(0, -4))],
+            if (r != null && r.eta.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(children: [
+                  const Icon(Icons.schedule, size: 20, color: Brand.veg),
+                  const SizedBox(width: 6),
+                  Text(r.eta, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: Brand.veg)),
+                  Text('  ·  ${r.distance} by road', style: const TextStyle(fontWeight: FontWeight.w700, color: Brand.muted)),
+                ]),
               ),
-              child: ListView(
-                controller: scroll,
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            const SizedBox(height: 16),
+            _Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.only(top: 10, bottom: 14),
-                      width: 44,
-                      height: 5,
-                      decoration: BoxDecoration(color: Brand.faint.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(3)),
-                    ),
-                  ),
-                  // time and distance on the road
-                  if (r != null && r.eta.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Row(children: [
-                        const Icon(Icons.schedule, size: 20, color: Brand.veg),
-                        const SizedBox(width: 6),
-                        Text(r.eta, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Brand.veg)),
-                        Text('  ·  ${r.distance} by road', style: const TextStyle(fontWeight: FontWeight.w700, color: Brand.muted)),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('DELIVER TO', style: _label),
+                        const SizedBox(height: 6),
+                        Text(o.name, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text('${o.address}${o.pincode != null && o.pincode!.isNotEmpty ? ' - ${o.pincode}' : ''}', style: const TextStyle(fontSize: 14.5, color: Brand.muted, height: 1.4)),
+                        if (o.phone.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(o.phone, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ],
                       ]),
                     ),
-                  _Steps(out: out),
-                  const SizedBox(height: 20),
-                  // who and where
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(o.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 4),
-                            Text('${o.address}${o.pincode != null ? ' - ${o.pincode}' : ''}', style: const TextStyle(fontSize: 14.5, color: Brand.muted, height: 1.4)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      _RoundAction(icon: Icons.call, label: 'Call', color: Brand.veg, onTap: () => launchUrl(Uri(scheme: 'tel', path: o.phone))),
-                    ],
-                  ),
+                    const SizedBox(width: 12),
+                    if (o.phone.isNotEmpty) _RoundAction(icon: Icons.call, label: 'Call', color: Brand.veg, onTap: () => _call(o.phone)),
+                  ]),
                   if (o.notes != null && o.notes!.trim().isNotEmpty) ...[
                     const SizedBox(height: 14),
                     Container(
@@ -226,41 +198,52 @@ class _RiderOrderScreenState extends ConsumerState<RiderOrderScreen> {
                       ]),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  // the money, big
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Brand.accentTint, borderRadius: BorderRadius.circular(16)),
-                    child: Row(children: [
-                      const Icon(Icons.payments_outlined, color: Brand.accent, size: 26),
-                      const SizedBox(width: 12),
-                      const Expanded(child: Text('Collect in cash', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
-                      Text(rupees(o.total), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Brand.accent)),
-                    ]),
-                  ),
-                  const SizedBox(height: 20),
-                  // what to hand over
-                  Text('${o.itemCount} ${o.itemCount == 1 ? 'item' : 'items'} to hand over', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                  const SizedBox(height: 6),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${o.itemCount} ${o.itemCount == 1 ? 'ITEM' : 'ITEMS'} TO HAND OVER', style: _label),
+                  const SizedBox(height: 8),
+                  if (o.items.isEmpty) const Text('No item details on this order.', style: TextStyle(color: Brand.muted)),
                   for (final i in o.items)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(children: [
-                        ProductImage(url: i.image, size: 44, radius: 10, fit: BoxFit.contain, outlined: true),
+                        ProductImage(url: i.image, size: 46, radius: 10, fit: BoxFit.contain, outlined: true),
                         const SizedBox(width: 12),
                         Expanded(child: Text(i.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(8)),
-                          child: Text('× ${i.qty}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                        ),
+                        const SizedBox(width: 8),
+                        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Text('× ${i.qty}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text(rupees(i.lineTotal), style: const TextStyle(fontSize: 12.5, color: Brand.muted)),
+                        ]),
                       ]),
                     ),
+                  const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1, color: Brand.line)),
+                  _bill('Items', rupees(o.subtotal)),
+                  _bill('Delivery fee', o.deliveryFee == 0 ? 'Free' : rupees(o.deliveryFee)),
+                  const SizedBox(height: 4),
+                  _bill('Total', rupees(o.total), bold: true),
                 ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: cash ? Brand.accentTint : const Color(0xFFE8F5EC), borderRadius: BorderRadius.circular(16)),
+              child: Row(children: [
+                Icon(cash ? Icons.payments_outlined : Icons.verified_outlined, color: cash ? Brand.accent : Brand.veg, size: 26),
+                const SizedBox(width: 12),
+                Expanded(child: Text(cash ? 'Collect in cash' : 'Already paid', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
+                Text(cash ? rupees(o.total) : rupees(0), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: cash ? Brand.accent : Brand.veg)),
+              ]),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
@@ -269,13 +252,13 @@ class _RiderOrderScreenState extends ConsumerState<RiderOrderScreen> {
             ? const SizedBox(height: 56, child: Center(child: CircularProgressIndicator(color: Brand.accent)))
             : !out
                 ? FilledButton.icon(
-                    onPressed: () => _pickup(o),
+                    onPressed: () => _run(() => riderPickupFlow(context, ref, o)),
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
                     icon: const Icon(Icons.inventory_2_outlined),
                     label: const Text('Picked up · start delivery'),
                   )
                 : FilledButton.icon(
-                    onPressed: () => _deliver(o),
+                    onPressed: () => _run(() => riderDeliverFlow(context, ref, o), closeAfter: true),
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56), backgroundColor: Brand.veg),
                     icon: const Icon(Icons.check_circle_outline),
                     label: const Text('Delivered · enter code'),
@@ -283,6 +266,29 @@ class _RiderOrderScreenState extends ConsumerState<RiderOrderScreen> {
       ),
     );
   }
+
+  Widget _bill(String k, String v, {bool bold = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(children: [
+          Expanded(child: Text(k, style: TextStyle(color: bold ? Brand.ink : Brand.muted, fontWeight: bold ? FontWeight.w800 : FontWeight.w600))),
+          Text(v, style: TextStyle(fontWeight: bold ? FontWeight.w900 : FontWeight.w700, fontSize: bold ? 17 : 14.5)),
+        ]),
+      );
+}
+
+const _label = TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: Brand.faint);
+
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Brand.line)),
+        child: child,
+      );
 }
 
 /// Pick up -> On the way -> Delivered, with where this order is now.
@@ -301,30 +307,16 @@ class _Steps extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(
-                color: done
-                    ? Brand.accent
-                    : (now ? Brand.accentTint : Brand.surface),
-                shape: BoxShape.circle,
-                border: Border.all(color: c, width: now ? 2 : 1)),
-            child: Icon(done ? Icons.check : icon,
-                size: 18, color: done ? Colors.white : c),
+            decoration: BoxDecoration(color: done ? Brand.accent : (now ? Brand.accentTint : Brand.surface), shape: BoxShape.circle, border: Border.all(color: c, width: now ? 2 : 1)),
+            child: Icon(done ? Icons.check : icon, size: 18, color: done ? Colors.white : c),
           ),
           const SizedBox(height: 6),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: now ? FontWeight.w800 : FontWeight.w600,
-                  color: now ? Brand.ink : Brand.muted)),
+          Text(label, style: TextStyle(fontSize: 12.5, fontWeight: now ? FontWeight.w800 : FontWeight.w600, color: now ? Brand.ink : Brand.muted)),
         ]),
       );
     }
 
-    Widget line(int i) => Expanded(
-        child: Container(
-            height: 2,
-            margin: const EdgeInsets.only(bottom: 22),
-            color: i < at ? Brand.accent : Brand.line));
+    Widget line(int i) => Expanded(child: Container(height: 2, margin: const EdgeInsets.only(bottom: 22), color: i < at ? Brand.accent : Brand.line));
 
     return Row(children: [
       dot(0, Icons.storefront_outlined, 'Pick up'),
@@ -337,11 +329,7 @@ class _Steps extends StatelessWidget {
 }
 
 class _RoundAction extends StatelessWidget {
-  const _RoundAction(
-      {required this.icon,
-      required this.label,
-      required this.color,
-      required this.onTap});
+  const _RoundAction({required this.icon, required this.label, required this.color, required this.onTap});
   final IconData icon;
   final String label;
   final Color color;
@@ -352,18 +340,10 @@ class _RoundAction extends StatelessWidget {
         Material(
           color: color,
           shape: const CircleBorder(),
-          child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onTap,
-              child: SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: Icon(icon, color: Colors.white))),
+          child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: SizedBox(width: 52, height: 52, child: Icon(icon, color: Colors.white))),
         ),
         const SizedBox(height: 4),
-        Text(label,
-            style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
       ]);
 }
 
@@ -388,18 +368,14 @@ class _OtpSheetState extends State<_OtpSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-          24, 0, 24, MediaQuery.viewInsetsOf(context).bottom + 24),
+      padding: EdgeInsets.fromLTRB(24, 0, 24, MediaQuery.viewInsetsOf(context).bottom + 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Delivery code',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const Text('Delivery code', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text(
-              'Collect ${rupees(widget.amount)} in cash, then ask the customer for the 4-digit code on their order screen.',
-              style: const TextStyle(color: Brand.muted, height: 1.35)),
+          Text('Collect ${rupees(widget.amount)} in cash, then ask the customer for the 4-digit code on their order screen.', style: const TextStyle(color: Brand.muted, height: 1.35)),
           const SizedBox(height: 18),
           TextField(
             controller: _otp,
@@ -407,16 +383,13 @@ class _OtpSheetState extends State<_OtpSheet> {
             keyboardType: TextInputType.number,
             maxLength: 4,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 10),
+            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 10),
             decoration: const InputDecoration(counterText: ''),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: _otp.text.trim().length == 4
-                ? () => Navigator.pop(context, _otp.text.trim())
-                : null,
+            onPressed: _otp.text.trim().length == 4 ? () => Navigator.pop(context, _otp.text.trim()) : null,
             child: const Text('Confirm delivery'),
           ),
         ],
