@@ -16,4 +16,13 @@ export async function sendSms(phone: string, message: string): Promise<void> {
   url.search = new URLSearchParams({ apikey: key, senderid: sender, templateid: template, number: phone, message }).toString();
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`SMS gateway answered ${res.status}`);
+  // the gateway answers 200 even when it refuses (no credit, bad key ...): only code "011" means the SMS was submitted
+  const body = await res.text();
+  let reply: { status?: unknown; code?: unknown; description?: unknown } | null = null;
+  try {
+    reply = JSON.parse(body);
+  } catch {}
+  if (String(reply?.code ?? "") !== "011") {
+    throw new Error(`SMS gateway refused: ${reply ? `${reply.code ?? "?"} ${reply.description ?? reply.status ?? ""}`.trim() : body.slice(0, 200)}`);
+  }
 }
