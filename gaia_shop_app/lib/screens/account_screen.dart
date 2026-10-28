@@ -22,6 +22,23 @@ class AccountScreen extends ConsumerWidget {
 
   void _toast(BuildContext context, String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
+  Future<void> _turnOffBiometric(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Turn off fingerprint sign-in?'),
+        content: const Text('Your PIN will be removed from this phone. You can turn it on again the next time you sign in.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Keep it')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Turn off')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(accountProvider.notifier).clearBiometric();
+    if (context.mounted) _toast(context, 'Fingerprint sign-in is off.');
+  }
+
   Future<void> _signOut(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -160,6 +177,15 @@ class AccountScreen extends ConsumerWidget {
             ),
             gap(),
             _Row(icon: Icons.person_outline_rounded, title: 'Name', subtitle: c.name.isEmpty ? 'Add your name' : c.name, onTap: () => _editName(context, ref, c.name)),
+            if (ref.read(accountProvider.notifier).biometricSaved) ...[
+              gap(),
+              _Row(
+                icon: Icons.fingerprint_rounded,
+                title: 'Fingerprint / face sign-in',
+                subtitle: 'On for this phone. Tap to turn off',
+                onTap: () => _turnOffBiometric(context, ref),
+              ),
+            ],
           ],
           const SizedBox(height: 8),
           band(),

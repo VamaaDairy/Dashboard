@@ -58,8 +58,51 @@ class AccountStore extends Notifier<Account> {
 
   /// Signs in to an existing account, or with [signUp] creates one (name needed).
   /// The account's saved delivery address pre-fills checkout.
-  Future<void> signIn(String phone, String pin, {String name = '', bool signUp = false}) async {
-    final r = await _api.customerLogin(phone, pin, name: name, signUp: signUp);
+  /// Creating needs the SMS code ([otp]) sent by [sendOtp].
+  Future<void> signIn(String phone, String pin, {String name = '', bool signUp = false, String otp = ''}) async =>
+      _finishSignIn(await _api.customerLogin(phone, pin, name: name, signUp: signUp, otp: otp));
+
+  /// Texts a code to [phone] - to confirm a new account's number, or with [reset] to recover a PIN.
+  /// Returns the seconds until another code may be asked for.
+  Future<int> sendOtp(String phone, {required bool reset}) => _api.sendOtp(phone, reset: reset);
+
+  /// Forgotten PIN: the SMS [otp] proves the number, [pin] becomes the new PIN and this phone is signed in.
+  /// Any fingerprint sign-in saved with the old PIN stops working, so it is cleared.
+  Future<void> resetPin(String phone, String otp, String pin) async {
+    final r = await _api.customerResetPin(phone, otp, pin);
+    await clearBiometric();
+    await _finishSignIn(r);
+  }
+
+  /// Fingerprint / face sign-in saved on this phone: the number and PIN sit in secure storage.
+  bool get biometricSaved => _vault.read(TokenVault.bioPhone) != null;
+  String? get biometricPhone => _vault.read(TokenVault.bioPhone);
+
+  Future<void> saveBiometric(String phone, String pin) async {
+    await _vault.write(TokenVault.bioPhone, phone);
+    await _vault.write(TokenVault.bioPin, pin);
+  }
+
+  Future<void> clearBiometric() async {
+    await _vault.delete(TokenVault.bioPhone);
+    await _vault.delete(TokenVault.bioPin);
+    state = state.copyWith(); // screens showing the fingerprint row rebuild
+  }
+
+  /// Signs in with the saved number and PIN. Call only after the phone's own fingerprint / face check passed.
+  /// When the server refuses the PIN (changed elsewhere) the saved copy is dropped.
+  Future<void> signInSaved() async {
+    final phone = _vault.read(TokenVault.bioPhone), pin = _vault.read(TokenVault.bioPin);
+    if (phone == null || pin == null) throw ApiException('Fingerprint sign-in is not set up. Sign in with your PIN.');
+    try {
+      await signIn(phone, pin);
+    } on ApiException catch (e) {
+      if (e.message.startsWith('Wrong PIN') || e.message.startsWith('No account')) await clearBiometric();
+      rethrow;
+    }
+  }
+
+  Future<void> _finishSignIn(({String token, Customer customer}) r) async {
     await _vault.write(TokenVault.customer, r.token);
     final c = r.customer, was = state.customer;
     final customer = Customer(

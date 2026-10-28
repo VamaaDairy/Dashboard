@@ -4,6 +4,8 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Gaia uses your location to deliver to the right place and to show your delivery on the map.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Gaia uses Face ID so you can sign in without typing your PIN.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array><string>tel</string><string>https</string></array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

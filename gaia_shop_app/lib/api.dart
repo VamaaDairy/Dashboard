@@ -89,9 +89,23 @@ class Api {
 
   /// [signUp] creates the account (needs [name]; refused if the number already has one),
   /// otherwise signs in to an existing one. Returns the session token and the saved account.
-  Future<({String token, Customer customer})> customerLogin(String phone, String pin, {String name = '', bool signUp = false}) async {
+  /// Creating an account also needs [otp], the SMS code sent to the number by [sendOtp].
+  Future<({String token, Customer customer})> customerLogin(String phone, String pin, {String name = '', bool signUp = false, String otp = ''}) async {
     final j = await _send(() => _http.post(_u('/customer/login'),
-        headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'name': name, 'mode': signUp ? 'signup' : 'signin'})));
+        headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'name': name, 'mode': signUp ? 'signup' : 'signin', if (otp.isNotEmpty) 'otp': otp})));
+    return (token: j['token'] as String, customer: Customer.fromJson(j['customer'] as Map<String, dynamic>));
+  }
+
+  /// Texts a 6-digit code to [phone]: [reset] for a forgotten PIN (the number must have an account),
+  /// otherwise to confirm the number of a new account (it must not have one). Returns seconds until a resend is allowed.
+  Future<int> sendOtp(String phone, {required bool reset}) async {
+    final j = await _send(() => _http.post(_u('/customer/otp'), headers: _json, body: jsonEncode({'phone': phone, 'purpose': reset ? 'reset' : 'signup'})));
+    return (j['resendAfter'] as num?)?.toInt() ?? 30;
+  }
+
+  /// Sets a new PIN once the SMS [otp] checks out; signs in on this phone and every other phone is signed out.
+  Future<({String token, Customer customer})> customerResetPin(String phone, String otp, String pin) async {
+    final j = await _send(() => _http.post(_u('/customer/reset-pin'), headers: _json, body: jsonEncode({'phone': phone, 'otp': otp, 'pin': pin})));
     return (token: j['token'] as String, customer: Customer.fromJson(j['customer'] as Map<String, dynamic>));
   }
 

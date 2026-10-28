@@ -26,6 +26,9 @@ class TokenVault {
 
   static const customer = 'gaia_customer_token';
   static const rider = 'gaia_rider_token';
+  // the number and PIN for fingerprint / face sign-in; only ever read after the phone's biometric check
+  static const bioPhone = 'gaia_bio_phone';
+  static const bioPin = 'gaia_bio_pin';
 
   final FlutterSecureStorage _store;
   final Map<String, String> _cache;
@@ -51,6 +54,12 @@ class TokenVault {
         } catch (_) {}
       }
       if (v != null) cache[e.key] = v;
+    }
+    for (final k in const [bioPhone, bioPin]) {
+      try {
+        final v = await store.read(key: k);
+        if (v != null) cache[k] = v;
+      } catch (_) {}
     }
     return TokenVault._(store, cache);
   }

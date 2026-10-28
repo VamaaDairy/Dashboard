@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { one, query } from "@/lib/db";
+import { consumeOtp, OTP_WRONG } from "./otp";
 import { hashPin, pinMatches } from "./rider";
 
 export interface Customer {
@@ -30,11 +31,11 @@ export type LoginResult =
 /**
  * Phone + 5-digit PIN -> a new session token for this phone. Other phones stay signed in;
  * a session lasts until the customer signs out on that phone.
- * mode "signup" creates the account (name needed) and refuses a number that already has one;
- * mode "signin" refuses a number with no account. Without a mode (older apps) an unknown
- * number is registered with the PIN it first signs in with.
+ * mode "signup" creates the account (name and the SMS code sent to that number needed) and refuses
+ * a number that already has one; mode "signin" refuses a number with no account. Without a mode
+ * (older apps) an unknown number is refused: accounts are only made with a verified number.
  */
-export async function customerLogin(phone: string, pin: string, name: string, mode?: "signin" | "signup"): Promise<LoginResult> {
+export async function customerLogin(phone: string, pin: string, name: string, mode?: "signin" | "signup", otp = ""): Promise<LoginResult> {
   const c = await one<Customer & { pin_hash: string; failed_tries: number; locked: boolean }>(
     `select ${COLS}, pin_hash, failed_tries, coalesce(locked_until > now(), false) as locked from shop_customer where phone = $1`,
     [phone],
@@ -45,7 +46,9 @@ export async function customerLogin(phone: string, pin: string, name: string, mo
   if (!c && mode === "signin") return { ok: false, status: 404, error: "No account with this number yet. Create one to continue." };
 
   if (!c) {
+    if (mode !== "signup") return { ok: false, status: 404, error: "No account with this number yet. Create one to continue." };
     if (name.length < 2) return { ok: false, status: 400, error: "Enter your name to create your account." };
+    if (!/^\d{6}$/.test(otp) || !(await consumeOtp(phone, "signup", otp))) return { ok: false, status: 401, error: OTP_WRONG };
     const made = await one<Customer>(
       `insert into shop_customer (name, phone, pin_hash, last_login) values ($1, $2, $3, now())
        on conflict (phone) do nothing returning ${COLS}`,
@@ -73,6 +76,21 @@ export async function customerLogin(phone: string, pin: string, name: string, mo
   await query(`insert into shop_customer_session (token, customer_id) values ($1, $2)`, [token, c.id]);
   const { pin_hash: _h, failed_tries: _f, locked: _l, ...customer } = c;
   return { ok: true, token, customer, created: false };
+}
+
+/**
+ * Forgotten PIN: the SMS code proves the phone is theirs, then the new PIN replaces the old one,
+ * the wrong-PIN lock is lifted, and every other phone is signed out (whoever knew the old PIN loses access).
+ */
+export async function resetPin(phone: string, otp: string, pin: string): Promise<LoginResult> {
+  const c = await one<Customer>(`select ${COLS} from shop_customer where phone = $1`, [phone]);
+  if (!c) return { ok: false, status: 404, error: "No account with this number yet. Create one to continue." };
+  if (!(await consumeOtp(phone, "reset", otp))) return { ok: false, status: 401, error: OTP_WRONG };
+  const token = randomBytes(32).toString("hex");
+  await query(`update shop_customer set pin_hash = $2, failed_tries = 0, locked_until = null, last_login = now() where id = $1`, [c.id, hashPin(pin)]);
+  await query(`delete from shop_customer_session where customer_id = $1`, [c.id]);
+  await query(`insert into shop_customer_session (token, customer_id) values ($1, $2)`, [token, c.id]);
+  return { ok: true, token, customer: c, created: false };
 }
 
 export type ProfileChange = { name?: string; address?: string; pincode?: string | null; lat?: number | null; lng?: number | null };
