@@ -15,7 +15,7 @@ const hashCode = (phone: string, purpose: OtpPurpose, code: string) =>
   createHmac("sha256", process.env.JWT_SECRET || "dev-secret-change-me").update(`${phone}:${purpose}:${code}`).digest("hex");
 
 /** The text of the DLT-approved template; {otp} is where the code goes. */
-const template = () => process.env.SMS_OTP_TEXT ?? "Your Gaia verification code is {otp}. It is valid for 10 minutes. Do not share it with anyone. - Vamaa Dairy";
+const template = () => process.env.SMS_OTP_TEXT ?? "Your One Time Password (OTP) is {otp} Please enter this in the App to complete the verification. Regards Team Gaia Fresh";
 
 export type SendResult = { ok: true } | { ok: false; status: number; error: string };
 
