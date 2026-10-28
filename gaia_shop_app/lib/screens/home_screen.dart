@@ -16,8 +16,10 @@ import 'cart_screen.dart';
 import 'my_calendar_screen.dart';
 import 'orders_screen.dart';
 import 'product_screen.dart';
+import 'products_screen.dart';
 
-/// The app's frame: Home, Calendar, Orders and Account, with the cart bar floating above the tabs on Home.
+/// The app's frame: Home, Products, Calendar, Orders and Account, with the cart bar floating above the tabs
+/// on Home and Products.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -27,6 +29,14 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
+
+  /// The category the Products tab shows (null: the first one).
+  String? _productsCategory;
+
+  void _openCategory(String? name) => setState(() {
+        _tab = 1;
+        if (name != null) _productsCategory = name;
+      });
 
   @override
   void initState() {
@@ -61,25 +71,31 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     });
     return Scaffold(
       body: IndexedStack(index: _tab, children: [
-        MenuScreen(onRetry: () => _load(force: true)),
-        const MyCalendarScreen(),
-        const OrdersScreen(),
-        const AccountScreen(),
+        for (final (i, tab) in [
+          MenuScreen(onRetry: () => _load(force: true), onOpenCategory: _openCategory),
+          ProductsScreen(category: _productsCategory, onCategory: (c) => setState(() => _productsCategory = c), onRetry: () => _load(force: true)),
+          const MyCalendarScreen(),
+          const OrdersScreen(),
+          const AccountScreen(),
+        ].indexed)
+          // the same product photo sits on more than one tab: only the shown tab's photos fly to the product page
+          HeroMode(enabled: i == _tab, child: tab),
       ]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_tab == 0) const CartBar(),
+          if (_tab <= 1) const CartBar(),
           DecoratedBox(
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: Brand.line))),
             child: NavigationBar(
               selectedIndex: _tab,
               onDestinationSelected: (i) {
                 setState(() => _tab = i);
-                if (i == 2) ref.read(accountProvider.notifier).refresh();
+                if (i == 3) ref.read(accountProvider.notifier).refresh();
               },
               destinations: [
                 const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
+                const NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view_rounded), label: 'Products'),
                 const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendar'),
                 const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
                 const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Account'),
@@ -93,8 +109,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 }
 
 class MenuScreen extends ConsumerStatefulWidget {
-  const MenuScreen({super.key, required this.onRetry});
+  const MenuScreen({super.key, required this.onRetry, required this.onOpenCategory});
   final Future<void> Function() onRetry;
+
+  /// Opens the Products tab on this category.
+  final ValueChanged<String?> onOpenCategory;
 
   @override
   ConsumerState<MenuScreen> createState() => _MenuScreenState();
@@ -102,7 +121,6 @@ class MenuScreen extends ConsumerStatefulWidget {
 
 class _MenuScreenState extends ConsumerState<MenuScreen> {
   final _search = TextEditingController();
-  String? _category;
   bool _searchOpen = false;
 
   void _closeSearch() => setState(() {
@@ -249,17 +267,15 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
     final term = _search.text.trim().toLowerCase();
     final searching = term.isNotEmpty;
-    final shown = catalog.products.where((p) {
-      if (_category != null && p.category != _category) return false;
-      if (searching && !'${p.name} ${p.category} ${p.subCategory}'.toLowerCase().contains(term)) return false;
-      return true;
-    }).toList();
+    final shown = catalog.products.where((p) => !searching || '${p.name} ${p.category} ${p.subCategory}'.toLowerCase().contains(term)).toList();
 
     final groups = <String, List<Product>>{};
     for (final p in shown) {
       groups.putIfAbsent(p.category, () => []).add(p);
     }
     final tileW = (MediaQuery.sizeOf(context).width - 46) / 2;
+    // a card and a peek of the next, so the row reads as one to swipe
+    final rowW = ((MediaQuery.sizeOf(context).width - 32) * 0.86).clamp(260.0, 420.0);
 
     return [
       // the banners take the place the search bar used to hold, right under the top bar
@@ -275,17 +291,11 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: catalog.categories.length + 1,
+              itemCount: catalog.categories.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (_, i) {
-                final c = i == 0 ? null : catalog.categories[i - 1];
-                final on = _category == c?.name;
-                return _CategoryCard(
-                  label: c?.name ?? 'All',
-                  image: c?.image,
-                  selected: on,
-                  onTap: () => setState(() => _category = (c == null || on) ? null : c.name),
-                );
+                final c = catalog.categories[i];
+                return _CategoryCard(label: c.name, image: c.image, selected: false, onTap: () => widget.onOpenCategory(c.name));
               },
             ),
           ),
@@ -296,7 +306,31 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           hasScrollBody: false,
           child: EmptyState(icon: Icons.search_off_rounded, title: 'Nothing found', message: 'No product matches "${_search.text.trim()}". Try milk, paneer or ghee.'),
         )
+      else if (!searching)
+        // each category as a sideways row; See all opens it on the Products tab
+        for (final g in groups.entries) ...[
+          SliverToBoxAdapter(
+            child: SectionHeader(g.key, action: 'See all', onAction: () => widget.onOpenCategory(g.key), padding: const EdgeInsets.fromLTRB(16, 26, 4, 10)),
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: ProductRowCard.height,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: g.value.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (_, i) => ProductRowCard(
+                  product: g.value[i],
+                  width: rowW,
+                  onOpen: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: g.value[i]))),
+                ),
+              ),
+            ),
+          ),
+        ]
       else
+        // search results as a grid
         for (final g in groups.entries) ...[
           SliverToBoxAdapter(child: SectionHeader(g.key, subtitle: '${g.value.length} ${g.value.length == 1 ? 'item' : 'items'}', padding: const EdgeInsets.fromLTRB(16, 26, 16, 12))),
           SliverPadding(

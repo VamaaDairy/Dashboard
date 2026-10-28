@@ -288,6 +288,89 @@ class ProductTile extends ConsumerWidget {
   }
 }
 
+/// A wide product card for the home page's sideways rows: photo on the left; name, size, price,
+/// ADD and Subscribe on the right.
+class ProductRowCard extends StatelessWidget {
+  const ProductRowCard({super.key, required this.product, required this.onOpen, this.width = 300});
+
+  static const double height = 160;
+  final Product product;
+  final VoidCallback onOpen;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = product;
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Brand.line)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onOpen,
+          child: Row(children: [
+            SizedBox(
+              width: width * 0.4,
+              child: Stack(children: [
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Hero(tag: 'p-${p.sku}', child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
+                  ),
+                ),
+                if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent)),
+              ]),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 12, 12, 10),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, height: 1.25, color: Brand.ink)),
+                  if (p.size != null && p.size!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(p.size!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
+                    ),
+                  const Spacer(),
+                  PriceTag(product: p, size: 15.5),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    AddButton(product: p),
+                    const SizedBox(width: 8),
+                    // shrinks rather than overflowing on a narrow card or with large phone text
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.event_repeat_rounded, size: 15, color: Brand.sky),
+                                SizedBox(width: 4),
+                                Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.sky)),
+                              ]),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 /// The red bar at the bottom once something is in the cart.
 class CartBar extends ConsumerWidget {
   const CartBar({super.key});
