@@ -7,7 +7,6 @@ import 'models.dart';
 import 'screens/cart_screen.dart';
 import 'screens/subscribe_screen.dart';
 import 'store/cart.dart';
-import 'store/distributor.dart';
 import 'theme.dart';
 
 /// A product photo, or a soft placeholder when there isn't one (or it can't load).
@@ -142,13 +141,6 @@ class AddButton extends ConsumerWidget {
           _step(Icons.remove, () => cart.setQty(product.sku, qty - 1), 'Remove one'),
           Flexible(
             child: InkWell(
-              // distributors order in cases: tap the number to type it
-              onTap: ref.read(distributorProvider).signedIn
-                  ? () async {
-                      final n = await _askQty(context, product.name, qty);
-                      if (n != null) cart.setQty(product.sku, n);
-                    }
-                  : null,
               child: Text('$qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: large ? 18 : 15)),
             ),
           ),
@@ -169,63 +161,15 @@ class AddButton extends ConsumerWidget {
       );
 }
 
-Future<int?> _askQty(BuildContext context, String name, int current) {
-  final c = TextEditingController(text: '$current');
-  return showDialog<int>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-      content: TextField(controller: c, autofocus: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(c.text.trim()) ?? current), child: const Text('OK')),
-      ],
-    ),
-  );
-}
-
-/// Selling price, with the MRP struck through and the saving when there is one. A signed-in distributor / retailer
-/// sees their own price with the MRP on the line below it; a sales officer the MRP.
-class PriceTag extends ConsumerWidget {
+/// Selling price, with the MRP struck through and the saving when there is one.
+class PriceTag extends StatelessWidget {
   const PriceTag({super.key, required this.product, this.size = 16});
   final Product product;
   final double size;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final p = product;
-    final kind = ref.watch(distributorProvider.select((d) => d.profile?.kind));
-    if (kind != null) {
-      // a dealer's price card: their price and the MRP side by side, both in bold black, each with a
-      // small label under it, split by a hairline - easy to compare at a glance
-      final salesman = kind == 'salesman';
-      final value = TextStyle(fontSize: size, fontWeight: FontWeight.w800, color: Brand.ink, height: 1.1, letterSpacing: -0.2);
-      final label = TextStyle(fontSize: (size * 0.62).clamp(10, 14).toDouble(), fontWeight: FontWeight.w600, color: Brand.muted, height: 1.3);
-      Widget figure(String v, String l) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [Text(v, maxLines: 1, style: value), Text(l, maxLines: 1, style: label)],
-          );
-      if (salesman) return figure(rupees(p.mrp), 'MRP');
-      // never cut a price off: on a narrow tile or with large phone text the card shrinks to fit
-      return FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: IntrinsicHeight(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              figure(rupees(p.price), 'Your price'),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: size * 0.6),
-                child: const VerticalDivider(width: 1, thickness: 1, color: Brand.line),
-              ),
-              figure(rupees(p.mrp), 'MRP'),
-            ],
-          ),
-        ),
-      );
-    }
     // one line always: the struck-out MRP gives way before the price ever wraps
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -247,17 +191,14 @@ class PriceTag extends ConsumerWidget {
 
 /// "12% OFF" ribbon for the corner of a product photo.
 class OffBadge extends StatelessWidget {
-  const OffBadge({super.key, required this.percent, this.margin = false});
+  const OffBadge({super.key, required this.percent});
   final int percent;
-
-  /// For a distributor / retailer the gap to the MRP is their margin, not a discount.
-  final bool margin;
 
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: const BoxDecoration(color: Brand.gaiaGreen, borderRadius: BorderRadius.only(topLeft: Radius.circular(10), bottomRight: Radius.circular(10))),
-        child: Text('$percent% ${margin ? 'MARGIN' : 'OFF'}', style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
+        child: Text('$percent% OFF', style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
       );
 }
 
@@ -274,7 +215,6 @@ class ProductTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = product;
-    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
     return Material(
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Brand.line)),
@@ -298,7 +238,7 @@ class ProductTile extends ConsumerWidget {
                         child: Hero(tag: 'p-${p.sku}', child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
                       ),
                     ),
-                    if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent, margin: partner)),
+                    if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent)),
                     // ADD sits on the photo's corner so it is always in the same place
                     Positioned(right: 6, bottom: -14, child: AddButton(product: p)),
                   ],
@@ -323,9 +263,9 @@ class ProductTile extends ConsumerWidget {
                   ),
                   const SizedBox(height: 6),
                   PriceTag(product: p),
-                  if (!partner) const SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   // every product can be subscribed to, right from the list
-                  if (!partner) InkWell(
+                  InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
                     child: const Padding(
@@ -355,7 +295,6 @@ class CartBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
-    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
     if (cart.count == 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -377,7 +316,7 @@ class CartBar extends ConsumerWidget {
                     children: [
                       Text('${cart.count} ${cart.count == 1 ? 'ITEM' : 'ITEMS'}',
                           style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                      Text(partner ? rupees(cart.subtotal) : '${rupees(cart.subtotal)}  plus delivery',
+                      Text('${rupees(cart.subtotal)}  plus delivery',
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
                     ],
                   ),
@@ -400,7 +339,6 @@ class BillDetails extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
-    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
     Widget row(String l, Widget r) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l, style: const TextStyle(color: Brand.muted)), r]),
@@ -414,8 +352,7 @@ class BillDetails extends ConsumerWidget {
           const Text('Bill details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
           const SizedBox(height: 8),
           row('Item total', Text(rupees(cart.subtotal))),
-          if (!partner)
-            row(
+          row(
               'Delivery fee',
               cart.delivery == 0
                   ? const Text('FREE', style: TextStyle(color: Brand.veg, fontWeight: FontWeight.w700))
@@ -425,11 +362,11 @@ class BillDetails extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(partner ? 'Order total' : 'To pay', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              Text(rupees(partner ? cart.subtotal : cart.total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              const Text('To pay', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              Text(rupees(cart.total), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             ],
           ),
-          if (!partner && cart.toFreeDelivery > 0)
+          if (cart.toFreeDelivery > 0)
             Container(
               margin: const EdgeInsets.only(top: 12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

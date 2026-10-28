@@ -116,7 +116,7 @@ class Push {
     );
   }
 
-  /// Subscribe/unsubscribe to a topic (e.g. 'riders', 'distributors'). No-op without Firebase.
+  /// Subscribe/unsubscribe to a topic (e.g. 'riders'). No-op without Firebase.
   static Future<void> subscribe(String topic) async {
     if (!_ready) return;
     try {

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../push.dart';
 import 'account.dart';
 import 'core.dart';
-import 'distributor.dart';
 import 'rider.dart';
 
 /// Keeps the backend told which phone belongs to which signed-in session: whenever the push token
@@ -14,13 +13,12 @@ import 'rider.dart';
 final pushSyncProvider = Provider<void>((ref) {
   final customer = ref.watch(accountProvider.select((a) => a.signedIn));
   final rider = ref.watch(riderProvider.select((r) => r.signedIn));
-  final distributor = ref.watch(distributorProvider.select((d) => d.signedIn));
 
   void register() {
     final t = Push.token;
     if (t == null) return;
     final vault = ref.read(vaultProvider), api = ref.read(apiProvider);
-    for (final (signedIn, key) in [(customer, TokenVault.customer), (rider, TokenVault.rider), (distributor, TokenVault.distributor)]) {
+    for (final (signedIn, key) in [(customer, TokenVault.customer), (rider, TokenVault.rider)]) {
       final session = vault.read(key);
       if (signedIn && session != null) unawaited(api.registerPushToken(session, t));
     }

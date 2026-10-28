@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../product_info.dart';
 import '../store/cart.dart';
-import '../store/distributor.dart';
+import '../store/catalog.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cart_screen.dart';
@@ -23,8 +23,7 @@ class ProductScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = product;
     final info = infoFor(p);
-    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
-    final all = ref.watch(menuProvider.select((c) => c.products));
+    final all = ref.watch(catalogProvider.select((c) => c.products));
     final sameRange = [for (final o in all) if (o.sku != p.sku && o.category == p.category) o];
     // one or two from each other category, so the row shows the range rather than six ghees
     final seen = <String, int>{};
@@ -41,7 +40,7 @@ class ProductScreen extends ConsumerWidget {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _Gallery(product: p)),
-          SliverToBoxAdapter(child: _Header(product: p, partner: partner)),
+          SliverToBoxAdapter(child: _Header(product: p)),
           SliverToBoxAdapter(child: _Highlights(items: info.highlights)),
           SliverToBoxAdapter(child: _Details(info: info)),
           if (sameRange.isNotEmpty) SliverToBoxAdapter(child: _Rail(title: 'More in ${p.category}', products: sameRange, onOpen: (o) => _open(context, o))),
@@ -68,11 +67,10 @@ class ProductScreen extends ConsumerWidget {
                     children: [
                       if (p.size != null && p.size!.isNotEmpty) Text(p.size!, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
                       PriceTag(product: p, size: 20),
-                      if (!partner) const Text('Inclusive of all taxes', style: TextStyle(fontSize: 11, color: Brand.faint)),
+                      const Text('Inclusive of all taxes', style: TextStyle(fontSize: 11, color: Brand.faint)),
                     ],
                   ),
                 ),
-                if (!partner)
                 OutlinedButton(
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
                   style: OutlinedButton.styleFrom(
@@ -87,7 +85,7 @@ class ProductScreen extends ConsumerWidget {
                     Text('Subscribe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                   ]),
                 ),
-                if (!partner) const SizedBox(width: 10),
+                const SizedBox(width: 10),
                 AddButton(product: p, large: true, width: 150),
               ],
             ),
@@ -159,7 +157,7 @@ class _GalleryState extends ConsumerState<_Gallery> {
             ),
           ),
           if (p.offPercent > 0)
-            Positioned(left: 16, bottom: 16, child: OffBadge(percent: p.offPercent, margin: ref.watch(distributorProvider.select((d) => d.signedIn)))),
+            Positioned(left: 16, bottom: 16, child: OffBadge(percent: p.offPercent)),
           if (photos.length > 1)
             Positioned(
               left: 0,
@@ -186,9 +184,8 @@ class _GalleryState extends ConsumerState<_Gallery> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.product, this.partner = false});
+  const _Header({required this.product});
   final Product product;
-  final bool partner;
 
   @override
   Widget build(BuildContext context) {
@@ -223,14 +220,13 @@ class _Header extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(color: Brand.veg.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-                  child: Text(partner ? '${rupees(p.mrp - p.price)} margin' : '${p.offPercent}% OFF', style: const TextStyle(color: Brand.veg, fontSize: 12, fontWeight: FontWeight.w800)),
+                  child: Text('${p.offPercent}% OFF', style: const TextStyle(color: Brand.veg, fontSize: 12, fontWeight: FontWeight.w800)),
                 ),
               ],
             ],
           ),
           const SizedBox(height: 2),
-          // partners already see the MRP under their price
-          Text(p.offPercent > 0 && !partner ? 'MRP ${rupees(p.mrp)} · Inclusive of all taxes' : 'Inclusive of all taxes', style: const TextStyle(fontSize: 12, color: Brand.faint)),
+          Text(p.offPercent > 0 ? 'MRP ${rupees(p.mrp)} · Inclusive of all taxes' : 'Inclusive of all taxes', style: const TextStyle(fontSize: 12, color: Brand.faint)),
         ],
       ),
     );

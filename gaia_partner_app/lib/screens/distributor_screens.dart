@@ -6,14 +6,21 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../models.dart';
 import '../store/cart.dart';
-import '../subscription_widgets.dart' show niceDate;
 import '../store/distributor.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
 import 'cart_screen.dart';
 import 'distributor_edit_screen.dart';
-import 'orders_screen.dart' show orderDate;
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+String niceDate(DateTime d) => '${d.day.toString().padLeft(2, '0')} ${_months[d.month - 1]} ${d.year}';
+
+/// "12 Oct · 4:05 PM"
+String orderDate(DateTime d) {
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  return '${d.day} ${_months[d.month - 1]} · $h:${d.minute.toString().padLeft(2, '0')} ${d.hour >= 12 ? 'PM' : 'AM'}';
+}
 
 /// The signed-in distributor's / sales officer's side of the normal app: which distributor the order
 /// is for, the primary orders already placed, and the account page. The menu, product pages and cart

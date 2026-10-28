@@ -8,13 +8,11 @@ import '../models.dart';
 import '../store/account.dart';
 import '../store/cart.dart';
 import '../store/catalog.dart';
-import '../store/distributor.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
 import 'account_screen.dart';
 import 'cart_screen.dart';
-import 'distributor_screens.dart';
 import 'my_calendar_screen.dart';
 import 'orders_screen.dart';
 import 'product_screen.dart';
@@ -29,83 +27,44 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
-  Timer? _poll;
-  bool _inForeground = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // a distributor looking at the Orders tab sees the office confirm / cancel an order within seconds
-    _poll = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (_inForeground && _tab == 1 && ref.read(distributorProvider).signedIn) ref.read(distributorProvider.notifier).loadOrders();
-    });
     // the saved menu is already on screen; this only refreshes it if it is stale
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _load();
-      _startPartner();
-    });
-  }
-
-  /// A signed-in distributor / sales officer: load who they can order for (and their past orders).
-  void _startPartner() {
-    if (!mounted || !ref.read(distributorProvider).signedIn) return;
-    final s = ref.read(distributorProvider.notifier);
-    s.start();
-    s.loadOrders();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  /// Back in the app: refresh the menu if it has gone stale (prices, stock); a distributor gets
-  /// today's dealer prices, quietly - the menu only changes if a price did.
+  /// Back in the app: refresh the menu if it has gone stale (prices, stock).
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
-    _inForeground = s == AppLifecycleState.resumed;
-    if (s != AppLifecycleState.resumed) return;
-    if (ref.read(distributorProvider).signedIn) {
-      ref.read(distributorProvider.notifier).refreshPrices();
-      ref.read(distributorProvider.notifier).loadOrders();
-    } else {
-      _load();
-    }
+    if (s == AppLifecycleState.resumed) _load();
   }
 
   Future<void> _load({bool force = false}) => ref.read(catalogProvider.notifier).load(force: force);
 
-  /// Pull to refresh / Try again on a distributor's menu: today's dealer prices.
-  Future<void> _reloadPrices() {
-    final d = ref.read(distributorProvider), s = ref.read(distributorProvider.notifier);
-    if (d.firm != null && d.products.isEmpty) return s.selectFirm(d.firm);
-    return s.refreshPrices(minGap: Duration.zero);
-  }
-
   @override
   Widget build(BuildContext context) {
     // whenever the menu changes, the cart follows: current prices, delivery rule, nothing that's gone
-    ref.listen(distributorProvider.select((d) => d.signedIn), (prev, next) {
-      if (next) _startPartner();
-      setState(() => _tab = 0);
-    });
-    final partner = ref.watch(distributorProvider.select((d) => d.signedIn));
-    ref.listen(menuProvider, (prev, next) {
+    ref.listen(catalogProvider, (prev, next) {
       if (identical(prev?.catalog, next.catalog) || next.catalog == null) return;
       final cart = ref.read(cartProvider.notifier);
       cart.setRule(next.rule);
       cart.syncWith(next.products);
     });
     return Scaffold(
-      // distributors / sales officers get no Calendar (subscriptions are for home delivery)
       body: IndexedStack(index: _tab, children: [
-        MenuScreen(onRetry: () => partner ? _reloadPrices() : _load(force: true)),
-        if (!partner) const MyCalendarScreen(),
-        partner ? const DistOrdersScreen() : const OrdersScreen(),
-        partner ? const PartnerAccountScreen() : const AccountScreen(),
+        MenuScreen(onRetry: () => _load(force: true)),
+        const MyCalendarScreen(),
+        const OrdersScreen(),
+        const AccountScreen(),
       ]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -117,13 +76,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               selectedIndex: _tab,
               onDestinationSelected: (i) {
                 setState(() => _tab = i);
-                if (i == (partner ? 1 : 2)) {
-                  partner ? ref.read(distributorProvider.notifier).loadOrders() : ref.read(accountProvider.notifier).refresh();
-                }
+                if (i == 2) ref.read(accountProvider.notifier).refresh();
               },
               destinations: [
                 const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
-                if (!partner) const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendar'),
+                const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendar'),
                 const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
                 const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Account'),
               ],
@@ -166,12 +123,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final catalog = ref.watch(menuProvider);
-    final dist = ref.watch(distributorProvider);
+    final catalog = ref.watch(catalogProvider);
     final count = ref.watch(cartProvider.select((c) => c.count));
-    final name = dist.signedIn
-        ? dist.profile!.name.split(' ').first
-        : ref.watch(accountProvider.select((a) => a.signedIn ? a.customer.name.split(' ').first : ''));
+    final name = ref.watch(accountProvider.select((a) => a.signedIn ? a.customer.name.split(' ').first : ''));
 
     return SafeArea(
       bottom: false,
@@ -203,7 +157,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(name.isEmpty ? _greeting : '$_greeting, $name', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                          Text(dist.signedIn ? dist.profile!.label : 'Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
+                          Text('Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
                         ]),
                       ),
                     ]),
@@ -240,12 +194,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 ),
               ],
             ),
-            if (dist.signedIn && dist.firm == null)
-              const SliverFillRemaining(hasScrollBody: false, child: DistFirmPicker())
-            else ...[
-              if (dist.signedIn) const SliverToBoxAdapter(child: DistFirmBar()),
-              ..._body(catalog),
-            ],
+            ..._body(catalog),
           ],
         ),
       ),
@@ -317,7 +266,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       if (!searching && catalog.banners.isNotEmpty)
         SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 4), child: BannerCarousel(banners: catalog.banners))),
       // subscriptions: the fortnight at a glance
-      if (!searching && !ref.read(distributorProvider).signedIn) const SliverToBoxAdapter(child: QuickCalendar()),
+      if (!searching) const SliverToBoxAdapter(child: QuickCalendar()),
       if (!searching && catalog.categories.length > 1) ...[
         const SliverToBoxAdapter(child: SectionHeader('Shop By Category')),
         SliverToBoxAdapter(

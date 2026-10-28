@@ -121,8 +121,8 @@ class Api {
 
   // ---- subscriptions (signed-in customer) ----
 
-  /// Tells the backend which phone to push to for this signed-in session ([token] is a customer,
-  /// rider or distributor sign-in token; the server knows which). Best effort.
+  /// Tells the backend which phone to push to for this signed-in session ([token] is a customer
+  /// or rider sign-in token; the server knows which). Best effort.
   Future<void> registerPushToken(String token, String pushToken) async {
     try {
       await _http
@@ -288,64 +288,6 @@ class Api {
 
   Future<void> riderLocation(String token, double lat, double lng) async {
     await _send(() => _http.post(_r('/location'), headers: _auth(token), body: jsonEncode({'lat': lat, 'lng': lng})));
-  }
-
-  // ---- distributors / salesmen (primary orders) ----
-
-  Uri _d(String path, [Map<String, String>? q]) => Uri.parse('$_base/api/distributor$path').replace(queryParameters: q);
-
-  Future<({String token, DistProfile profile})> distLogin(String phone, String pin, String kind) async {
-    final j = await _send(() => _http.post(_d('/login'), headers: _json, body: jsonEncode({'phone': phone, 'pin': pin, 'kind': kind})));
-    final l = j['login'] as Map<String, dynamic>;
-    return (token: j['token'] as String, profile: DistProfile(kind: l['kind'] as String, name: l['name'] as String, phone: l['phone'] as String));
-  }
-
-  /// The distributors this login can order for, and the states a profile can be set to.
-  Future<({List<DistFirm> firms, List<String> states})> distFirms(String token) async {
-    final j = await _send(() => _http.get(_d('/me'), headers: _auth(token)));
-    return (
-      firms: ((j['distributors'] as List?) ?? []).map((e) => DistFirm.fromJson(e as Map<String, dynamic>)).toList(),
-      states: ((j['states'] as List?) ?? []).map((e) => '$e').toList(),
-    );
-  }
-
-  /// Saves changed details of a distributor into the dashboard's Customer Masters; returns the saved profile
-  /// and the (possibly new) sign-in number. Only the keys in [changes] are touched.
-  Future<({DistFirm firm, String name, String phone})> distSaveFirm(String token, String firmUid, Map<String, Object?> changes) async {
-    final j = await _send(() => _http.patch(_d('/me'), headers: {..._json, ..._auth(token)}, body: jsonEncode({'firmUid': firmUid, ...changes})));
-    final l = j['login'] as Map<String, dynamic>;
-    return (firm: DistFirm.fromJson(j['firm'] as Map<String, dynamic>), name: l['name'] as String, phone: l['phone'] as String);
-  }
-
-  /// The shop catalogue at [firmUid]'s dealer price.
-  /// With the [etag] of the list the phone already has, an unchanged list comes back as `raw == null`.
-  Future<({String? raw, String? etag})> distProducts(String token, String firmUid, {String? etag}) async {
-    http.Response? res;
-    final j = await _send(() async => res = await _http.get(_d('/products', {'firm': firmUid}), headers: {..._auth(token), if (etag != null) 'if-none-match': etag}));
-    if (res!.statusCode == 304) return (raw: null, etag: etag);
-    return (raw: jsonEncode(j), etag: res!.headers['etag']);
-  }
-
-  static List<Product> parseProducts(String raw) =>
-      ((jsonDecode(raw) as Map<String, dynamic>)['products'] as List? ?? []).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
-
-  Future<List<DistOrder>> distOrders(String token) async {
-    final j = await _send(() => _http.get(_d('/orders'), headers: _auth(token)));
-    return ((j['orders'] as List?) ?? []).map((e) => DistOrder.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  /// Places the order; returns the order number.
-  Future<int> distPlaceOrder(String token, {required String firmUid, required Map<String, int> qty, String? notes}) async {
-    final j = await _send(() => _http.post(
-          _d('/orders'),
-          headers: _auth(token),
-          body: jsonEncode({
-            'firmUid': firmUid,
-            if (notes != null && notes.isNotEmpty) 'notes': notes,
-            'lines': [for (final e in qty.entries) {'sku': e.key, 'qty': e.value}],
-          }),
-        ));
-    return (j['orderId'] as num).toInt();
   }
 
   Future<Map<String, dynamic>> _send(Future<http.Response> Function() call) async {

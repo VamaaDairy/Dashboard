@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import 'core.dart';
-import 'distributor.dart';
 
 /// The cart. Persisted on the phone, so it survives closing the app; no account needed for it.
 class Cart {
@@ -33,8 +32,8 @@ final cartProvider = NotifierProvider<CartStore, Cart>(CartStore.new);
 
 class CartStore extends Notifier<Cart> {
   static const _key = 'gaia_cart_v1';
-  /// A shopper takes a few of each; a distributor orders in cases.
-  int get maxPerItem => ref.read(distributorProvider).signedIn ? 100000 : 20;
+  /// A shopper takes a few of each.
+  static const maxPerItem = 20;
 
   @override
   Cart build() {
