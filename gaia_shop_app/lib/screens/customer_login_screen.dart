@@ -122,9 +122,11 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
     return false;
   }
 
-  void _nameDone() {
+  Future<void> _nameDone() async {
     if (_name.text.trim().length < 2) return setState(() => _error = 'Please enter your name.');
     FocusScope.of(context).unfocus();
+    // the number was already typed on the sign-in screen before "Create account" was tapped: don't ask for it twice
+    if (RegExp(r'^[6-9]\d{9}$').hasMatch(_digits)) return _mobileDone();
     setState(() {
       _step = _Step.mobile;
       _error = null;

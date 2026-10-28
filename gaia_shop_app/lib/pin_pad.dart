@@ -57,8 +57,11 @@ class PinPad extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(5),
         child: Material(
-          color: onTap == null ? Colors.transparent : Brand.surface,
-          borderRadius: BorderRadius.circular(18),
+          color: onTap == null ? Colors.transparent : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: onTap == null ? BorderSide.none : const BorderSide(color: Brand.line),
+          ),
           child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: onTap,

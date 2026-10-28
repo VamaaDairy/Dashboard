@@ -23,6 +23,8 @@ export async function sendSms(phone: string, message: string): Promise<void> {
     reply = JSON.parse(body);
   } catch {}
   if (String(reply?.code ?? "") !== "011") {
+    // keep the gateway's raw JSON in the server log so a refusal can be diagnosed
+    console.error(`[sms] gateway reply for ${phone} (HTTP ${res.status}): ${body.slice(0, 1000)}`);
     throw new Error(`SMS gateway refused: ${reply ? `${reply.code ?? "?"} ${reply.description ?? reply.status ?? ""}`.trim() : body.slice(0, 200)}`);
   }
 }

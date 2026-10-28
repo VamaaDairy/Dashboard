@@ -44,7 +44,8 @@ export async function sendOtp(phone: string, purpose: OtpPurpose): Promise<SendR
     await sendSms(phone, template().replace("{otp}", code));
   } catch (e) {
     console.error("OTP SMS failed:", e);
-    return { ok: false, status: 502, error: "We could not send the SMS right now. Please try again." };
+    // TEMPORARY (debugging): the gateway's code and message are shown in the app; remove once SMS delivery works
+    return { ok: false, status: 502, error: `We could not send the SMS right now. Please try again. [${e instanceof Error ? e.message : String(e)}]` };
   }
   return { ok: true };
 }
