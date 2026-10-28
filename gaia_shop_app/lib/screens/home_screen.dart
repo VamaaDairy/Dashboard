@@ -146,6 +146,12 @@ class MenuScreen extends ConsumerStatefulWidget {
 class _MenuScreenState extends ConsumerState<MenuScreen> {
   final _search = TextEditingController();
   String? _category;
+  bool _searchOpen = false;
+
+  void _closeSearch() => setState(() {
+        _searchOpen = false;
+        _search.clear();
+      });
 
   @override
   void dispose() {
@@ -180,17 +186,41 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               snap: true,
               toolbarHeight: 72,
               titleSpacing: 16,
-              title: Row(children: [
-                Image.asset('assets/images/gaia-logo.jpg', height: 42, fit: BoxFit.contain),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(name.isEmpty ? _greeting : '$_greeting, $name', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    Text(dist.signedIn ? dist.profile!.label : 'Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
-                  ]),
-                ),
-              ]),
+              title: _searchOpen
+                  ? TextField(
+                      controller: _search,
+                      autofocus: true,
+                      onChanged: (_) => setState(() {}),
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: "Search milk, paneer, ghee, dahi…",
+                        suffixIcon: IconButton(icon: const Icon(Icons.close_rounded), tooltip: 'Close search', onPressed: _closeSearch),
+                      ),
+                    )
+                  : Row(children: [
+                      Image.asset('assets/images/gaia-logo.jpg', height: 42, fit: BoxFit.contain),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(name.isEmpty ? _greeting : '$_greeting, $name', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                          Text(dist.signedIn ? dist.profile!.label : 'Fresh dairy, delivered every morning', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w500)),
+                        ]),
+                      ),
+                    ]),
               actions: [
+                if (!_searchOpen)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Material(
+                      color: Brand.surface,
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        tooltip: 'Search',
+                        onPressed: () => setState(() => _searchOpen = true),
+                        icon: const Icon(Icons.search_rounded, size: 24),
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.only(right: 12),
                   child: Material(
@@ -226,8 +256,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
   List<Widget> _skeleton() {
     final w = (MediaQuery.sizeOf(context).width - 46) / 2;
     return [
-      const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 0), child: Skeleton(height: 54, radius: 16))),
-      const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 0), child: Skeleton(height: 190, radius: 22))),
+      const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 0), child: Skeleton(height: 190, radius: 22))),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -284,23 +313,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final tileW = (MediaQuery.sizeOf(context).width - 46) / 2;
 
     return [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: TextField(
-            controller: _search,
-            onChanged: (_) => setState(() {}),
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: "Search milk, paneer, ghee, dahi…",
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: searching ? IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setState(_search.clear)) : null,
-            ),
-          ),
-        ),
-      ),
+      // the banners take the place the search bar used to hold, right under the top bar
       if (!searching && catalog.banners.isNotEmpty)
-        SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 16), child: BannerCarousel(banners: catalog.banners))),
+        SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 4), child: BannerCarousel(banners: catalog.banners))),
       // subscriptions: the fortnight at a glance
       if (!searching && !ref.read(distributorProvider).signedIn) const SliverToBoxAdapter(child: QuickCalendar()),
       if (!searching && catalog.categories.length > 1) ...[
