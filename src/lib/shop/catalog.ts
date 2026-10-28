@@ -36,7 +36,7 @@ const SELECT = `${COLUMNS} and coalesce(si.visible, true)`;
 
 const clean = (r: ShopProduct): ShopProduct => ({ ...r, name: displayName(r.name), category: shopCategory(r.category) });
 
-/** In the app's category order (Milk, Dahi, Paneer, Ghee, Desserts, Beverages, then the rest); within a category, as listed. */
+/** In the app's category order (Milk, Paneer, Ghee, Desserts, Beverages, UHT Milk, Dahi, then the rest); within a category, as listed. */
 const byCategory = (rows: ShopProduct[]) =>
   rows
     .map((r, i) => ({ r, i }))

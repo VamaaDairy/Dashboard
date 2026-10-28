@@ -44,12 +44,13 @@ export const STATUS_LABEL: Record<string, string> = {
  * here keeps its own name and comes after these.
  */
 export const SHOP_CATEGORIES: Array<{ name: string; from: string[] }> = [
-  { name: "Milk", from: ["milk", "uht milk"] },
-  { name: "Dahi", from: ["plain dahi", "kadhi dahi", "dahi"] },
+  { name: "Milk", from: ["milk"] },
   { name: "Paneer", from: ["paneer", "low fat paneer"] },
   { name: "Ghee", from: ["ghee"] },
   { name: "Desserts", from: ["desserts", "peda", "shahi rabdi", "rabdi", "shrikhand", "shrikhand 6 pc", "khowa", "sweets"] },
   { name: "Beverages", from: ["lassi", "masala chaas", "chaas", "beverages"] },
+  { name: "UHT Milk", from: ["uht milk"] },
+  { name: "Dahi", from: ["plain dahi", "kadhi dahi", "dahi"] },
 ];
 
 const CATEGORY_OF = new Map(SHOP_CATEGORIES.flatMap((c) => c.from.map((f) => [f, c.name] as const)));
