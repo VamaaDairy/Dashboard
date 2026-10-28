@@ -15,6 +15,7 @@ class CodeBoxes extends StatefulWidget {
     this.hasError = false,
     this.autofocus = false,
     this.otp = false,
+    this.systemKeyboard = true,
     this.onCompleted,
     this.onChanged,
     this.focusNode,
@@ -30,6 +31,9 @@ class CodeBoxes extends StatefulWidget {
 
   /// Lets the phone offer the code from the SMS it just received.
   final bool otp;
+
+  /// false: only draws the boxes; the digits come from an on-screen [PinPad] that sets the controller.
+  final bool systemKeyboard;
   final ValueChanged<String>? onCompleted;
   final ValueChanged<String>? onChanged;
   final FocusNode? focusNode;
@@ -69,12 +73,13 @@ class _CodeBoxesState extends State<CodeBoxes> {
   @override
   Widget build(BuildContext context) {
     final text = widget.controller.text;
-    final focused = _focus.hasFocus;
+    final focused = !widget.systemKeyboard || _focus.hasFocus;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _focus.requestFocus(),
       child: Stack(alignment: Alignment.center, children: [
         // the real field: invisible, but it holds focus, the keyboard and the autofill
+        if (widget.systemKeyboard)
         Positioned.fill(
           child: Opacity(
             opacity: 0,

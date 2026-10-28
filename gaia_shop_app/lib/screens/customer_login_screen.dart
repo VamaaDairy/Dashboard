@@ -13,9 +13,10 @@ import '../theme.dart';
 
 enum _Mode { signIn, signUp, reset }
 
-/// signIn / signUp start on the form; both signUp and reset then confirm the number with an SMS code and
-/// finish on two PIN screens: choose the PIN, then enter it again.
-enum _Step { form, otp, createPin, confirmPin }
+/// One thing per screen, each with our own on-screen number pad (no system keyboard, except for the name).
+/// signIn: mobile -> PIN. signUp: name -> mobile -> SMS code -> choose PIN -> confirm PIN.
+/// reset: mobile -> SMS code -> choose PIN -> confirm PIN.
+enum _Step { name, mobile, signInPin, otp, createPin, confirmPin }
 
 /// Sign in or create an account - both on one screen. Ordering needs one; the cart does not.
 /// Creating an account (and recovering a forgotten PIN) confirms the mobile number with an SMS code.
@@ -46,9 +47,8 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
   final _name = TextEditingController();
   final _otp = TextEditingController();
   late _Mode _mode = widget.startWithSignUp ? _Mode.signUp : _Mode.signIn;
-  _Step _step = _Step.form;
+  late _Step _step = _first;
   bool _busy = false;
-  bool _showPin = false;
   String? _error;
   bool _wrongOtp = false;
 
@@ -58,6 +58,8 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
 
   Timer? _ticker;
   int _resendIn = 0;
+
+  _Step get _first => _mode == _Mode.signUp ? _Step.name : _Step.mobile;
 
   String get _digits => _phone.text.replaceAll(RegExp(r'\D'), '');
 
@@ -101,13 +103,6 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
     });
   }
 
-  String? _checkForm() {
-    if (_mode == _Mode.signUp && _name.text.trim().length < 2) return 'Please enter your name.';
-    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(_digits)) return 'Enter a valid 10-digit mobile number.';
-    if (_mode == _Mode.signIn && !RegExp(r'^\d{5}$').hasMatch(_pin.text)) return 'The PIN is 5 digits.';
-    return null;
-  }
-
   /// Runs [job], showing its failure on the screen.
   Future<bool> _run(Future<void> Function() job) async {
     setState(() {
@@ -127,15 +122,35 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
     return false;
   }
 
-  Future<void> _submitForm() async {
-    final problem = _checkForm();
-    if (problem != null) return setState(() => _error = problem);
+  void _nameDone() {
+    if (_name.text.trim().length < 2) return setState(() => _error = 'Please enter your name.');
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _step = _Step.mobile;
+      _error = null;
+    });
+  }
+
+  Future<void> _mobileDone() async {
+    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(_digits)) return setState(() => _error = 'Enter a valid 10-digit mobile number.');
     if (_mode == _Mode.signIn) {
-      final nav = Navigator.of(context);
-      final ok = await _run(() => ref.read(accountProvider.notifier).signIn(_digits, _pin.text));
-      if (ok) await _done(nav, offerBiometric: true);
+      setState(() {
+        _step = _Step.signInPin;
+        _error = null;
+        _pin.clear();
+      });
     } else {
       await _sendCode();
+    }
+  }
+
+  Future<void> _signInPinEntered(String pin) async {
+    final nav = Navigator.of(context);
+    final ok = await _run(() => ref.read(accountProvider.notifier).signIn(_digits, pin));
+    if (ok) return _done(nav, offerBiometric: true);
+    if (mounted) {
+      HapticFeedback.heavyImpact();
+      setState(() => _pin.clear());
     }
   }
 
@@ -252,7 +267,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
 
   void _switch(_Mode m) => setState(() {
         _mode = m;
-        _step = _Step.form;
+        _step = _first;
         _error = null;
         _wrongOtp = false;
         _ticker?.cancel();
@@ -264,7 +279,7 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
 
   /// Back one step inside the flow; leaves the screen from the first step.
   void _back() {
-    if (_step == _Step.form) {
+    if (_step == _first) {
       Navigator.of(context).maybePop();
       return;
     }
@@ -272,9 +287,14 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
       _error = null;
       _pinMismatch = false;
       _pin2.clear();
-      _step = _step == _Step.confirmPin ? _Step.createPin : _step == _Step.createPin ? _Step.otp : _Step.form;
-      if (_step == _Step.createPin) _pin.clear();
-      if (_step == _Step.form) {
+      _step = switch (_step) {
+        _Step.confirmPin => _Step.createPin,
+        _Step.createPin => _Step.otp,
+        _Step.otp || _Step.signInPin => _Step.mobile,
+        _ => _Step.name,
+      };
+      if (_step == _Step.createPin || _step == _Step.mobile) _pin.clear();
+      if (_step == _Step.mobile) {
         _ticker?.cancel();
         _resendIn = 0;
       }
@@ -283,17 +303,20 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pinStep = _step == _Step.createPin || _step == _Step.confirmPin;
     return PopScope(
-      canPop: _step == _Step.form,
+      canPop: _step == _first,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _back();
       },
       child: Scaffold(
-        appBar: AppBar(leading: _step == _Step.form ? null : IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: _busy ? null : _back)),
-        body: pinStep
-            ? _pinScreen()
-            : AutofillGroup(child: ListView(padding: const EdgeInsets.fromLTRB(24, 0, 24, 24), children: [_step == _Step.form ? _form() : _otpStep()])),
+        appBar: AppBar(leading: _step == _first ? null : IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: _busy ? null : _back)),
+        body: switch (_step) {
+          _Step.name => AutofillGroup(child: ListView(padding: const EdgeInsets.fromLTRB(24, 0, 24, 24), children: [_nameStep()])),
+          _Step.mobile => _mobileStep(),
+          _Step.signInPin => _signInPinStep(),
+          _Step.otp => _otpStep(),
+          _Step.createPin || _Step.confirmPin => _pinScreen(),
+        },
       ),
     );
   }
@@ -316,154 +339,33 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
         Text(sub, style: const TextStyle(color: Brand.muted, fontSize: 14.5, height: 1.4)),
       ]);
 
-  Widget _label(String t) => Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(t, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: Brand.muted)));
-
-  Widget _pinToggle() => Align(
-        alignment: Alignment.centerRight,
-        child: TextButton.icon(
-          onPressed: () => setState(() => _showPin = !_showPin),
-          icon: Icon(_showPin ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
-          label: Text(_showPin ? 'Hide PIN' : 'Show PIN'),
-        ),
-      );
-
   Widget _button(String label, VoidCallback onTap) => FilledButton(
         onPressed: _busy ? null : onTap,
         child: _busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : Text(label),
       );
 
-  // ---- step 1: the form ----
+  // ---- a screen with a header, something to show the digits in, and the on-screen number pad ----
 
-  Widget _form() {
-    final signUp = _mode == _Mode.signUp, reset = _mode == _Mode.reset, signIn = _mode == _Mode.signIn;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _logo(),
-      const SizedBox(height: 20),
-      _title(
-        reset ? 'Reset your PIN' : signUp ? 'Create your account' : 'Welcome back',
-        widget.reason ??
-            (reset
-                ? 'Enter your mobile number. We will text you a code to choose a new PIN.'
-                : signUp
-                    ? 'One account for all your Gaia orders, on any phone. We will text a code to confirm your number.'
-                    : 'Sign in with your mobile number and 5-digit PIN.'),
-      ),
-      const SizedBox(height: 22),
-      if (!reset) ...[
-        // both choices side by side, always visible
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
-          child: Row(children: [_tab('Sign in', !signUp, () => _switch(_Mode.signIn)), _tab('Create account', signUp, () => _switch(_Mode.signUp))]),
-        ),
-        const SizedBox(height: 22),
-      ],
-      _errorBox(),
-      if (signUp) ...[
-        TextField(
-          controller: _name,
-          textCapitalization: TextCapitalization.words,
-          textInputAction: TextInputAction.next,
-          autofillHints: const [AutofillHints.name],
-          decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
-        ),
-        const SizedBox(height: 14),
-      ],
-      TextField(
-        controller: _phone,
-        keyboardType: TextInputType.phone,
-        maxLength: 10,
-        textInputAction: reset ? TextInputAction.done : TextInputAction.next,
-        onSubmitted: (_) => reset && !_busy ? _submitForm() : null,
-        autofillHints: const [AutofillHints.telephoneNumberNational],
-        decoration: const InputDecoration(labelText: 'Mobile number', prefixText: '+91  ', prefixIcon: Icon(Icons.phone_outlined), counterText: ''),
-      ),
-      if (!reset && !signUp) ...[
-        const SizedBox(height: 20),
-        _label('5-digit PIN'),
-        CodeBoxes(controller: _pin, length: 5, obscure: !_showPin, hasError: _error != null && _error!.contains('PIN'), onCompleted: (_) => _submitForm()),
-        _pinToggle(),
-      ],
-      const SizedBox(height: 14),
-      _button(signIn ? 'Sign in' : 'Send code', _submitForm),
-      if (!signUp && !reset && _bioReady) ...[
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : _signInWithBiometric,
-          icon: const Icon(Icons.fingerprint_rounded),
-          label: Text('Sign in with $_bioLabel'),
-        ),
-      ],
-      const SizedBox(height: 10),
-      if (_mode == _Mode.signIn) Center(child: TextButton(onPressed: _busy ? null : () => _switch(_Mode.reset), child: const Text('Forgot your PIN?'))),
-      Center(
-        child: TextButton(
-          onPressed: _busy ? null : () => _switch(reset ? _Mode.signIn : signUp ? _Mode.signIn : _Mode.signUp),
-          child: Text(reset ? 'Back to sign in' : signUp ? 'Already have an account? Sign in' : 'New to Gaia? Create an account'),
-        ),
-      ),
-    ]);
-  }
-
-  // ---- step 2: the SMS code ----
-
-  Widget _otpStep() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _logo(),
-      const SizedBox(height: 20),
-      _title('Enter the code', 'We texted a 6-digit code to +91 $_digits. It works for 10 minutes.'),
-      const SizedBox(height: 26),
-      _errorBox(),
-      if (_wrongOtp && _error == null)
-        const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('That code did not work. Check it or ask for a new one.', style: TextStyle(color: Brand.danger, fontWeight: FontWeight.w600))),
-      CodeBoxes(
-        controller: _otp,
-        length: 6,
-        otp: true,
-        autofocus: true,
-        hasError: _wrongOtp,
-        onChanged: (_) => _wrongOtp ? setState(() => _wrongOtp = false) : null,
-        onCompleted: _busy ? null : _codeEntered,
-      ),
-      const SizedBox(height: 22),
-      if (_busy) const Center(child: CircularProgressIndicator(strokeWidth: 2.5)) else _button(_mode == _Mode.reset ? 'Continue' : 'Verify and create account', () {
-        if (_otp.text.length == 6) {
-          _codeEntered(_otp.text);
-        } else {
-          setState(() => _error = 'Enter the 6-digit code.');
-        }
-      }),
-      const SizedBox(height: 10),
-      Center(
-        child: TextButton(
-          onPressed: _busy || _resendIn > 0 ? null : _sendCode,
-          child: Text(_resendIn > 0 ? 'Send the code again in ${_resendIn}s' : 'Send the code again'),
-        ),
-      ),
-      Center(child: TextButton(onPressed: _busy ? null : _back, child: const Text('Change the mobile number'))),
-    ]);
-  }
-
-  // ---- steps 3 and 4: choose the PIN, then enter it again (own on-screen number pad) ----
-
-  Widget _pinScreen() {
-    final confirm = _step == _Step.confirmPin;
-    final ctrl = confirm ? _pin2 : _pin;
+  Widget _padPage({
+    required List<Widget> top,
+    required Widget display,
+    required String value,
+    required int length,
+    required ValueChanged<String> onChanged,
+    List<Widget> below = const [],
+    Widget? action,
+    bool enabled = true,
+  }) {
     return SafeArea(
       child: Column(children: [
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _logo(),
-              const SizedBox(height: 20),
-              _title(
-                confirm ? 'Confirm your PIN' : (_mode == _Mode.reset ? 'Choose a new PIN' : 'Create your PIN'),
-                confirm ? 'Enter the same 5 digits once more.' : 'Pick a 5-digit PIN. You will use it every time you sign in.',
-              ),
-              const SizedBox(height: 36),
-              Center(child: PinDots(filled: ctrl.text.length, error: _pinMismatch)),
-              const SizedBox(height: 18),
+              ...top,
+              const SizedBox(height: 28),
+              Center(child: display),
+              const SizedBox(height: 12),
               SizedBox(
                 height: 44,
                 child: Center(
@@ -476,24 +378,194 @@ class _CustomerLoginScreenState extends ConsumerState<CustomerLoginScreen> {
                         ),
                 ),
               ),
+              ...below,
             ]),
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-          child: PinPad(
-            value: ctrl.text,
-            enabled: !_busy && !_pinMismatch,
-            onChanged: (v) {
-              setState(() {
-                ctrl.text = v;
-                _error = null;
-              });
-              if (v.length == 5) confirm ? _pinConfirmed(v) : _pinChosen(v);
-            },
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (action != null) ...[SizedBox(width: double.infinity, child: action), const SizedBox(height: 8)],
+            PinPad(
+              value: value,
+              length: length,
+              enabled: enabled && !_busy,
+              onChanged: (v) {
+                setState(() => _error = null);
+                onChanged(v);
+              },
+            ),
+          ]),
         ),
       ]),
+    );
+  }
+
+  // ---- sign up: your name ----
+
+  Widget _nameStep() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _logo(),
+      const SizedBox(height: 20),
+      _title('Create your account', widget.reason ?? 'One account for all your Gaia orders, on any phone.'),
+      const SizedBox(height: 22),
+      _modeTabs(),
+      const SizedBox(height: 22),
+      _errorBox(),
+      TextField(
+        controller: _name,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _nameDone(),
+        autofillHints: const [AutofillHints.name],
+        decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
+      ),
+      const SizedBox(height: 14),
+      _button('Continue', _nameDone),
+      const SizedBox(height: 10),
+      Center(child: TextButton(onPressed: _busy ? null : () => _switch(_Mode.signIn), child: const Text('Already have an account? Sign in'))),
+    ]);
+  }
+
+  Widget _modeTabs() => Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+        child: Row(children: [
+          _tab('Sign in', _mode != _Mode.signUp, () => _switch(_Mode.signIn)),
+          _tab('Create account', _mode == _Mode.signUp, () => _switch(_Mode.signUp)),
+        ]),
+      );
+
+  // ---- the mobile number ----
+
+  String get _phoneShown {
+    final d = _phone.text;
+    return d.length <= 5 ? d : '${d.substring(0, 5)} ${d.substring(5)}';
+  }
+
+  Widget _mobileStep() {
+    final reset = _mode == _Mode.reset, signUp = _mode == _Mode.signUp;
+    return _padPage(
+      top: [
+        _logo(),
+        const SizedBox(height: 20),
+        _title(
+          reset ? 'Reset your PIN' : signUp ? 'Your mobile number' : 'Welcome back',
+          widget.reason ??
+              (reset
+                  ? 'Enter your mobile number. We will text you a code to choose a new PIN.'
+                  : signUp
+                      ? 'We will text a code to confirm your number.'
+                      : 'Sign in with your mobile number and 5-digit PIN.'),
+        ),
+        if (!reset && !signUp) ...[const SizedBox(height: 18), _modeTabs()],
+      ],
+      display: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: Brand.accentTint, borderRadius: BorderRadius.circular(14), border: Border.all(color: _error != null ? Brand.danger : Brand.accent, width: 2)),
+        child: Row(children: [
+          const Icon(Icons.phone_outlined, color: Brand.muted),
+          const SizedBox(width: 10),
+          const Text('+91', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Brand.muted)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(_phone.text.isEmpty ? 'Mobile number' : _phoneShown, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: _phone.text.isEmpty ? Brand.muted : Brand.ink)),
+          ),
+        ]),
+      ),
+      value: _phone.text,
+      length: 10,
+      onChanged: (v) => setState(() => _phone.text = v),
+      below: [
+        if (!signUp && !reset && _bioReady)
+          OutlinedButton.icon(onPressed: _busy ? null : _signInWithBiometric, icon: const Icon(Icons.fingerprint_rounded), label: Text('Sign in with $_bioLabel')),
+        if (_mode == _Mode.signIn) Center(child: TextButton(onPressed: _busy ? null : () => _switch(_Mode.reset), child: const Text('Forgot your PIN?'))),
+        if (reset) Center(child: TextButton(onPressed: _busy ? null : () => _switch(_Mode.signIn), child: const Text('Back to sign in'))),
+      ],
+      action: _button(reset || signUp ? 'Send code' : 'Continue', _mobileDone),
+    );
+  }
+
+  // ---- sign in: the PIN ----
+
+  Widget _signInPinStep() {
+    return _padPage(
+      top: [
+        _logo(),
+        const SizedBox(height: 20),
+        _title('Enter your PIN', 'Your 5-digit PIN for +91 $_digits.'),
+      ],
+      display: PinDots(filled: _pin.text.length, error: _error != null),
+      value: _pin.text,
+      length: 5,
+      onChanged: (v) {
+        setState(() => _pin.text = v);
+        if (v.length == 5) _signInPinEntered(v);
+      },
+      below: [
+        if (_bioReady) OutlinedButton.icon(onPressed: _busy ? null : _signInWithBiometric, icon: const Icon(Icons.fingerprint_rounded), label: Text('Sign in with $_bioLabel')),
+        Center(child: TextButton(onPressed: _busy ? null : () => _switch(_Mode.reset), child: const Text('Forgot your PIN?'))),
+      ],
+    );
+  }
+
+  // ---- the SMS code ----
+
+  Widget _otpStep() {
+    return _padPage(
+      top: [
+        _logo(),
+        const SizedBox(height: 20),
+        _title('Enter the code', 'We texted a 6-digit code to +91 $_digits. It works for 10 minutes.'),
+      ],
+      display: CodeBoxes(controller: _otp, length: 6, otp: true, systemKeyboard: false, hasError: _wrongOtp),
+      value: _otp.text,
+      length: 6,
+      onChanged: (v) {
+        setState(() {
+          _otp.text = v;
+          _wrongOtp = false;
+        });
+        if (v.length == 6) _codeEntered(v);
+      },
+      below: [
+        if (_wrongOtp && _error == null)
+          const Center(child: Text('That code did not work. Check it or ask for a new one.', textAlign: TextAlign.center, style: TextStyle(color: Brand.danger, fontWeight: FontWeight.w600))),
+        Center(
+          child: TextButton(
+            onPressed: _busy || _resendIn > 0 ? null : _sendCode,
+            child: Text(_resendIn > 0 ? 'Send the code again in ${_resendIn}s' : 'Send the code again'),
+          ),
+        ),
+        Center(child: TextButton(onPressed: _busy ? null : _back, child: const Text('Change the mobile number'))),
+      ],
+    );
+  }
+
+  // ---- choose the PIN, then enter it again ----
+
+  Widget _pinScreen() {
+    final confirm = _step == _Step.confirmPin;
+    final ctrl = confirm ? _pin2 : _pin;
+    return _padPage(
+      top: [
+        _logo(),
+        const SizedBox(height: 20),
+        _title(
+          confirm ? 'Confirm your PIN' : (_mode == _Mode.reset ? 'Choose a new PIN' : 'Create your PIN'),
+          confirm ? 'Enter the same 5 digits once more.' : 'Pick a 5-digit PIN. You will use it every time you sign in.',
+        ),
+      ],
+      display: PinDots(filled: ctrl.text.length, error: _pinMismatch),
+      value: ctrl.text,
+      length: 5,
+      enabled: !_pinMismatch,
+      onChanged: (v) {
+        setState(() => ctrl.text = v);
+        if (v.length == 5) confirm ? _pinConfirmed(v) : _pinChosen(v);
+      },
     );
   }
 
