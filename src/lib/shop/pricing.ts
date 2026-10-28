@@ -39,7 +39,8 @@ export const STATUS_LABEL: Record<string, string> = {
 
 /**
  * The app's categories, in the order it shows them, and which Product Master categories go into each.
- * The Product Master keeps its own (finer) categories for the portal's reports; anything not listed
+ * Since migration 065 the Product Master uses these categories itself (the old split ones are now
+ * sub-categories); the extra names only catch an old category that comes back. Anything not listed
  * here keeps its own name and comes after these.
  */
 export const SHOP_CATEGORIES: Array<{ name: string; from: string[] }> = [
@@ -47,7 +48,7 @@ export const SHOP_CATEGORIES: Array<{ name: string; from: string[] }> = [
   { name: "Dahi", from: ["plain dahi", "kadhi dahi", "dahi"] },
   { name: "Paneer", from: ["paneer", "low fat paneer"] },
   { name: "Ghee", from: ["ghee"] },
-  { name: "Sweets", from: ["peda", "shahi rabdi", "rabdi", "shrikhand", "shrikhand 6 pc", "khowa", "sweets"] },
+  { name: "Desserts", from: ["desserts", "peda", "shahi rabdi", "rabdi", "shrikhand", "shrikhand 6 pc", "khowa", "sweets"] },
   { name: "Beverages", from: ["lassi", "masala chaas", "chaas", "beverages"] },
 ];
 
