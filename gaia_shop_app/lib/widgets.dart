@@ -141,7 +141,7 @@ class AddButton extends ConsumerWidget {
       );
 }
 
-/// The outlined Add to cart button; its icon and text are exactly the Subscribe link's (size, weight, colour).
+/// The plain Add to cart button (no box); its icon and text are exactly the Subscribe link's (size, weight, colour).
 class AddToCartPill extends StatelessWidget {
   const AddToCartPill({super.key, required this.onTap, required this.width});
   final VoidCallback onTap;
@@ -159,8 +159,7 @@ class AddToCartPill extends StatelessWidget {
         child: Container(
           width: width,
           height: 34,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(borderRadius: r, border: Border.all(color: Brand.accent, width: 1.2)),
+          alignment: Alignment.centerLeft,
           child: const FittedBox(
             fit: BoxFit.scaleDown,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -241,12 +240,15 @@ class OffBadge extends StatelessWidget {
 /// A compact product tile: photo with Add to cart on its corner, then name, size and price.
 /// Used in the menu grid and the "you may also like" rows.
 class ProductTile extends ConsumerWidget {
-  const ProductTile({super.key, required this.product, required this.onOpen});
+  const ProductTile({super.key, required this.product, required this.onOpen, this.addBelow = false});
 
   /// The height a tile [width] wide needs: its photo plus room for size, two lines of name, price and Subscribe.
-  static double heightFor(double width) => (width - 12) / 1.08 + 150;
+  static double heightFor(double width, {bool addBelow = false}) => (width - 12) / 1.08 + 150 + (addBelow ? 34 : 0);
   final Product product;
   final VoidCallback onOpen;
+
+  /// Add to cart goes under the price instead of on the photo's corner.
+  final bool addBelow;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -276,12 +278,12 @@ class ProductTile extends ConsumerWidget {
                     ),
                     if (p.offPercent > 0) Positioned(top: 0, left: 0, child: OffBadge(percent: p.offPercent)),
                     // ADD sits on the photo's corner so it is always in the same place
-                    Positioned(right: 6, bottom: -14, child: AddButton(product: p)),
+                    if (!addBelow) Positioned(right: 6, bottom: -14, child: AddButton(product: p)),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(6, 20, 6, 0),
+                padding: EdgeInsets.fromLTRB(6, addBelow ? 8 : 20, 6, 0),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   // the name, then its quantity (500 ml, 1 Ltr) under it
                   SizedBox(
@@ -300,6 +302,10 @@ class ProductTile extends ConsumerWidget {
                   ),
                   const SizedBox(height: 6),
                   PriceTag(product: p),
+                  if (addBelow) ...[
+                    const SizedBox(height: 4),
+                    AddButton(product: p),
+                  ],
                   const SizedBox(height: 6),
                   // every product can be subscribed to, right from the list
                   SubscribeLink(product: p, chevron: true),

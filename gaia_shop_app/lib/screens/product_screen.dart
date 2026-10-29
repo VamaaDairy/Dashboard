@@ -283,13 +283,13 @@ class _Rail extends StatelessWidget {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Brand.ink))),
           const SizedBox(height: 12),
           SizedBox(
-            height: ProductTile.heightFor(_w),
+            height: ProductTile.heightFor(_w, addBelow: true),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: products.length,
               separatorBuilder: (_, __) => const SizedBox(width: 14),
-              itemBuilder: (_, i) => SizedBox(width: _w, child: ProductTile(product: products[i], onOpen: () => onOpen(products[i]))),
+              itemBuilder: (_, i) => SizedBox(width: _w, child: ProductTile(product: products[i], addBelow: true, onOpen: () => onOpen(products[i]))),
             ),
           ),
         ],
