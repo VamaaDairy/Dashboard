@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Database, Droplets, FileClock, Fuel, Home, LogOut,
-  MapPinned, MessageCircle, Package, PackageCheck, Smartphone, Store, Tags, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
+  MapPinned, MessageCircle, Package, PackageCheck, PackageSearch, Smartphone, Store, Tags, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -114,6 +114,14 @@ const DAILY: NavItem[] = [
       { href: "/app-orders/d2c", key: "apporders", label: "D2C" },
       { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
       { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },
+    ],
+  },
+  {
+    href: "/product-master", key: "productmaster", label: "Product Master", icon: PackageSearch,
+    children: [
+      { href: "/product-master/d2c", key: "productmaster.d2c", label: "D2C" },
+      { href: "/product-master/retail", key: "productmaster.retail", label: "Retail" },
+      { href: "/product-master/distributor", key: "productmaster.distributor", label: "Distributors" },
     ],
   },
   { href: "/price-list", key: "pricelist", label: "Price list", icon: Tags },

@@ -44,7 +44,7 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
 
   const items = [...merged].map(([sku, qty]) => {
     const p = prices.get(sku)!;
-    return { sku, qty, name: p.name, image: p.image, unit: p.price, total: Math.round(p.price * qty * 100) / 100 };
+    return { sku, qty, name: p.size ? `${p.name} ${p.size}` : p.name, image: p.image, unit: p.price, total: Math.round(p.price * qty * 100) / 100 };
   });
   const subtotal = Math.round(items.reduce((s, i) => s + i.total, 0) * 100) / 100;
   const fee = deliveryFor(subtotal, deliveryRule);

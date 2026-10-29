@@ -38,8 +38,9 @@ export async function standardPrices(): Promise<PriceRow[]> {
   const rows = await query<PriceRow>(
     `select p.uid, p.sku_code as sku, p.sku_name as name, coalesce(nullif(trim(p.category), ''), 'Other') as category, p.mrp::float as mrp,
             ${latestRate("RT")}::float as rt, ${latestRate("DB")}::float as db,
-            p.mrp > 0 as "inApp", (p.mrp > 0 and coalesce(si.visible, true)) as "inShop"
-     from fp_product p left join shop_item si on si.sku_code = p.sku_code
+            p.mrp > 0 as "inApp",
+            (p.mrp > 0 and exists (select 1 from app_product a where a.channel = 'd2c' and a.product_uid = p.uid and a.visible)) as "inShop"
+     from fp_product p
      where p.active = 1
      order by category, p.sku_name`,
   );

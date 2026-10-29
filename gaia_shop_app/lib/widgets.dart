@@ -247,12 +247,7 @@ class ProductTile extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(6, 20, 6, 0),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  SizedBox(
-                    height: 18,
-                    child: (p.size != null && p.size!.isNotEmpty)
-                        ? Text(p.size!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: Brand.muted, fontWeight: FontWeight.w600))
-                        : null,
-                  ),
+                  // the name, then its quantity (500 ml, 1 Ltr) under it
                   SizedBox(
                     height: 36,
                     // two lines normally; with large phone text only whole lines, never half of one
@@ -260,6 +255,12 @@ class ProductTile extends ConsumerWidget {
                         maxLines: (36 / MediaQuery.textScalerOf(context).scale(13.5 * 1.3)).floor().clamp(1, 2),
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.3, color: Brand.ink)),
+                  ),
+                  SizedBox(
+                    height: 18,
+                    child: (p.size != null && p.size!.isNotEmpty)
+                        ? Text(p.size!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600))
+                        : null,
                   ),
                   const SizedBox(height: 6),
                   PriceTag(product: p),

@@ -70,9 +70,14 @@ final distributorProvider = NotifierProvider<DistributorStore, DistData>(Distrib
 final _distCatalogProvider = Provider<Catalog?>((ref) {
   final products = ref.watch(distributorProvider.select((d) => d.products));
   final waiting = ref.watch(distributorProvider.select((d) => d.products.isEmpty && (d.firm == null || d.loading)));
-  final categories = ref.watch(catalogProvider.select((c) => c.categories));
   if (waiting) return null;
-  return Catalog(rule: const DeliveryRule(), categories: categories, products: products);
+  // the categories of this app's own Product Master list, in its order (the server sends the products in it)
+  final categories = <String, MenuCategory>{};
+  for (final p in products) {
+    final c = categories[p.category];
+    categories[p.category] = MenuCategory(name: p.category, count: (c?.count ?? 0) + 1, image: c?.image ?? p.image);
+  }
+  return Catalog(rule: const DeliveryRule(), categories: categories.values.toList(), products: products);
 });
 
 /// What the menu, product pages and cart show: the retail menu normally, or - for a signed-in

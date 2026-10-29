@@ -1,6 +1,6 @@
 import "server-only";
 import { query } from "@/lib/db";
-import { categoryRank, displayName, shopCategory } from "./pricing";
+import { appCatalog } from "@/lib/products/app-products";
 
 export interface ShopProduct {
   sku: string;
@@ -22,52 +22,28 @@ const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy
 /** A photo's link: our own copy when we hold the picture (versioned, so a new upload is not served from cache), else the imported link. */
 export const photoUrlOf = (a: string) =>
   `case when ${a}.data is not null then '${PUBLIC_URL}/api/shop/product-image/' || ${a}.uid || '?v=' || extract(epoch from ${a}.updated_at)::bigint else ${a}.image_url end`;
-const photoUrl = photoUrlOf("i");
-
-const COLUMNS = `
-  select p.sku_code as sku, p.sku_name as name, p.category, p.sub_category as "subCategory", p.sku_size as size,
-         p.mrp, coalesce(si.price, p.mrp) as price, nullif(trim(p.description), '') as description,
-         (select ${photoUrl} from fp_product_image i where i.product_uid = p.uid order by i.imagesno nulls last limit 1) as image,
-         coalesce((select array_agg(${photoUrl} order by i.imagesno nulls last) from fp_product_image i where i.product_uid = p.uid), '{}') as images
-  from fp_product p
-  left join shop_item si on si.sku_code = p.sku_code
-  where p.active = 1 and p.mrp > 0`;
-const SELECT = `${COLUMNS} and coalesce(si.visible, true)`;
-
-const clean = (r: ShopProduct): ShopProduct => ({ ...r, name: displayName(r.name), category: shopCategory(r.category) });
-
-/** In the app's category order (Milk, Paneer, Ghee, Desserts, Beverages, UHT Milk, Dahi, then the rest); within a category, as listed. */
-const byCategory = (rows: ShopProduct[]) =>
-  rows
-    .map((r, i) => ({ r, i }))
-    .sort((a, b) => categoryRank(a.r.category) - categoryRank(b.r.category) || a.r.category.localeCompare(b.r.category) || a.i - b.i)
-    .map(({ r }) => r);
 
 /**
- * Every active product with an MRP, including the ones hidden from the customer shop - what distributors and
- * retailers can order (at their own price), in the shop's order.
+ * Every visible product on a Product Master app list (D2C, Retail or Distributors), in that app's order. For
+ * Retail / Distributors `price` is the D2C price; the Partners app puts each customer's own price on top.
  */
-export async function listAllProducts(): Promise<ShopProduct[]> {
-  const rows = await query<ShopProduct>(`${COLUMNS} order by si.sort nulls last, p.position nulls last, p.sku_name`);
-  return byCategory(rows.map(clean));
+export async function listAllProducts(channel: "retail" | "distributor"): Promise<ShopProduct[]> {
+  return appCatalog(channel);
 }
 
-/** Everything on sale, in the order the shop shows it. */
+/** Everything on sale in the D2C app, in the order it shows it (Product Master > D2C). */
 export async function listProducts(): Promise<ShopProduct[]> {
-  const rows = await query<ShopProduct>(`${SELECT} order by si.sort nulls last, p.position nulls last, p.sku_name`);
-  return byCategory(rows.map(clean));
+  return appCatalog("d2c");
 }
 
 export async function getProduct(sku: string): Promise<ShopProduct | null> {
-  const rows = await query<ShopProduct>(`${SELECT} and p.sku_code = $1`, [sku]);
-  return rows[0] ? clean(rows[0]) : null;
+  return (await appCatalog("d2c", [sku]))[0] ?? null;
 }
 
 /** The prices a customer would really pay for these SKUs - the order never trusts what the browser sent. */
 export async function pricesFor(skus: string[]): Promise<Map<string, ShopProduct>> {
   if (!skus.length) return new Map();
-  const rows = await query<ShopProduct>(`${SELECT} and p.sku_code = any($1)`, [skus]);
-  return new Map(rows.map((r) => [r.sku, clean(r)]));
+  return new Map((await appCatalog("d2c", skus)).map((r) => [r.sku, r]));
 }
 
 export async function productImage(uid: string): Promise<{ bytes: Buffer; mime: string } | null> {

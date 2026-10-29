@@ -129,12 +129,15 @@ async function firmAllowed(login: DistLogin, firmUid: string | undefined): Promi
   return firms.find((f) => f.uid === firmUid) ?? null;
 }
 
+/** Which Product Master list a login orders from: retailers the Retail list, distributors and sales officers the Distributors list. */
+const appChannelOf = (login: DistLogin): "retail" | "distributor" => (login.kind === "retailer" ? "retail" : "distributor");
+
 /** The catalogue the retail app shows, priced at this distributor's dealer price. */
 export async function catalogFor(login: DistLogin, firmUid: string | undefined): Promise<ShopProduct[] | null> {
   const firm = await firmAllowed(login, firmUid);
   if (!firm) return null;
-  // every active product they have a price for, even ones hidden from the customer shop
-  const [products, prices] = await Promise.all([listAllProducts(), dealerPrices(firm.uid)]);
+  // the Product Master list for this app (Retail or Distributors), each product they have a price for
+  const [products, prices] = await Promise.all([listAllProducts(appChannelOf(login)), dealerPrices(firm.uid)]);
   return products.flatMap((p) => {
     const dp = prices.get(p.sku);
     return dp && dp > 0 ? [{ ...p, price: dp }] : [];
@@ -211,9 +214,9 @@ export async function placeDistOrder(
   if (merged.size > MAX_LINES) return { ok: false, error: `At most ${MAX_LINES} products per order.` };
 
   const skus = [...merged.keys()];
-  // any active product with an MRP (shop-hidden ones too) that has a price for this customer, priced server-side
+  // a product on this app's Product Master list that has a price for this customer, priced server-side
   const [listed, prices, prods] = await Promise.all([
-    listAllProducts(),
+    listAllProducts(appChannelOf(login)),
     dealerPrices(firm.uid, skus),
     query<{ uid: string; sku: string; mrp: number }>(`select uid, sku_code as sku, mrp from fp_product where sku_code = any($1) and active = 1`, [skus]),
   ]);

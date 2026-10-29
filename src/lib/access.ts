@@ -52,6 +52,10 @@ export const RESOURCES: Resource[] = [
   { key: "shop", label: "Online shop orders", group: "Everyday", path: "/shop-orders" },
   { key: "apporders", label: "App orders (D2C, retailers, distributors)", group: "Everyday", path: "/app-orders" },
   { key: "pricelist", label: "Price list (customer prices)", group: "Everyday", path: "/price-list" },
+  // each app list is its own permission: access to one does not open the others
+  { key: "productmaster.d2c", label: "D2C app products", group: "Product Master", path: "/product-master/d2c" },
+  { key: "productmaster.retail", label: "Retail app products", group: "Product Master", path: "/product-master/retail" },
+  { key: "productmaster.distributor", label: "Distributor app products", group: "Product Master", path: "/product-master/distributor" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
   { key: "grn", label: "POD", group: "Everyday", path: "/pod" },
   // every Orders screen is its own resource
