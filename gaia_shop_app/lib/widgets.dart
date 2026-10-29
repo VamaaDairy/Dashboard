@@ -99,32 +99,14 @@ class AddButton extends ConsumerWidget {
           ),
         );
       }
-      return Material(
-        color: Colors.white,
-        borderRadius: r,
-        elevation: 2,
-        shadowColor: Colors.black26,
-        child: InkWell(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            cart.add(product);
-          },
-          borderRadius: r,
-          child: Container(
-            width: w,
-            height: h,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(borderRadius: r, border: Border.all(color: Brand.accent, width: 1.2)),
-            child: const FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.add_shopping_cart_rounded, size: 14, color: Brand.accent),
-                SizedBox(width: 5),
-                Text('ADD TO CART', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w800, fontSize: 11.5, letterSpacing: 0.4)),
-              ]),
-            ),
-          ),
-        ),
+      return PillButton(
+        icon: Icons.add_shopping_cart_rounded,
+        label: 'ADD TO CART',
+        width: w,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          cart.add(product);
+        },
       );
     }
     return Container(
@@ -158,6 +140,57 @@ class AddButton extends ConsumerWidget {
           label: label,
           child: SizedBox(width: large ? 48 : 26, height: double.infinity, child: Icon(icon, color: Colors.white, size: large ? 22 : 16)),
         ),
+      );
+}
+
+/// The small outlined button used for both ADD TO CART and SUBSCRIBE: same size, text and colour.
+class PillButton extends StatelessWidget {
+  const PillButton({super.key, required this.icon, required this.label, required this.onTap, required this.width});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = BorderRadius.circular(9);
+    return Material(
+      color: Colors.white,
+      borderRadius: r,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: r,
+        child: Container(
+          width: width,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(borderRadius: r, border: Border.all(color: Brand.accent, width: 1.2)),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 14, color: Brand.accent),
+              const SizedBox(width: 5),
+              Text(label, style: const TextStyle(color: Brand.accent, fontWeight: FontWeight.w800, fontSize: 11.5, letterSpacing: 0.4)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// SUBSCRIBE, looking exactly like ADD TO CART.
+class SubscribeButton extends StatelessWidget {
+  const SubscribeButton({super.key, required this.product, required this.width});
+  final Product product;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => PillButton(
+        icon: Icons.event_repeat_rounded,
+        label: 'SUBSCRIBE',
+        width: width,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: product))),
       );
 }
 
@@ -208,7 +241,7 @@ class ProductTile extends ConsumerWidget {
   const ProductTile({super.key, required this.product, required this.onOpen});
 
   /// The height a tile [width] wide needs: its photo plus room for size, two lines of name, price and Subscribe.
-  static double heightFor(double width) => (width - 12) / 1.08 + 150;
+  static double heightFor(double width) => (width - 12) / 1.08 + 158;
   final Product product;
   final VoidCallback onOpen;
 
@@ -266,19 +299,7 @@ class ProductTile extends ConsumerWidget {
                   PriceTag(product: p),
                   const SizedBox(height: 6),
                   // every product can be subscribed to, right from the list
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 4),
-                      child: Row(children: [
-                        Icon(Icons.event_repeat_rounded, size: 15, color: Brand.accent),
-                        SizedBox(width: 5),
-                        Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent)),
-                        Icon(Icons.chevron_right_rounded, size: 16, color: Brand.accent),
-                      ]),
-                    ),
-                  ),
+                  LayoutBuilder(builder: (_, box) => SubscribeButton(product: p, width: box.maxWidth)),
                 ]),
               ),
             ],
@@ -294,7 +315,7 @@ class ProductTile extends ConsumerWidget {
 class ProductRowCard extends StatelessWidget {
   const ProductRowCard({super.key, required this.product, required this.onOpen, this.width = 300});
 
-  static const double height = 176;
+  static const double height = 188;
   final Product product;
   final VoidCallback onOpen;
   final double width;
@@ -336,19 +357,9 @@ class ProductRowCard extends StatelessWidget {
                     ),
                   const Spacer(),
                   PriceTag(product: p, size: 15.5),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 5),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.event_repeat_rounded, size: 15, color: Brand.accent),
-                        SizedBox(width: 5),
-                        Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent)),
-                        Icon(Icons.chevron_right_rounded, size: 16, color: Brand.accent),
-                      ]),
-                    ),
-                  ),
+                  const SizedBox(height: 6),
+                  LayoutBuilder(builder: (_, box) => SubscribeButton(product: p, width: box.maxWidth)),
+                  const SizedBox(height: 6),
                   // the button takes the text column's whole width
                   LayoutBuilder(builder: (_, box) => AddButton(product: p, width: box.maxWidth)),
                 ]),

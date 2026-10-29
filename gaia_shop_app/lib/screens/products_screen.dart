@@ -148,7 +148,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   }
 }
 
-/// One category in the rail: its photo in a rounded box (tinted when chosen), the name below.
+/// One category in the rail: its photo in a rounded box (plain; the name goes bold and a bar marks it), the name below.
 class _RailItem extends StatelessWidget {
   const _RailItem({required this.category, required this.selected, required this.onTap});
   final MenuCategory category;
@@ -158,6 +158,9 @@ class _RailItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
         onTap: onTap,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
         child: Stack(children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
@@ -168,7 +171,7 @@ class _RailItem extends StatelessWidget {
                 height: 64,
                 padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
-                  color: selected ? Brand.accentTint : Colors.white,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: selected ? Colors.transparent : Brand.line, width: 1),
                 ),

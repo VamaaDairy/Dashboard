@@ -41,8 +41,6 @@ class ProductScreen extends ConsumerWidget {
         slivers: [
           SliverToBoxAdapter(child: _Gallery(product: p)),
           SliverToBoxAdapter(child: _Header(product: p)),
-          SliverToBoxAdapter(child: _SubscribeCard(product: p)),
-          SliverToBoxAdapter(child: _Highlights(items: info.highlights)),
           SliverToBoxAdapter(child: _Details(info: info)),
           if (sameRange.isNotEmpty) SliverToBoxAdapter(child: _Rail(title: 'More in ${p.category}', products: sameRange, onOpen: (o) => _open(context, o))),
           if (others.isNotEmpty) SliverToBoxAdapter(child: _Rail(title: 'You may also like', products: others, onOpen: (o) => _open(context, o))),
@@ -57,24 +55,13 @@ class ProductScreen extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + MediaQuery.paddingOf(context).bottom),
             decoration: const BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-              boxShadow: [BoxShadow(color: Color(0x1A111827), blurRadius: 20, offset: Offset(0, -4))],
+              boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, -2))],
             ),
             child: Row(
               children: [
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (p.size != null && p.size!.isNotEmpty) Text(p.size!, style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
-                      PriceTag(product: p, size: 20),
-                      const Text('Inclusive of all taxes', style: TextStyle(fontSize: 11, color: Brand.faint)),
-                    ],
-                  ),
-                ),
+                Expanded(child: _SubscribeButton(product: p)),
                 const SizedBox(width: 10),
-                AddButton(product: p, large: true, width: 180),
+                Expanded(child: LayoutBuilder(builder: (_, box) => AddButton(product: p, large: true, width: box.maxWidth))),
               ],
             ),
           ),
@@ -114,11 +101,8 @@ class _GalleryState extends ConsumerState<_Gallery> {
         );
 
     return Container(
-      // a soft blue wash behind the pack shot, curving into the details
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFEAF2FE), Colors.white]),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
-      ),
+      // white, like the pack shots, with a hairline where the details start
+      decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Brand.line))),
       padding: EdgeInsets.only(top: top),
       child: Stack(
         children: [
@@ -148,22 +132,12 @@ class _GalleryState extends ConsumerState<_Gallery> {
             ),
           ),
           if (p.offPercent > 0)
-            Positioned(left: 16, bottom: 18, child: OffBadge(percent: p.offPercent)),
-          if (photos.length > 1)
-            Positioned(
-              right: 16,
-              bottom: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(12)),
-                child: Text('${_page + 1}/${photos.length}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Brand.muted)),
-              ),
-            ),
+            Positioned(left: 16, bottom: 16, child: OffBadge(percent: p.offPercent)),
           if (photos.length > 1)
             Positioned(
               left: 0,
               right: 0,
-              bottom: 22,
+              bottom: 14,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -206,31 +180,27 @@ class _Header extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(p.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.3, color: Brand.ink)),
+          Text(p.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, height: 1.25, color: Brand.ink)),
           if (p.size != null && p.size!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: Brand.line)),
-              child: Text(p.size!, style: const TextStyle(fontSize: 13, color: Brand.ink, fontWeight: FontWeight.w700)),
-            ),
+            const SizedBox(height: 4),
+            Text(p.size!, style: const TextStyle(fontSize: 14, color: Brand.muted, fontWeight: FontWeight.w600)),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Flexible(child: PriceTag(product: p, size: 30)),
+              Flexible(child: PriceTag(product: p, size: 28)),
               if (p.offPercent > 0) ...[
                 const SizedBox(width: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(color: Brand.veg.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                  child: Text('Save ${rupees(p.mrp - p.price)}', style: const TextStyle(color: Brand.veg, fontSize: 12.5, fontWeight: FontWeight.w800)),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: Brand.veg.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                  child: Text('${p.offPercent}% OFF', style: const TextStyle(color: Brand.veg, fontSize: 12, fontWeight: FontWeight.w800)),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(p.offPercent > 0 ? 'MRP ${rupees(p.mrp)} · Inclusive of all taxes' : 'Inclusive of all taxes', style: const TextStyle(fontSize: 12, color: Brand.faint)),
         ],
       ),
@@ -238,81 +208,7 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// "Subscribe": a tinted card under the price that opens the subscribe screen.
-class _SubscribeCard extends StatelessWidget {
-  const _SubscribeCard({required this.product});
-  final Product product;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-        child: Material(
-          color: Brand.accentTint,
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: product))),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-              child: Row(children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle),
-                  child: const Icon(Icons.event_repeat_rounded, color: Colors.white, size: 22),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Subscribe', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Brand.ink)),
-                    SizedBox(height: 2),
-                    Text('Fresh at your door on the days you pick. Pause any time.', style: TextStyle(fontSize: 12.5, height: 1.3, color: Brand.muted)),
-                  ]),
-                ),
-                const Icon(Icons.chevron_right_rounded, color: Brand.accent),
-              ]),
-            ),
-          ),
-        ),
-      );
-}
-
-class _Highlights extends StatelessWidget {
-  const _Highlights({required this.items});
-  final List<Highlight> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
-      decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final h in items.take(4))
-            Expanded(
-              child: Column(
-                children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0x14111827), blurRadius: 8, offset: Offset(0, 2))]),
-                    child: Icon(h.icon, color: Brand.accent, size: 21),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(h.label, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(fontSize: 11.5, height: 1.2, fontWeight: FontWeight.w600, color: Brand.ink)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// About, nutrition and storage in one small card: three lines of about (tap for more),
-/// nutrition folded away, storage on one line.
+/// Just the short description for now: two lines, tap for the rest.
 class _Details extends StatefulWidget {
   const _Details({required this.info});
   final ProductInfo info;
@@ -326,102 +222,46 @@ class _DetailsState extends State<_Details> {
 
   @override
   Widget build(BuildContext context) {
-    final info = widget.info;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(18), boxShadow: Brand.lift),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('About this product', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Brand.ink))),
-          GestureDetector(
-            onTap: () => setState(() => _more = !_more),
-            child: Text.rich(
-              TextSpan(children: [
-                TextSpan(text: info.about),
-              ]),
-              maxLines: _more ? null : 3,
-              overflow: _more ? TextOverflow.visible : TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, color: Brand.muted, height: 1.45),
-            ),
-          ),
-          if (!_more)
-            GestureDetector(
-              onTap: () => setState(() => _more = true),
-              child: const Padding(padding: EdgeInsets.only(top: 2), child: Text('Read more', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w700, fontSize: 13))),
-            ),
-          const SizedBox(height: 6),
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: Material(
-              type: MaterialType.transparency,
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                leading: const Icon(Icons.eco_outlined, color: Brand.accent, size: 20),
-                title: Text('Nutrition (per ${info.per})', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                children: [_Nutrition(info: info)],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.kitchen_outlined, color: Brand.accent, size: 20),
-              const SizedBox(width: 16),
-              Expanded(child: Text(info.storage, style: const TextStyle(fontSize: 13, color: Brand.muted, height: 1.4))),
-            ]),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: GestureDetector(
+        onTap: () => setState(() => _more = !_more),
+        child: Text.rich(
+          TextSpan(children: [
+            TextSpan(text: widget.info.about),
+            if (!_more) const TextSpan(text: '  Read more', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w700)),
+          ]),
+          maxLines: _more ? null : 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14, color: Brand.muted, height: 1.45),
+        ),
       ),
     );
   }
 }
 
-class _Nutrition extends StatelessWidget {
-  const _Nutrition({required this.info});
-  final ProductInfo info;
+/// Same size, shape and text as the Add to cart button beside it; outlined instead of filled.
+class _SubscribeButton extends StatelessWidget {
+  const _SubscribeButton({required this.product});
+  final Product product;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: Brand.line)),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              Container(
-                color: Brand.accentTint,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Row(
-                  children: [
-                    const Expanded(child: Text('Nutrient', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent))),
-                    Text('Per ${info.per}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent)),
-                  ],
-                ),
-              ),
-              for (var i = 0; i < info.nutrition.length; i++)
-                Container(
-                  color: i.isOdd ? Brand.surface : Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(info.nutrition[i].$1, style: const TextStyle(fontSize: 13.5, color: Brand.ink))),
-                      Text(info.nutrition[i].$2, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Brand.ink)),
-                    ],
-                  ),
-                ),
-            ],
+  Widget build(BuildContext context) => SizedBox(
+        height: 50,
+        child: OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: product))),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Brand.accent,
+            minimumSize: const Size(0, 50),
+            padding: EdgeInsets.zero,
+            side: const BorderSide(color: Brand.accent, width: 1.4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.1),
           ),
+          icon: const Icon(Icons.event_repeat_rounded, size: 20),
+          label: const Text('Subscribe'),
         ),
-        const SizedBox(height: 8),
-        const Text('Typical values. Please refer to the pack for exact nutrition information.', style: TextStyle(fontSize: 11.5, color: Brand.faint)),
-      ],
-    );
-  }
+      );
 }
 
 /// A sideways row of product tiles.
