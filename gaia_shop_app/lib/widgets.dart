@@ -65,7 +65,7 @@ class ProductImage extends StatelessWidget {
   }
 }
 
-/// ADD TO CART, which becomes a  -  1  +  stepper once the item is in the cart.
+/// Add to cart, which becomes a  -  1  +  stepper once the item is in the cart.
 /// [large] is the product page's solid "Add to cart".
 class AddButton extends ConsumerWidget {
   const AddButton({super.key, required this.product, this.large = false, this.width});
@@ -99,9 +99,7 @@ class AddButton extends ConsumerWidget {
           ),
         );
       }
-      return PillButton(
-        icon: Icons.add_shopping_cart_rounded,
-        label: 'ADD TO CART',
+      return AddToCartPill(
         width: w,
         onTap: () {
           HapticFeedback.lightImpact();
@@ -143,11 +141,9 @@ class AddButton extends ConsumerWidget {
       );
 }
 
-/// The small outlined button used for both ADD TO CART and SUBSCRIBE: same size, text and colour.
-class PillButton extends StatelessWidget {
-  const PillButton({super.key, required this.icon, required this.label, required this.onTap, required this.width});
-  final IconData icon;
-  final String label;
+/// The outlined Add to cart button; its icon and text are exactly the Subscribe link's (size, weight, colour).
+class AddToCartPill extends StatelessWidget {
+  const AddToCartPill({super.key, required this.onTap, required this.width});
   final VoidCallback onTap;
   final double width;
 
@@ -165,12 +161,12 @@ class PillButton extends StatelessWidget {
           height: 34,
           alignment: Alignment.center,
           decoration: BoxDecoration(borderRadius: r, border: Border.all(color: Brand.accent, width: 1.2)),
-          child: FittedBox(
+          child: const FittedBox(
             fit: BoxFit.scaleDown,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(icon, size: 14, color: Brand.accent),
-              const SizedBox(width: 5),
-              Text(label, style: const TextStyle(color: Brand.accent, fontWeight: FontWeight.w800, fontSize: 11.5, letterSpacing: 0.4)),
+              Icon(Icons.add_shopping_cart_rounded, size: 15, color: Brand.accent),
+              SizedBox(width: 5),
+              Text('Add to cart', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent)),
             ]),
           ),
         ),
@@ -179,18 +175,25 @@ class PillButton extends StatelessWidget {
   }
 }
 
-/// SUBSCRIBE, looking exactly like ADD TO CART.
-class SubscribeButton extends StatelessWidget {
-  const SubscribeButton({super.key, required this.product, required this.width});
+/// The Subscribe link, as it always was.
+class SubscribeLink extends StatelessWidget {
+  const SubscribeLink({super.key, required this.product, this.chevron = false});
   final Product product;
-  final double width;
+  final bool chevron;
 
   @override
-  Widget build(BuildContext context) => PillButton(
-        icon: Icons.event_repeat_rounded,
-        label: 'SUBSCRIBE',
-        width: width,
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(8),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: product))),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.event_repeat_rounded, size: 15, color: Brand.accent),
+            const SizedBox(width: 5),
+            const Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent)),
+            if (chevron) const Icon(Icons.chevron_right_rounded, size: 16, color: Brand.accent),
+          ]),
+        ),
       );
 }
 
@@ -235,13 +238,13 @@ class OffBadge extends StatelessWidget {
       );
 }
 
-/// A compact product tile: photo with ADD TO CART on its corner, then name, size and price.
+/// A compact product tile: photo with Add to cart on its corner, then name, size and price.
 /// Used in the menu grid and the "you may also like" rows.
 class ProductTile extends ConsumerWidget {
   const ProductTile({super.key, required this.product, required this.onOpen});
 
   /// The height a tile [width] wide needs: its photo plus room for size, two lines of name, price and Subscribe.
-  static double heightFor(double width) => (width - 12) / 1.08 + 158;
+  static double heightFor(double width) => (width - 12) / 1.08 + 150;
   final Product product;
   final VoidCallback onOpen;
 
@@ -299,7 +302,7 @@ class ProductTile extends ConsumerWidget {
                   PriceTag(product: p),
                   const SizedBox(height: 6),
                   // every product can be subscribed to, right from the list
-                  LayoutBuilder(builder: (_, box) => SubscribeButton(product: p, width: box.maxWidth)),
+                  SubscribeLink(product: p, chevron: true),
                 ]),
               ),
             ],
@@ -311,11 +314,11 @@ class ProductTile extends ConsumerWidget {
 }
 
 /// A wide product card for the home page's sideways rows: photo on the left; name, size, price,
-/// Subscribe and ADD TO CART on the right.
+/// Subscribe and Add to cart on the right.
 class ProductRowCard extends StatelessWidget {
   const ProductRowCard({super.key, required this.product, required this.onOpen, this.width = 300});
 
-  static const double height = 188;
+  static const double height = 176;
   final Product product;
   final VoidCallback onOpen;
   final double width;
@@ -357,9 +360,9 @@ class ProductRowCard extends StatelessWidget {
                     ),
                   const Spacer(),
                   PriceTag(product: p, size: 15.5),
-                  const SizedBox(height: 6),
-                  LayoutBuilder(builder: (_, box) => SubscribeButton(product: p, width: box.maxWidth)),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 2),
+                  SubscribeLink(product: p, chevron: true),
+                  const SizedBox(height: 2),
                   // the button takes the text column's whole width
                   LayoutBuilder(builder: (_, box) => AddButton(product: p, width: box.maxWidth)),
                 ]),
