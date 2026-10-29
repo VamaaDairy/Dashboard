@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'config.dart';
+import 'payments.dart';
 import 'push.dart';
 import 'screens/home_screen.dart';
 import 'screens/rider_shell.dart';
@@ -54,12 +55,15 @@ class SplashScreen extends StatelessWidget {
 /// The app's stores (Riverpod) wrap everything; prefs and tokens are opened before it starts so
 /// every store restores instantly.
 class GaiaApp extends StatelessWidget {
-  const GaiaApp({super.key, required this.prefs, required this.vault, this.api});
+  const GaiaApp({super.key, required this.prefs, required this.vault, this.api, this.checkout});
   final SharedPreferences prefs;
   final TokenVault vault;
 
   /// Swap in a fake backend for tests.
   final Api? api;
+
+  /// Swap in a fake Easebuzz checkout for tests.
+  final OpenCheckout? checkout;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +72,7 @@ class GaiaApp extends StatelessWidget {
         prefsProvider.overrideWithValue(prefs),
         vaultProvider.overrideWithValue(vault),
         if (api != null) apiProvider.overrideWithValue(api!),
+        if (checkout != null) checkoutProvider.overrideWithValue(checkout!),
       ],
       child: MaterialApp(
         title: appName,

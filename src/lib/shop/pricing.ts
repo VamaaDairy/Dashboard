@@ -30,6 +30,7 @@ export function displayName(raw: string): string {
 }
 
 export const STATUS_LABEL: Record<string, string> = {
+  awaiting_payment: "Awaiting payment",
   placed: "Order placed",
   confirmed: "Confirmed",
   out_for_delivery: "Out for delivery",

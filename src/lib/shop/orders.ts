@@ -2,6 +2,7 @@ import "server-only";
 import { one, query, tx } from "@/lib/db";
 import { shop } from "@/lib/whatsapp/config";
 import { notifyOrderStatus, notifyRiderAssigned } from "@/lib/push";
+import { expireUnpaid } from "@/lib/payments/easebuzz";
 import { photoUrlOf, pricesFor } from "./catalog";
 import { deliveryFor, MAX_LINE_QTY, MAX_LINES, type DeliveryRule } from "./pricing";
 
@@ -18,6 +19,8 @@ export interface OrderInput {
   lines: Array<{ sku: string; qty: number }>;
   /** The signed-in account placing it (the app requires one). */
   customerId?: number | null;
+  /** "online": the order waits for its Easebuzz payment before it is placed; else cash on delivery. */
+  paymentMethod?: "cod" | "online";
 }
 
 export type PlaceResult = { ok: true; accessKey: string } | { ok: false; error: string };
@@ -49,11 +52,16 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
   const subtotal = Math.round(items.reduce((s, i) => s + i.total, 0) * 100) / 100;
   const fee = deliveryFor(subtotal, deliveryRule);
 
+  const online = input.paymentMethod === "online";
+  if (online) await expireUnpaid();
   const placed = await tx(async (c) => {
     const o = await c.query(
-      `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, customer_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id, access_key`,
-      [input.name, input.phone, input.address, input.pincode, input.notes, input.lat, input.lng, subtotal, fee, subtotal + fee, input.customerId ?? null],
+      `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, customer_id, payment_method, status)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id, access_key`,
+      [
+        input.name, input.phone, input.address, input.pincode, input.notes, input.lat, input.lng, subtotal, fee, subtotal + fee, input.customerId ?? null,
+        online ? "online" : "cod", online ? "awaiting_payment" : "placed",
+      ],
     );
     // the account remembers where it last ordered to, so the next checkout is pre-filled
     if (input.customerId) {
@@ -67,7 +75,8 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
     }
     return { id: o.rows[0].id as number, key: o.rows[0].access_key as string };
   });
-  await notifyOrderStatus(placed.id, "placed");
+  // an online order reaches the team once Easebuzz confirms the payment (lib/payments/easebuzz.ts)
+  if (!online) await notifyOrderStatus(placed.id, "placed");
   return { ok: true, accessKey: placed.key };
 }
 

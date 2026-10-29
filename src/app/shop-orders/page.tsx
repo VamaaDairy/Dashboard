@@ -84,7 +84,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
                   <td className="px-3 py-2"><div className="font-medium">{o.name}</div><div className="font-mono text-xs text-muted-foreground">{o.phone}</div></td>
                   <td className="min-w-56 px-3 py-2 text-muted-foreground">{o.address}{o.pincode ? ` - ${o.pincode}` : ""}{o.notes ? <div className="text-xs italic">Note: {o.notes}</div> : null}</td>
                   <td className="min-w-48 px-3 py-2">{o.items.map((i) => `${i.name} × ${i.qty}`).join(", ")}</td>
-                  <td className="num whitespace-nowrap px-3 py-2 text-right">{rupees(o.total)}<div className="text-xs text-muted-foreground">COD · {o.payment_status}</div></td>
+                  <td className="num whitespace-nowrap px-3 py-2 text-right">{rupees(o.total)}<div className="text-xs text-muted-foreground">{o.payment_method === "online" ? "Online" : "COD"} · {o.payment_status}</div></td>
                   <td className="px-3 py-2">
                     {canEdit ? <AssignSelect orderId={o.id} riderId={o.rider_id} riders={riders} /> : o.rider?.name ?? "-"}
                     {o.lat === null ? <div className="mt-1 text-xs text-amber-600">No map pin</div> : null}

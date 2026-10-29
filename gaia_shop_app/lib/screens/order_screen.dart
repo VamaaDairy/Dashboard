@@ -87,6 +87,30 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
     }
   }
 
+  bool _paying = false;
+
+  /// Pays the order online now (Easebuzz checkout); the server confirms whether it went through.
+  Future<void> _payNow() => _payWith((a) => a.payOnline(_order), failed: 'The payment did not go through. Try again, or pay in cash.');
+
+  /// Gives up on paying online: the order goes ahead as cash on delivery.
+  Future<void> _payCash() => _payWith((a) => a.payInCash(_order));
+
+  Future<void> _payWith(Future<Order> Function(AccountStore a) job, {String? failed}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _paying = true);
+    try {
+      final fresh = await job(ref.read(accountProvider.notifier));
+      if (!mounted) return;
+      setState(() => _order = fresh);
+      if (fresh.status == 'awaiting_payment' && failed != null) messenger.showSnackBar(SnackBar(content: Text(failed)));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.')));
+    }
+    if (mounted) setState(() => _paying = false);
+  }
+
   /// Puts this order's items back in the cart (current prices) and opens it.
   void _orderAgain() {
     final menu = ref.read(catalogProvider);
@@ -131,7 +155,9 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
     final showMap = o.isOpen && o.status != 'placed' && o.hasPin;
 
     // the one line that matters, big - like the food apps do it
+    final awaiting = o.status == 'awaiting_payment';
     final (String title, String sub) = switch (o.status) {
+      'awaiting_payment' => ('Payment pending', 'Your order goes to the dairy as soon as the payment is through'),
       'placed' => (widget.justPlaced ? 'Order placed' : 'Order received', 'We will confirm it in a moment'),
       'confirmed' => ('Order confirmed', r != null ? '${r.name} will bring it to you' : 'Being packed for delivery'),
       'out_for_delivery' => (eta.isNotEmpty ? 'Arriving in $eta' : 'On the way', r != null ? '${r.name} is on the way to you' : 'Your order is on the way'),
@@ -179,7 +205,18 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
                 Text(title, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.4, color: cancelled ? Brand.danger : Brand.ink)),
                 const SizedBox(height: 4),
                 Text(sub, style: const TextStyle(fontSize: 14.5, color: Brand.muted, fontWeight: FontWeight.w500)),
-                if (!cancelled && !delivered) ...[
+                if (awaiting) ...[
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: _paying ? null : _payNow,
+                    child: _paying
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                        : Text('Pay ${rupees(o.total)} now'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(onPressed: _paying ? null : _payCash, child: const Text('Pay in cash on delivery instead')),
+                ],
+                if (!cancelled && !delivered && !awaiting) ...[
                   const SizedBox(height: 16),
                   Row(children: [
                     for (var i = 0; i < 4; i++) ...[
@@ -273,7 +310,11 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 2, 20, 20),
               child: Text(
-                o.paymentStatus == 'paid' ? 'Paid in cash' : (cancelled ? 'Nothing to pay' : 'Pay in cash on delivery'),
+                o.paymentStatus == 'paid'
+                    ? (o.paymentMethod == 'online' ? 'Paid online' : 'Paid in cash')
+                    : o.paymentStatus == 'refunded'
+                        ? 'Refunded'
+                        : (cancelled ? 'Nothing to pay' : (awaiting ? 'Waiting for your payment' : 'Pay in cash on delivery')),
                 style: const TextStyle(color: Brand.muted, fontSize: 13),
               ),
             ),
@@ -296,7 +337,7 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
               ]),
             ),
             line('Placed on', Text('${_day(o.createdAt)}, ${_clock(o.createdAt)}', style: value)),
-            line('Payment', const Text('Cash on delivery', style: value)),
+            line('Payment', Text(o.paymentMethod == 'online' ? 'Online (Easebuzz)' : 'Cash on delivery', style: value)),
             line(
               'Deliver to',
               Text(

@@ -62,8 +62,11 @@ class Api {
     required Customer customer,
     String? notes,
     required List<CartLine> lines,
+    bool payOnline = false,
   }) async {
     final body = jsonEncode({
+      // online: the order waits for its payment (startPayment) before it reaches the team
+      'paymentMethod': payOnline ? 'online' : 'cod',
       'name': customer.name,
       'phone': customer.phone,
       'address': customer.address,
@@ -78,6 +81,19 @@ class Api {
   }
 
   Future<Order> order(String accessKey) async => Order.fromJson(await _send(() => _http.get(_u('/orders/$accessKey'))));
+
+  /// A new Easebuzz payment for an order awaiting payment: the key and mode to open the checkout with.
+  Future<({String accessKey, String mode})> startPayment(String token, String accessKey) async {
+    final j = await _send(() => _http.post(_u('/orders/$accessKey/pay'), headers: {..._json, 'authorization': 'Bearer $token'}));
+    return (accessKey: j['accessKey'] as String, mode: (j['mode'] as String?) ?? 'production');
+  }
+
+  /// Asks the server to check the payment with Easebuzz (never trusting the phone) and returns the order.
+  Future<Order> checkPayment(String accessKey) async => Order.fromJson(await _send(() => _http.post(_u('/orders/$accessKey/payment'), headers: _json)));
+
+  /// Pay in cash after all: an order awaiting payment is placed as cash on delivery.
+  Future<Order> payInCash(String token, String accessKey) async =>
+      Order.fromJson(await _send(() => _http.post(_u('/orders/$accessKey/cash'), headers: {..._json, 'authorization': 'Bearer $token'})));
 
   Future<List<Order>> orders(List<String> accessKeys) async {
     if (accessKeys.isEmpty) return [];

@@ -5,6 +5,7 @@ import '../api.dart';
 import '../models.dart';
 import '../store/account.dart';
 import '../store/cart.dart';
+import '../store/catalog.dart';
 import '../store/map.dart';
 import '../theme.dart';
 import '../ui.dart';
@@ -29,6 +30,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _notes = TextEditingController();
 
   bool _placing = false;
+
+  /// Pay online (Easebuzz) rather than cash - the default whenever the server takes online payments.
+  bool _online = true;
   double? _lat;
   double? _lng;
   bool _pinMissing = false;
@@ -88,12 +92,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final nav = Navigator.of(context);
     setState(() => _placing = true);
     try {
-      final order = await orders.place(
+      final online = _online && (ref.read(catalogProvider).catalog?.payOnline ?? false);
+      var order = await orders.place(
         who: Customer(name: _name.text.trim(), phone: _phone.text.trim(), address: _address.text.trim(), pincode: _pincode.text.trim(), lat: _lat, lng: _lng),
         notes: _notes.text,
         lines: lines,
+        payOnline: online,
       );
       cart.clear();
+      // the order exists, waiting for its money: pay now; if it does not go through, the order screen
+      // offers to try again or to pay in cash
+      if (online) {
+        try {
+          order = await orders.payOnline(order);
+        } catch (_) {}
+      }
       // back to the menu, with the order on top
       nav.pushAndRemoveUntil(MaterialPageRoute<void>(builder: (_) => OrderScreen(order: order, justPlaced: true)), (r) => r.isFirst);
     } on ApiException catch (e) {
@@ -122,6 +135,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Widget build(BuildContext context) {
     final total = ref.watch(cartProvider.select((c) => c.total));
     final count = ref.watch(cartProvider.select((c) => c.count));
+    final payOnline = ref.watch(catalogProvider.select((c) => c.catalog?.payOnline ?? false));
+    final online = payOnline && _online;
 
     return Scaffold(
       backgroundColor: Brand.surface,
@@ -175,24 +190,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
             const SizedBox(height: 18),
             const _Step('3', 'Payment'),
-            AppCard(
-              padding: const EdgeInsets.all(14),
-              child: Row(children: [
-                const IconTile(Icons.payments_outlined, color: Brand.veg),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Cash on delivery', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                    Text('Pay when your order arrives', style: TextStyle(fontSize: 12.5, color: Brand.muted)),
-                  ]),
-                ),
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Brand.accent, width: 2)),
-                  child: Center(child: Container(width: 12, height: 12, decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle))),
-                ),
-              ]),
+            if (payOnline) ...[
+              _PayOption(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'Pay online',
+                sub: 'UPI, cards, net banking - secured by Easebuzz',
+                selected: _online,
+                onTap: () => setState(() => _online = true),
+              ),
+              const SizedBox(height: 10),
+            ],
+            _PayOption(
+              icon: Icons.payments_outlined,
+              title: 'Cash on delivery',
+              sub: 'Pay when your order arrives',
+              selected: !_online || !payOnline,
+              onTap: () => setState(() => _online = false),
             ),
             const SizedBox(height: 18),
             const BillDetails(),
@@ -203,7 +216,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         child: Row(children: [
           Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(rupees(total), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
-            Text('$count ${count == 1 ? 'item' : 'items'} · cash', style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
+            Text('$count ${count == 1 ? 'item' : 'items'} · ${online ? 'online' : 'cash'}', style: const TextStyle(fontSize: 12, color: Brand.muted, fontWeight: FontWeight.w600)),
           ]),
           const SizedBox(width: 16),
           Expanded(
@@ -212,7 +225,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               style: FilledButton.styleFrom(backgroundColor: Brand.veg),
               child: _placing
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                  : const Text('Place order'),
+                  : Text(online ? 'Pay ${rupees(total)}' : 'Place order'),
             ),
           ),
         ]),
@@ -296,5 +309,45 @@ class _Step extends StatelessWidget {
           const SizedBox(width: 8),
           Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         ]),
+      );
+}
+
+/// One way to pay, as a card with a radio dot.
+class _PayOption extends StatelessWidget {
+  const _PayOption({required this.icon, required this.title, required this.sub, required this.selected, required this.onTap});
+  final IconData icon;
+  final String title;
+  final String sub;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: selected ? Brand.accent : Brand.line, width: selected ? 1.6 : 1),
+          ),
+          child: Row(children: [
+            IconTile(icon, color: selected ? Brand.accent : Brand.muted),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                Text(sub, style: const TextStyle(fontSize: 12.5, color: Brand.muted)),
+              ]),
+            ),
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: selected ? Brand.accent : Brand.faint, width: 2)),
+              child: selected ? Center(child: Container(width: 12, height: 12, decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle))) : null,
+            ),
+          ]),
+        ),
       );
 }

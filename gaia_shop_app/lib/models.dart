@@ -74,8 +74,11 @@ class DeliveryRule {
 }
 
 class Catalog {
-  Catalog({required this.rule, required this.categories, required this.products});
+  Catalog({required this.rule, required this.categories, required this.products, this.payOnline = false});
   final DeliveryRule rule;
+
+  /// The server can take online payments (Easebuzz); otherwise only cash on delivery.
+  final bool payOnline;
   final List<MenuCategory> categories;
   final List<Product> products;
 
@@ -85,6 +88,7 @@ class Catalog {
       rule: DeliveryRule(fee: _num(shop['deliveryFee']), freeAbove: _num(shop['freeDeliveryAbove'])),
       categories: ((j['categories'] as List?) ?? []).map((e) => MenuCategory.fromJson(e as Map<String, dynamic>)).toList(),
       products: ((j['products'] as List?) ?? []).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList(),
+      payOnline: ((shop['paymentMethods'] as List?) ?? const []).contains('online'),
     );
   }
 }

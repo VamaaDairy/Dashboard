@@ -3,6 +3,7 @@ import { jsonWithEtag } from "@/lib/shop/api";
 import { listProducts } from "@/lib/shop/catalog";
 import { deliveryRule } from "@/lib/shop/orders";
 import { shop } from "@/lib/whatsapp/config";
+import { easebuzzReady } from "@/lib/payments/easebuzz";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   return jsonWithEtag(
     req,
     {
-      shop: { name: shop.name || "Gaia", deliveryFee: deliveryRule.fee, freeDeliveryAbove: deliveryRule.freeAbove, currency: "INR", paymentMethods: ["cod"] },
+      shop: { name: shop.name || "Gaia", deliveryFee: deliveryRule.fee, freeDeliveryAbove: deliveryRule.freeAbove, currency: "INR", paymentMethods: easebuzzReady() ? ["cod", "online"] : ["cod"] },
       categories: [...cats.values()],
       products,
     },

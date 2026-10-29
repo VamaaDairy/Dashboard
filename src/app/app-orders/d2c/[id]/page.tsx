@@ -13,6 +13,7 @@ import { atLeast, levelFor } from "@/lib/access";
 import { getOrderById } from "@/lib/shop/orders";
 import { rupees } from "@/lib/shop/pricing";
 import { d2cAccount } from "@/lib/app-orders";
+import { paymentsOf } from "@/lib/payments/easebuzz";
 import { D2cStatus, Field, dateOnly, when } from "../../parts";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +23,11 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const o = await getOrderById(Number(id));
   if (!o) notFound();
-  const [account, riders, me] = await Promise.all([
+  const [account, riders, me, payments] = await Promise.all([
     d2cAccount(o.id),
     query<{ id: number; name: string }>(`select id, name from shop_rider where active order by name`),
     userFromToken((await cookies()).get("session")?.value),
+    paymentsOf(o.id),
   ]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
   const map = o.lat !== null && o.lng !== null ? `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}` : null;
@@ -124,10 +126,26 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
 
             <Panel title="Payment" flush>
               <dl className="divide-y divide-border">
-                <Field label="Method">{o.payment_method === "cod" ? "Cash on delivery" : o.payment_method}</Field>
-                <Field label="Status">{o.payment_status === "paid" ? "Paid" : "To collect"}</Field>
+                <Field label="Method">{o.payment_method === "cod" ? "Cash on delivery" : "Online (Easebuzz)"}</Field>
+                <Field label="Status">
+                  {o.payment_status === "paid" ? (o.payment_method === "online" ? "Paid online" : "Paid") : o.payment_status === "refunded" ? "Refunded" : o.status === "awaiting_payment" ? "Waiting for the customer to pay" : "To collect"}
+                </Field>
                 <Field label="Amount">{rupees(o.total)}</Field>
               </dl>
+              {payments.length ? (
+                // every Easebuzz attempt, newest first: the transaction id is what Easebuzz's dashboard knows it by
+                <ul className="divide-y divide-border border-t border-border text-[12px]">
+                  {payments.map((p) => (
+                    <li key={p.txnid} className="flex items-center justify-between gap-3 px-4 py-2">
+                      <div className="min-w-0">
+                        <div className="font-mono">{p.txnid}</div>
+                        <div className="text-tertiary-foreground">{when(p.updated_at)}{p.mode ? ` · ${p.mode}` : ""}{p.easepayid ? ` · ${p.easepayid}` : ""}</div>
+                      </div>
+                      <Pill tone={p.status === "success" ? "success" : p.status === "initiated" ? "neutral" : "danger"}>{p.status}</Pill>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </Panel>
           </div>
         </div>

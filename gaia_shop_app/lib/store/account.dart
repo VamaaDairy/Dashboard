@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
+import '../payments.dart';
 import '../models.dart';
 import 'core.dart';
 
@@ -158,12 +159,12 @@ class AccountStore extends Notifier<Account> {
 
   /// Places the order on the signed-in account. On success it is remembered, along with the
   /// delivery details for next time. Throws [ApiException] asking to sign in when there is no account.
-  Future<Order> place({required Customer who, String? notes, required List<CartLine> lines}) async {
+  Future<Order> place({required Customer who, String? notes, required List<CartLine> lines, bool payOnline = false}) async {
     final t = _token;
     if (t == null) throw ApiException('Please sign in or create an account to place your order.');
     final Order o;
     try {
-      o = await _api.placeOrder(token: t, customer: who, notes: notes, lines: lines);
+      o = await _api.placeOrder(token: t, customer: who, notes: notes, lines: lines, payOnline: payOnline);
     } on ApiException catch (e) {
       if (e.message.contains('sign in')) await _sessionEnded();
       rethrow;
@@ -192,6 +193,35 @@ class AccountStore extends Notifier<Account> {
       state = state.copyWith(loading: false, error: 'Something went wrong. Please try again.');
     }
   }
+
+  /// Pays an order that is awaiting payment: our server starts an Easebuzz payment, the Easebuzz
+  /// checkout opens, and then our server checks with Easebuzz how it went. Returns the order as it now
+  /// stands - paid and placed, or still awaiting payment.
+  Future<Order> payOnline(Order o) async {
+    final t = _token;
+    if (t == null) throw ApiException('Please sign in again to pay.');
+    final start = await _api.startPayment(t, o.accessKey);
+    final said = await ref.read(checkoutProvider)(start.accessKey, start.mode);
+    var fresh = await _api.checkPayment(o.accessKey);
+    // the checkout says it went through but Easebuzz has not settled it yet: ask again for a few seconds
+    for (var i = 0; i < 3 && fresh.status == 'awaiting_payment' && (said ?? '').contains('success'); i++) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      fresh = await _api.checkPayment(o.accessKey);
+    }
+    _put(fresh);
+    return fresh;
+  }
+
+  /// Pay in cash after all: the order goes ahead as cash on delivery.
+  Future<Order> payInCash(Order o) async {
+    final t = _token;
+    if (t == null) throw ApiException('Please sign in again.');
+    final fresh = await _api.payInCash(t, o.accessKey);
+    _put(fresh);
+    return fresh;
+  }
+
+  void _put(Order fresh) => state = state.copyWith(orders: [for (final x in state.orders) x.accessKey == fresh.accessKey ? fresh : x]);
 
   /// One order, fresh from the backend (for the status screen).
   Future<Order> reload(Order o) async {

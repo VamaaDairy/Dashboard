@@ -6,3 +6,12 @@
 -keep class kotlin.** { *; }
 -keep class kotlinx.coroutines.** { *; }
 -dontwarn kotlinx.coroutines.**
+
+# Easebuzz payment SDK (in.easebuzz:android-v2, through the easebuzz_flutter plugin): its checkout
+# screen, data models and the Gson (de)serialisation it relies on must survive R8 untouched.
+-keep class com.easebuzz.** { *; }
+-keep class datamodels.** { *; }
+-keep class com.google.gson.** { *; }
+-keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod
+-dontwarn com.easebuzz.**
+-dontwarn datamodels.**

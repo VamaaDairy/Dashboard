@@ -43,5 +43,9 @@ export function parseOrderBody(body: unknown): Parsed {
   }
 
   if (Object.keys(fields).length) return { ok: false, error: "Please check the highlighted details.", fields };
-  return { ok: true, input: { name, phone, address, pincode: pincode || null, notes: notes || null, lat: lat !== null && lng !== null ? lat : null, lng: lat !== null && lng !== null ? lng : null, lines } };
+  const paymentMethod = b.paymentMethod === "online" ? "online" : "cod";
+  return {
+    ok: true,
+    input: { name, phone, address, pincode: pincode || null, notes: notes || null, lat: lat !== null && lng !== null ? lat : null, lng: lat !== null && lng !== null ? lng : null, lines, paymentMethod },
+  };
 }

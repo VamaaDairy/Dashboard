@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <!-- the app talks to the dashboard backend; release builds need this declared here -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- the delivery map: where the customer is, and where a rider is while on a delivery -->
@@ -15,8 +15,12 @@
     <queries>
         <intent><action android:name="android.intent.action.DIAL"/><data android:scheme="tel"/></intent>
         <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>
+        <!-- the Easebuzz checkout lists the UPI apps on the phone (GPay, PhonePe, Paytm ...) -->
+        <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="upi"/></intent>
     </queries>
+    <!-- the Easebuzz payment SDK brings its own app label: ours wins -->
     <application
+        tools:replace="android:label"
         android:label="Gaia"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

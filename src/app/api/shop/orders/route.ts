@@ -3,6 +3,7 @@ import { fail, orderJson, readJson, tooMany } from "@/lib/shop/api";
 import { customerFromRequest } from "@/lib/shop/customer";
 import { getOrderByKey, placeOrder } from "@/lib/shop/orders";
 import { parseOrderBody } from "@/lib/shop/validate";
+import { easebuzzReady } from "@/lib/payments/easebuzz";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
   const parsed = parseOrderBody(body);
   if (!parsed.ok) return fail(400, parsed.error, parsed.fields);
 
+  if (parsed.input.paymentMethod === "online" && !easebuzzReady()) return fail(409, "Online payment is not available right now. Please choose cash on delivery.");
   const r = await placeOrder({ ...parsed.input, customerId: customer.id });
   if (!r.ok) return fail(409, r.error);
 

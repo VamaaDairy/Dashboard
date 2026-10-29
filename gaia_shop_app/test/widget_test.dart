@@ -189,6 +189,65 @@ void main() {
       expect(ProviderContainer(overrides: [prefsProvider.overrideWithValue(prefs), vaultProvider.overrideWithValue(TokenVault.memory())]).read(cartProvider).isEmpty, true); // what is saved on the phone
     });
 
+    testWidgets('pay online: the order waits for its payment, the server confirms it with Easebuzz', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      Map<String, dynamic> order(String status, String payment) => {
+            'orderNo': 'GS-000043', 'accessKey': 'b' * 32, 'status': status, 'statusLabel': status, 'paymentMethod': 'online',
+            'paymentStatus': payment, 'createdAt': '2026-10-17T10:00:00.000Z', 'name': 'Asha Verma', 'phone': '9876543210',
+            'address': 'Flat 4, Test Colony, Raipur', 'pincode': null, 'notes': null, 'subtotal': 30, 'deliveryFee': 20, 'total': 50,
+            'items': [{'sku': '1003', 'name': 'Gaia Toned Milk 500 ml', 'image': null, 'qty': 1, 'unitPrice': 30, 'lineTotal': 30}],
+          };
+      Map<String, dynamic>? sentBody;
+      String? openedWith;
+      final server = MockClient((req) async {
+        final path = req.url.path;
+        final json = {'content-type': 'application/json'};
+        if (path == '/api/shop/catalog') {
+          return http.Response(jsonEncode({..._catalog, 'shop': {...(_catalog['shop'] as Map), 'paymentMethods': ['cod', 'online']}}), 200, headers: json);
+        }
+        if (path == '/api/shop/geo/config') return http.Response(jsonEncode({'enabled': false}), 200, headers: json);
+        if (path == '/api/shop/banners') return http.Response(jsonEncode({'banners': []}), 200, headers: json);
+        if (path == '/api/shop/orders' && req.method == 'POST') {
+          sentBody = jsonDecode(req.body) as Map<String, dynamic>;
+          return http.Response(jsonEncode(order('awaiting_payment', 'pending')), 201, headers: json);
+        }
+        if (path.endsWith('/pay')) return http.Response(jsonEncode({'accessKey': 'AK123', 'mode': 'test'}), 200, headers: json);
+        if (path.endsWith('/payment')) return http.Response(jsonEncode(order('placed', 'paid')), 200, headers: json);
+        return http.Response('{}', 404);
+      });
+
+      _tallPhone(tester);
+      await tester.pumpWidget(GaiaApp(
+        prefs: prefs,
+        vault: TokenVault.memory({TokenVault.customer: 'c' * 64}),
+        api: Api(client: server, base: 'http://test'),
+        checkout: (key, mode) async {
+          openedWith = '$key/$mode';
+          return '{"result":"payment_successfull"}';
+        },
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(AddToCartPill).first);
+      await tester.pump();
+      await tester.tap(find.text('View cart'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Proceed to checkout'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pay online'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextFormField, 'Your name'), 'Asha Verma');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Mobile number'), '9876543210');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Full address'), 'Flat 4, Test Colony, Raipur');
+      await tester.tap(find.textContaining('Pay ₹'));
+      await tester.pumpAndSettle();
+
+      expect(sentBody!['paymentMethod'], 'online');
+      expect(openedWith, 'AK123/test');
+      // paid, as the server (not the checkout) says
+      expect(find.text('Order placed'), findsOneWidget);
+      expect(find.text('Paid online'), findsOneWidget);
+    });
+
     testWidgets('a server error is shown, and the order is kept in the cart', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
