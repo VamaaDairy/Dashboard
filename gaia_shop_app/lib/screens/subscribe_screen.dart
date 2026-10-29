@@ -167,54 +167,28 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
     final (count, cost) = _monthTotal();
     final first = firstEditableLocal();
 
-    Widget band() => Container(height: 8, color: Brand.surface);
-    Widget title(String t) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
-          child: Text(t, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+    Widget label(String t) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+          child: Text(t, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
         );
-    // one radio row per frequency; the ones with a number or days show what is chosen and "Change"
-    Widget freq(Frequency f, String name, {String? detail, Future<void> Function()? edit}) {
-      final on = _freq == f;
-      return InkWell(
-        onTap: () async {
-          setState(() => _freq = f);
-          if (edit != null) await edit();
-        },
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: TextStyle(fontSize: 15, fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
-                if (on && detail != null) ...[
-                  const SizedBox(height: 2),
-                  Text(detail, style: const TextStyle(fontSize: 13, color: Brand.muted)),
-                ],
-              ]),
-            ),
-            if (on && edit != null)
-              TextButton(onPressed: edit, style: TextButton.styleFrom(visualDensity: VisualDensity.compact), child: const Text('Change')),
-            Icon(on ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded, color: on ? Brand.accent : Brand.faint, size: 22),
-          ]),
-        ),
-      );
-    }
-
-    Widget dateRow(String k, String v, VoidCallback onTap, {VoidCallback? onClear}) => InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 13, 16, 13),
-            child: Row(children: [
-              Expanded(child: Text(k, style: const TextStyle(fontSize: 15, color: Brand.muted))),
-              Text(v, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              const SizedBox(width: 4),
-              if (onClear != null)
-                InkWell(onTap: onClear, customBorder: const CircleBorder(), child: const Padding(padding: EdgeInsets.all(2), child: Icon(Icons.close_rounded, size: 20, color: Brand.muted)))
-              else
-                const Icon(Icons.chevron_right_rounded, size: 22, color: Brand.faint),
-            ]),
-          ),
+    Widget rule() => const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 24));
+    // a frequency chip; the ones with days or a number open their picker when chosen
+    Widget freq(Frequency f, String name, {Future<void> Function()? edit}) => PillChoice(
+          label: name,
+          selected: _freq == f,
+          editable: edit != null,
+          onTap: () async {
+            setState(() => _freq = f);
+            if (edit != null) await edit();
+          },
         );
+    final detail = switch (_freq) {
+      Frequency.daily => 'Every day',
+      Frequency.alternate => 'Every other day',
+      Frequency.weekdays => SubPlan(frequency: Frequency.weekdays, start: _start, weekdays: _weekdays, everyN: _n).describe,
+      Frequency.everyN => 'Every $_n days',
+      Frequency.skipN => 'Every day except every ${_n}th day',
+    };
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -222,87 +196,135 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
         titleSpacing: 0,
-        title: const Text('Subscribe', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        title: const Text('Subscription', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
-          // the product
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-            child: Row(children: [
-              Container(
-                width: 76,
-                height: 76,
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(14)),
-                child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain),
+          // the product, big, with its saving in the corner
+          SizedBox(
+            height: 260,
+            child: Stack(children: [
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(40, 20, 40, 12),
+                  child: Hero(tag: 'p-${p.sku}', child: ProductImage(url: p.image, radius: 0, fit: BoxFit.contain)),
+                ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(p.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, height: 1.25)),
-                  if (p.size != null) ...[const SizedBox(height: 2), Text(p.size!, style: const TextStyle(color: Brand.muted, fontSize: 13))],
-                  const SizedBox(height: 6),
-                  Text(rupees(p.price), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                ]),
-              ),
+              if (p.offPercent > 0)
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: Brand.gaiaGreen, borderRadius: BorderRadius.circular(20)),
+                    child: Text('${p.offPercent}% OFF', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w800)),
+                  ),
+                ),
             ]),
           ),
-          // once or regularly, and how many
+          // name and quantity on the left, the price on the right
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(p.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, height: 1.25)),
+                  if (p.size != null && p.size!.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(p.size!, style: const TextStyle(color: Brand.muted, fontSize: 14, fontWeight: FontWeight.w600)),
+                  ],
+                ]),
+              ),
+              const SizedBox(width: 12),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                  Text(rupees(p.price), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+                  if (p.offPercent > 0) ...[
+                    const SizedBox(width: 6),
+                    Text(rupees(p.mrp), style: const TextStyle(fontSize: 13.5, color: Brand.faint, decoration: TextDecoration.lineThrough)),
+                  ],
+                ]),
+                const Text('inclusive of all taxes', style: TextStyle(fontSize: 12, color: Brand.muted)),
+              ]),
+            ]),
+          ),
+          rule(),
+
+          // once or regularly
+          label('Subscription type'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _Segment(
-              options: const ['Subscribe', 'Buy once'],
-              selected: _subscribe ? 0 : 1,
-              onChanged: (i) => setState(() => _subscribe = i == 0),
-            ),
+            child: Wrap(spacing: 10, children: [
+              PillChoice(label: 'One time', selected: !_subscribe, onTap: () => setState(() => _subscribe = false)),
+              PillChoice(label: 'Subscription', selected: _subscribe, onTap: () => setState(() => _subscribe = true)),
+            ]),
           ),
+
+          if (_subscribe) ...[
+            label('Frequency'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Wrap(spacing: 10, runSpacing: 10, children: [
+                freq(Frequency.daily, 'Daily'),
+                freq(Frequency.alternate, 'Alternate'),
+                freq(Frequency.weekdays, 'Custom', edit: _editWeekdays),
+                freq(Frequency.everyN, 'Every nth day', edit: () => _editN(Frequency.everyN)),
+                freq(Frequency.skipN, "Don't deliver on nth day", edit: () => _editN(Frequency.skipN)),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              child: Text(detail, style: const TextStyle(fontSize: 13, color: Brand.muted)),
+            ),
+          ],
+
+          // how many
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
             child: Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Quantity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  Text(_subscribe ? 'On every delivery' : 'Added to your cart', style: const TextStyle(fontSize: 13, color: Brand.muted)),
+                  const Text('Quantity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  Text(_subscribe ? 'On every delivery' : 'Added to your cart', style: const TextStyle(fontSize: 12.5, color: Brand.muted)),
                 ]),
               ),
               QtyStepper(value: _qty, onChanged: (v) => setState(() => _qty = v)),
             ]),
           ),
+
           if (_subscribe) ...[
-            band(),
-            title('How often'),
-            freq(Frequency.daily, 'Daily'),
-            freq(Frequency.alternate, 'Alternate days'),
-            freq(Frequency.weekdays, 'Choose days', detail: SubPlan(frequency: Frequency.weekdays, start: _start, weekdays: _weekdays, everyN: _n).describe, edit: _editWeekdays),
-            freq(Frequency.everyN, 'Every few days', detail: 'Every $_n days', edit: () => _editN(Frequency.everyN)),
-            freq(Frequency.skipN, 'Skip every few days', detail: 'Every day except every ${_n}th day', edit: () => _editN(Frequency.skipN)),
-            const SizedBox(height: 8),
-            band(),
-            title('Dates'),
-            dateRow('Starts on', niceDate(_start), _pickStart),
-            const Padding(padding: EdgeInsets.only(left: 20), child: Divider()),
-            dateRow('Ends on', _end == null ? 'No end date' : niceDate(_end!), _pickEnd, onClear: _end == null ? null : () => setState(() => _end = null)),
-            const SizedBox(height: 8),
-            band(),
-            // the month, as it will come
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 16, 4),
-              child: MonthTitle(
-                month: _month,
-                size: 18,
-                canGoBack: _month.isAfter(DateTime(first.year, first.month)),
-                onChange: (m) => setState(() => _month = m),
+            // an end date is optional
+            InkWell(
+              onTap: _pickEnd,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 4),
+                child: Row(children: [
+                  const Expanded(child: Text('End date', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+                  Text(_end == null ? 'No end date' : niceDate(_end!), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _end == null ? Brand.muted : Brand.ink)),
+                  const SizedBox(width: 4),
+                  if (_end != null)
+                    InkWell(onTap: () => setState(() => _end = null), customBorder: const CircleBorder(), child: const Padding(padding: EdgeInsets.all(4), child: Icon(Icons.close_rounded, size: 18, color: Brand.muted)))
+                  else
+                    const Padding(padding: EdgeInsets.all(4), child: Icon(Icons.edit_outlined, size: 18, color: DayColors.vacation)),
+                ]),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-              child: Text('Tap a day to take it out', style: TextStyle(fontSize: 13, color: Brand.muted)),
-            ),
+            rule(),
+
+            // the month, as it will come
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
+              child: Row(children: [
+                const Expanded(child: Text('Calendar preview', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+                SizedBox(width: 190, child: MonthHeader(month: _month, canGoBack: _month.isAfter(DateTime(first.year, first.month)), onChange: (m) => setState(() => _month = m))),
+              ]),
+            ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 10),
+              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(16)),
               child: MonthGrid(
                 month: _month,
                 cell: (d) {
@@ -311,20 +333,25 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
                   final removed = _removed.contains(dayOnly(d));
                   final on = due && !removed;
                   return InkWell(
-                    customBorder: const CircleBorder(),
+                    borderRadius: BorderRadius.circular(10),
                     onTap: !due ? null : () => setState(() => removed ? _removed.remove(dayOnly(d)) : _removed.add(dayOnly(d))),
                     child: Center(
                       child: Container(
                         width: 36,
                         height: 36,
                         alignment: Alignment.center,
-                        decoration: BoxDecoration(color: on ? Brand.accent : null, shape: BoxShape.circle),
+                        // a delivery day is boxed in green, a day taken out is struck through
+                        decoration: BoxDecoration(
+                          color: on ? Colors.white : null,
+                          border: on ? Border.all(color: Brand.veg, width: 1.6) : null,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
                         child: Text(
                           '${d.day}',
                           style: TextStyle(
                             fontSize: 14.5,
                             fontWeight: on ? FontWeight.w800 : FontWeight.w500,
-                            color: on ? Colors.white : (before ? Brand.faint.withValues(alpha: 0.6) : (removed ? Brand.faint : Brand.ink)),
+                            color: on ? Brand.ink : (before ? Brand.faint.withValues(alpha: 0.6) : (removed ? DayColors.vacation : Brand.faint)),
                             decoration: removed ? TextDecoration.lineThrough : null,
                           ),
                         ),
@@ -338,61 +365,63 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Row(children: [
                 Expanded(
-                  child: Text('$count deliveries in ${monthNames[_month.month - 1]}',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  child: Text('$count deliveries in ${monthNames[_month.month - 1]} · tap a day to take it out',
+                      style: const TextStyle(fontSize: 13, color: Brand.muted)),
                 ),
-                Text('about ${rupees(cost)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                Text('≈ ${rupees(cost)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
               ]),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: Text('Skip, change or pause any day later from Calendar, until 9 PM the evening before. Pay in cash on delivery.',
-                  style: TextStyle(fontSize: 12.5, color: Brand.muted, height: 1.4)),
-            ),
           ],
+          rule(),
+
+          // the small print, and what the product is
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'Skip, change or pause any day from Calendar until 9 PM the evening before. Pay in cash on delivery. '
+              'Items may vary slightly in size and weight.',
+              style: TextStyle(fontSize: 13, color: Brand.muted, height: 1.45),
+            ),
+          ),
+          if (p.description != null && p.description!.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: Text(p.description!.trim(), style: const TextStyle(fontSize: 13.5, color: Brand.muted, height: 1.45)),
+            ),
         ],
       ),
+      // start date and confirm, always in reach
       bottomNavigationBar: StickyBar(
-        child: FilledButton(
-          onPressed: _busy ? null : _confirm,
-          child: _busy
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-              : Text(_subscribe ? 'Start subscription' : 'Add to cart · ${rupees(p.price * _qty)}'),
-        ),
+        child: Row(children: [
+          if (_subscribe) ...[
+            InkWell(
+              onTap: _pickStart,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 6, 10, 6),
+                decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  const Text('Start date', style: TextStyle(fontSize: 11, color: Brand.muted, fontWeight: FontWeight.w600)),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(niceDate(_start), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.edit_outlined, size: 16, color: DayColors.vacation),
+                  ]),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: FilledButton(
+              onPressed: _busy ? null : _confirm,
+              child: _busy
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                  : FittedBox(child: Text(_subscribe ? 'CONFIRM SUBSCRIPTION' : 'ADD TO CART · ${rupees(p.price * _qty)}')),
+            ),
+          ),
+        ]),
       ),
     );
   }
-}
-
-/// Two-way switch: a grey track with a white thumb on the chosen side.
-class _Segment extends StatelessWidget {
-  const _Segment({required this.options, required this.selected, required this.onChanged});
-  final List<String> options;
-  final int selected;
-  final void Function(int) onChanged;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(14)),
-        child: Row(children: [
-          for (final (i, o) in options.indexed)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  height: 42,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: i == selected ? Colors.white : Colors.transparent,
-                    borderRadius: BorderRadius.circular(11),
-                    boxShadow: i == selected ? const [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 1))] : null,
-                  ),
-                  child: Text(o, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: i == selected ? Brand.ink : Brand.muted)),
-                ),
-              ),
-            ),
-        ]),
-      );
 }
