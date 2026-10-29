@@ -71,11 +71,11 @@
   https://github.com/supabase/supabase/tree/master/packages/ui/build/css
 */
 :root {
-  /* 258 is the logo's own blue (#4A6FA5) converted to OKLCH hue, so the
+  /* 268 is the logo's own blue (#2B3990) converted to OKLCH hue, so the
      accent color and the brand mark actually match. */
-  --hue: 258;
+  --hue: 268;
   --surface-hue: 34;
-  --primary-hue: 258;
+  --primary-hue: 268;
   --chroma: 0;
   --surface: 0.995;
   --elevation-step: 0.024;
@@ -138,10 +138,9 @@
   --popover: oklch(from var(--background) calc(l + var(--elevation-step) * var(--elevation-2)) c h);
   --popover-foreground: var(--foreground);
 
-  --primary: oklch(0.76 0.15 var(--primary-hue));
-  --primary-foreground: oklch(
-    min(var(--surface), var(--foreground-lightness)) calc(var(--chroma) * 0.45) var(--primary-hue)
-  );
+  /* the logo's blue (#2B3990) with white on top */
+  --primary: oklch(0.4 0.15 var(--primary-hue));
+  --primary-foreground: oklch(1 0 0);
 
   --secondary: oklch(
     from var(--background) calc(l + var(--elevation-step) * var(--elevation-3)) c h
