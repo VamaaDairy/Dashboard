@@ -65,7 +65,7 @@ class ProductImage extends StatelessWidget {
   }
 }
 
-/// ADD, which becomes a  -  1  +  stepper once the item is in the cart.
+/// ADD TO CART, which becomes a  -  1  +  stepper once the item is in the cart.
 /// [large] is the product page's solid "Add to cart".
 class AddButton extends ConsumerWidget {
   const AddButton({super.key, required this.product, this.large = false, this.width});
@@ -79,7 +79,7 @@ class AddButton extends ConsumerWidget {
     // only this product's quantity: the button rebuilds when it changes, not for every cart change
     final qty = ref.watch(cartProvider.select((c) => c.qtyOf(product.sku)));
     final cart = ref.read(cartProvider.notifier);
-    final w = width ?? (large ? 160.0 : 76.0);
+    final w = width ?? (large ? 160.0 : (qty == 0 ? 112.0 : 84.0));
     final h = large ? 50.0 : 34.0;
     final r = BorderRadius.circular(large ? 14 : 9);
 
@@ -115,13 +115,13 @@ class AddButton extends ConsumerWidget {
             height: h,
             alignment: Alignment.center,
             decoration: BoxDecoration(borderRadius: r, border: Border.all(color: Brand.accent, width: 1.2)),
-            child: const Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                Text('ADD', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 0.6)),
-                Positioned(right: -14, top: -6, child: Text('+', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w800, fontSize: 13))),
-              ],
+            child: const FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add_shopping_cart_rounded, size: 14, color: Brand.accent),
+                SizedBox(width: 5),
+                Text('ADD TO CART', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w800, fontSize: 11.5, letterSpacing: 0.4)),
+              ]),
             ),
           ),
         ),
@@ -133,7 +133,7 @@ class AddButton extends ConsumerWidget {
       decoration: BoxDecoration(
         color: Brand.accent,
         borderRadius: r,
-        boxShadow: const [BoxShadow(color: Color(0x2E000000), blurRadius: 8, offset: Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Brand.accent.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -202,7 +202,7 @@ class OffBadge extends StatelessWidget {
       );
 }
 
-/// A compact product tile: photo with ADD on its corner, then name, size and price.
+/// A compact product tile: photo with ADD TO CART on its corner, then name, size and price.
 /// Used in the menu grid and the "you may also like" rows.
 class ProductTile extends ConsumerWidget {
   const ProductTile({super.key, required this.product, required this.onOpen});
@@ -272,10 +272,10 @@ class ProductTile extends ConsumerWidget {
                     child: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 4),
                       child: Row(children: [
-                        Icon(Icons.event_repeat_rounded, size: 15, color: Brand.sky),
+                        Icon(Icons.event_repeat_rounded, size: 15, color: Brand.accent),
                         SizedBox(width: 5),
-                        Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.sky)),
-                        Icon(Icons.chevron_right_rounded, size: 16, color: Brand.sky),
+                        Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent)),
+                        Icon(Icons.chevron_right_rounded, size: 16, color: Brand.accent),
                       ]),
                     ),
                   ),
@@ -290,11 +290,11 @@ class ProductTile extends ConsumerWidget {
 }
 
 /// A wide product card for the home page's sideways rows: photo on the left; name, size, price,
-/// ADD and Subscribe on the right.
+/// Subscribe and ADD TO CART on the right.
 class ProductRowCard extends StatelessWidget {
   const ProductRowCard({super.key, required this.product, required this.onOpen, this.width = 300});
 
-  static const double height = 160;
+  static const double height = 176;
   final Product product;
   final VoidCallback onOpen;
   final double width;
@@ -336,32 +336,21 @@ class ProductRowCard extends StatelessWidget {
                     ),
                   const Spacer(),
                   PriceTag(product: p, size: 15.5),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    AddButton(product: p),
-                    const SizedBox(width: 8),
-                    // shrinks rather than overflowing on a narrow card or with large phone text
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-                              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                Icon(Icons.event_repeat_rounded, size: 15, color: Brand.sky),
-                                SizedBox(width: 4),
-                                Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.sky)),
-                              ]),
-                            ),
-                          ),
-                        ),
-                      ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 5),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.event_repeat_rounded, size: 15, color: Brand.accent),
+                        SizedBox(width: 5),
+                        Text('Subscribe', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.accent)),
+                        Icon(Icons.chevron_right_rounded, size: 16, color: Brand.accent),
+                      ]),
                     ),
-                  ]),
+                  ),
+                  // the button takes the text column's whole width
+                  LayoutBuilder(builder: (_, box) => AddButton(product: p, width: box.maxWidth)),
                 ]),
               ),
             ),

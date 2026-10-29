@@ -381,7 +381,7 @@ class ShopBanner {
 
   static Color _hex(String? s) {
     final v = int.tryParse((s ?? '').replaceFirst('#', ''), radix: 16);
-    return v == null ? const Color(0xFF2B3990) : Color(0xFF000000 | v);
+    return v == null ? const Color(0xFF4A86E0) : Color(0xFF000000 | v);
   }
 }
 

@@ -144,12 +144,12 @@ void main() {
       // the menu is there
       expect(find.text('Gaia Toned Milk 500 ml'), findsOneWidget);
       expect(find.text('Gaia Paneer 200 g'), findsOneWidget);
-      expect(find.text('ADD'), findsNWidgets(2));
+      expect(find.text('ADD TO CART'), findsNWidgets(2));
 
       // ADD both: the button turns into a stepper and the cart bar appears
-      await tester.tap(find.text('ADD').first);
+      await tester.tap(find.text('ADD TO CART').first);
       await tester.pump();
-      await tester.tap(find.text('ADD').first);
+      await tester.tap(find.text('ADD TO CART').first);
       await tester.pump();
       expect(find.text('2 ITEMS'), findsOneWidget);
 
@@ -200,7 +200,7 @@ void main() {
       _tallPhone(tester);
       await tester.pumpWidget(GaiaApp(prefs: prefs, vault: TokenVault.memory({TokenVault.customer: 'c' * 64}), api: Api(client: server, base: 'http://test')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ADD').first);
+      await tester.tap(find.text('ADD TO CART').first);
       await tester.pump();
       await tester.tap(find.text('View cart'));
       await tester.pumpAndSettle();

@@ -148,7 +148,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   }
 }
 
-/// One category in the rail: its photo in a rounded box (outlined in blue when chosen), the name below.
+/// One category in the rail: its photo in a rounded box (tinted when chosen), the name below.
 class _RailItem extends StatelessWidget {
   const _RailItem({required this.category, required this.selected, required this.onTap});
   final MenuCategory category;
@@ -170,7 +170,7 @@ class _RailItem extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: selected ? Brand.accentTint : Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: selected ? Brand.accent : Brand.line, width: selected ? 1.6 : 1),
+                  border: Border.all(color: selected ? Colors.transparent : Brand.line, width: 1),
                 ),
                 child: ProductImage(url: category.image, radius: 10, fit: BoxFit.contain),
               ),

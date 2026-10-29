@@ -41,6 +41,7 @@ class ProductScreen extends ConsumerWidget {
         slivers: [
           SliverToBoxAdapter(child: _Gallery(product: p)),
           SliverToBoxAdapter(child: _Header(product: p)),
+          SliverToBoxAdapter(child: _SubscribeCard(product: p)),
           SliverToBoxAdapter(child: _Highlights(items: info.highlights)),
           SliverToBoxAdapter(child: _Details(info: info)),
           if (sameRange.isNotEmpty) SliverToBoxAdapter(child: _Rail(title: 'More in ${p.category}', products: sameRange, onOpen: (o) => _open(context, o))),
@@ -56,7 +57,8 @@ class ProductScreen extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + MediaQuery.paddingOf(context).bottom),
             decoration: const BoxDecoration(
               color: Colors.white,
-              boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, -2))],
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+              boxShadow: [BoxShadow(color: Color(0x1A111827), blurRadius: 20, offset: Offset(0, -4))],
             ),
             child: Row(
               children: [
@@ -71,22 +73,8 @@ class ProductScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                OutlinedButton(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: p))),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Brand.accent,
-                    minimumSize: const Size(0, 50),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    side: const BorderSide(color: Brand.accent, width: 1.4),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: const Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.calendar_month, size: 18),
-                    Text('Subscribe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                  ]),
-                ),
                 const SizedBox(width: 10),
-                AddButton(product: p, large: true, width: 150),
+                AddButton(product: p, large: true, width: 180),
               ],
             ),
           ),
@@ -126,8 +114,11 @@ class _GalleryState extends ConsumerState<_Gallery> {
         );
 
     return Container(
-      // white, like the pack shots, with a hairline where the details start
-      decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Brand.line))),
+      // a soft blue wash behind the pack shot, curving into the details
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFEAF2FE), Colors.white]),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+      ),
       padding: EdgeInsets.only(top: top),
       child: Stack(
         children: [
@@ -157,12 +148,22 @@ class _GalleryState extends ConsumerState<_Gallery> {
             ),
           ),
           if (p.offPercent > 0)
-            Positioned(left: 16, bottom: 16, child: OffBadge(percent: p.offPercent)),
+            Positioned(left: 16, bottom: 18, child: OffBadge(percent: p.offPercent)),
+          if (photos.length > 1)
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(12)),
+                child: Text('${_page + 1}/${photos.length}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Brand.muted)),
+              ),
+            ),
           if (photos.length > 1)
             Positioned(
               left: 0,
               right: 0,
-              bottom: 14,
+              bottom: 22,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -205,32 +206,75 @@ class _Header extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(p.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, height: 1.25, color: Brand.ink)),
+          Text(p.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.3, color: Brand.ink)),
           if (p.size != null && p.size!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(p.size!, style: const TextStyle(fontSize: 14, color: Brand.muted, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(color: Brand.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: Brand.line)),
+              child: Text(p.size!, style: const TextStyle(fontSize: 13, color: Brand.ink, fontWeight: FontWeight.w700)),
+            ),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Flexible(child: PriceTag(product: p, size: 28)),
+              Flexible(child: PriceTag(product: p, size: 30)),
               if (p.offPercent > 0) ...[
                 const SizedBox(width: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: Brand.veg.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-                  child: Text('${p.offPercent}% OFF', style: const TextStyle(color: Brand.veg, fontSize: 12, fontWeight: FontWeight.w800)),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(color: Brand.veg.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text('Save ${rupees(p.mrp - p.price)}', style: const TextStyle(color: Brand.veg, fontSize: 12.5, fontWeight: FontWeight.w800)),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(p.offPercent > 0 ? 'MRP ${rupees(p.mrp)} · Inclusive of all taxes' : 'Inclusive of all taxes', style: const TextStyle(fontSize: 12, color: Brand.faint)),
         ],
       ),
     );
   }
+}
+
+/// "Subscribe": a tinted card under the price that opens the subscribe screen.
+class _SubscribeCard extends StatelessWidget {
+  const _SubscribeCard({required this.product});
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        child: Material(
+          color: Brand.accentTint,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscribeScreen(product: product))),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Row(children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle),
+                  child: const Icon(Icons.event_repeat_rounded, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Subscribe', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Brand.ink)),
+                    SizedBox(height: 2),
+                    Text('Fresh at your door on the days you pick. Pause any time.', style: TextStyle(fontSize: 12.5, height: 1.3, color: Brand.muted)),
+                  ]),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Brand.accent),
+              ]),
+            ),
+          ),
+        ),
+      );
 }
 
 class _Highlights extends StatelessWidget {
@@ -251,9 +295,9 @@ class _Highlights extends StatelessWidget {
               child: Column(
                 children: [
                   Container(
-                    width: 42,
-                    height: 42,
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    width: 46,
+                    height: 46,
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0x14111827), blurRadius: 8, offset: Offset(0, 2))]),
                     child: Icon(h.icon, color: Brand.accent, size: 21),
                   ),
                   const SizedBox(height: 6),
@@ -285,11 +329,12 @@ class _DetailsState extends State<_Details> {
     final info = widget.info;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-      decoration: BoxDecoration(border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Brand.line), borderRadius: BorderRadius.circular(18), boxShadow: Brand.lift),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('About this product', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Brand.ink))),
           GestureDetector(
             onTap: () => setState(() => _more = !_more),
             child: Text.rich(

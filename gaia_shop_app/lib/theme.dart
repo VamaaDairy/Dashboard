@@ -4,10 +4,10 @@ import 'package:flutter/services.dart';
 
 /// One place for the look. To re-colour the whole app, change [accent].
 class Brand {
-  static const Color accent = Color(0xFF2B3990); // Gaia blue: primary actions, links, selection
-  static const Color accentDark = Color(0xFF1E2A70);
-  static const Color accentTint = Color(0xFFEEF1FB);
-  static const Color sky = Color(0xFF4A86E0); // the lighter blue of the banners and "upcoming"
+  static const Color accent = Color(0xFF4A86E0); // the milk-pack blue (same as Subscribe): primary actions, links, selection
+  static const Color accentDark = Color(0xFF3569BD);
+  static const Color accentTint = Color(0xFFEAF2FE);
+  static const Color sky = accent; // kept for the banners and "upcoming"
   static const Color gaiaGreen = Color(0xFF34A853);
   static const Color veg = Color(0xFF1E8E3E); // success / delivered / savings
   static const Color danger = Color(0xFFD93025); // errors and cancelled orders
