@@ -92,7 +92,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
       return Center(child: EmptyState(icon: Icons.wifi_off_rounded, title: 'No connection', message: catalog.error, action: 'Try again', onAction: widget.onRetry));
     }
     final gridW = MediaQuery.sizeOf(context).width - _railWidth - 1;
-    final tileW = (gridW - 12 * 2 - 10) / 2;
+    final cardW = gridW - 12 * 2;
 
     return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       // the category rail
@@ -128,20 +128,17 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                     message: term.isEmpty ? 'No products in this category yet.' : 'No product matches "${_search.text.trim()}".',
                   ),
                 ])
-              : GridView.builder(
+              : ListView.separated(
                   // a new category starts at its top
                   key: ValueKey('products-${term.isEmpty ? current : 'search'}'),
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 10,
-                    mainAxisExtent: ProductTile.heightFor(tileW),
-                  ),
+                  // one product per row: photo on the left, the name with its quantity under it on the right
                   itemCount: shown.length,
-                  itemBuilder: (_, i) => ProductTile(
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, i) => ProductRowCard(
                     product: shown[i],
+                    width: cardW,
                     onOpen: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ProductScreen(product: shown[i]))),
                   ),
                 ),

@@ -25,17 +25,36 @@ const UNIT: Record<string, string> = {
   ml: "ml", l: "Ltr", lt: "Ltr", ltr: "Ltr", ltrs: "Ltr", litre: "Ltr", litres: "Ltr", liter: "Ltr", liters: "Ltr",
   g: "g", gm: "g", gms: "g", gram: "g", grams: "g", kg: "kg", kgs: "kg", pc: "pc", pcs: "pc",
 };
-const SIZE_RE = /(?:(\d+)\s*[x×]\s*)?(\d+(?:\.\d+)?)\s*(ml|ltrs?|litres?|liters?|lt|l|gms?|grams?|g|kgs?|pcs?)\b/i;
+const SIZE_RE = /(?:(\d+)\s*[x×]\s*)?(\d+(?:\.\d+)?)\s*(ml|ltrs?|litres?|liters?|lt|l|gms?|grams?|g|kgs?)\b/i;
+// a pack count: "6 pc", "6Pc", "6 pcs", "6 pieces"
+const COUNT_RE = /(\d+)\s*(?:pcs?|pieces?)\b/i;
+// words still in capitals after the name is tidied ("JAR", "CEKA"), except the ones that are meant to be
+const KEEP_CAPS = new Set(["UHT", "KE", "FG"]);
 
-/** "Gaia Toned Milk 500 ml" -> { name: "Gaia Toned Milk", size: "500 ml" }; a name without a quantity is left as it is. */
+const cut = (s: string, m: RegExpExecArray) => s.slice(0, m.index) + " " + s.slice(m.index + m[0].length);
+
+/**
+ * "Gaia Toned Milk 500 ml" -> { name: "Gaia Toned Milk", size: "500 ml" }; "Gaia Shahi Rabdi 80g-Box 6Pc" ->
+ * { name: "Gaia Shahi Rabdi Box", size: "6 x 80 g" }. A name without a quantity keeps its name and has no size.
+ */
 export function splitSize(full: string): { name: string; size: string | null } {
-  const m = SIZE_RE.exec(full);
-  if (!m) return { name: full.trim(), size: null };
-  const size = `${m[1] ? `${m[1]} x ` : ""}${m[2]} ${UNIT[m[3].toLowerCase()] ?? m[3]}`;
-  const name = (full.slice(0, m.index) + " " + full.slice(m.index + m[0].length))
+  let rest = full;
+  let size: string | null = null;
+  const m = SIZE_RE.exec(rest);
+  if (m) {
+    size = `${m[1] ? `${m[1]} x ` : ""}${m[2]} ${UNIT[m[3].toLowerCase()] ?? m[3]}`;
+    rest = cut(rest, m);
+  }
+  const n = COUNT_RE.exec(rest);
+  if (n) {
+    size = size ? `${n[1]} x ${size}` : `${n[1]} pc`;
+    rest = cut(rest, n);
+  }
+  const name = rest
     .replace(/\s*[-–,]\s*(?=\s|$)/g, " ")
     .replace(/(^|\s)[-–](?=\S)/g, "$1")
     .replace(/\(\s*\)/g, "")
+    .replace(/\b[A-Z]{3,}\b/g, (w) => (KEEP_CAPS.has(w) ? w : w[0] + w.slice(1).toLowerCase()))
     .replace(/\s+/g, " ")
     .trim();
   return { name: name || full.trim(), size };
