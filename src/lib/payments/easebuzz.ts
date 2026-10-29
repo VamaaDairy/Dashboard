@@ -181,24 +181,40 @@ export async function applyReply(r: Record<string, unknown>, source: string): Pr
   return { ok: true, status, orderId: placed.orderId };
 }
 
-/** Asks Easebuzz how the order's latest attempt went (Transaction API) and records it. */
+/** Easebuzz's own amount spelling in the Transaction API hash: at least one decimal ("40.0", "189.5", "99.99"). */
+const txnAmount = (n: number) => {
+  const s = String(Number(Number(n).toFixed(2)));
+  return s.includes(".") ? s : `${s}.0`;
+};
+
+/**
+ * Asks Easebuzz how the order's payment attempts went (Transaction API) and records them. Every attempt not
+ * yet settled is asked, newest first, until one is a success (the customer may have paid on an earlier try).
+ */
 export async function checkPayment(orderKey: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const o = await one<PayOrder>(`${ORDER} where access_key = $1`, [orderKey]);
   if (!o) return { ok: false, status: 404, error: "Order not found." };
   if (o.payment_status === "paid" || !easebuzzReady()) return { ok: true };
-  const pay = await one<{ txnid: string; amount: number }>(
-    `select txnid, amount::float as amount from shop_payment where order_id = $1 and access_key is not null order by created_at desc limit 1`,
+  const attempts = await query<{ txnid: string; amount: number }>(
+    `select txnid, amount::float as amount from shop_payment
+     where order_id = $1 and access_key is not null and status <> 'success' order by created_at desc`,
     [o.id],
   );
-  if (!pay) return { ok: true };
-  const params: Record<string, string> = { key: KEY, txnid: pay.txnid, amount: money(pay.amount), email: EMAIL, phone: o.phone };
-  params.hash = sha512([params.key, params.txnid, params.amount, params.email, params.phone, SALT].join("|"));
-  try {
-    const reply = await post(`${DASH_URL}transaction/v1/retrieve`, params);
-    // { status: true, msg: { ...the transaction, signed like the other replies } }; anything else = not known yet
-    if (reply.status === true && reply.msg && typeof reply.msg === "object") await applyReply(reply.msg as Record<string, unknown>, "transaction API");
-  } catch (e) {
-    console.error("[easebuzz] transaction check failed:", e);
+  for (const pay of attempts) {
+    const params: Record<string, string> = { key: KEY, txnid: pay.txnid, amount: txnAmount(pay.amount), email: EMAIL, phone: o.phone };
+    params.hash = sha512([params.key, params.txnid, params.amount, params.email, params.phone, SALT].join("|"));
+    try {
+      const reply = await post(`${DASH_URL}transaction/v1/retrieve`, params);
+      // { status: true, msg: { ...the transaction, signed like the other replies } }; anything else = not known yet
+      if (reply.status === true && reply.msg && typeof reply.msg === "object") {
+        const r = await applyReply(reply.msg as Record<string, unknown>, "transaction API");
+        if (r.ok && r.status === "success") break;
+      } else {
+        console.error(`[easebuzz] transaction check for ${pay.txnid} got no transaction:`, JSON.stringify(reply).slice(0, 300));
+      }
+    } catch (e) {
+      console.error(`[easebuzz] transaction check for ${pay.txnid} failed:`, e);
+    }
   }
   return { ok: true };
 }
