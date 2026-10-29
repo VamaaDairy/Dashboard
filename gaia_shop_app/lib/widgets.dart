@@ -403,7 +403,7 @@ class CartBar extends ConsumerWidget {
                     children: [
                       Text('${cart.count} ${cart.count == 1 ? 'ITEM' : 'ITEMS'}',
                           style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                      Text('${rupees(cart.subtotal)}  plus delivery',
+                      Text(rupees(cart.subtotal),
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
                     ],
                   ),
