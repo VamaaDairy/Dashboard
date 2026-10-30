@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Gaia uses your location to deliver to the right place and to show your delivery on the map.</string>
+	<string>Gaia Dairy uses your location to deliver to the right place and to show your delivery on the map.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Gaia uses Face ID so you can sign in without typing your PIN.</string>
+	<string>Gaia Dairy uses Face ID so you can sign in without typing your PIN.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array><string>tel</string><string>https</string></array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
