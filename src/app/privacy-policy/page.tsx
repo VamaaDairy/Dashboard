@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GaiaLogo } from "@/components/brand";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Gaia Dairy",
@@ -91,6 +92,7 @@ const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: str
 export default function PrivacyPolicyPage() {
   return (
     <article className="mx-auto max-w-3xl px-5 py-10 text-sm leading-relaxed">
+      <GaiaLogo className="mx-auto mb-6 w-40" />
       <h1 className="mb-6 text-2xl font-semibold">Privacy Policy</h1>
       {SECTIONS.map((s, i) => (
         <section key={i} className="mb-6 space-y-3">
