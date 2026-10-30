@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Store } from "lucide-react";
+import { Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Store, UserX } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusSelect } from "@/components/shop/StatusSelect";
 import { AssignSelect } from "@/components/shop/AssignSelect";
@@ -43,6 +43,9 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
             </Link>
             <Link href="/shop-orders/live" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
               <MapPin className="h-4 w-4" /> Live map
+            </Link>
+            <Link href="/shop-orders/deletion-requests" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
+              <UserX className="h-4 w-4" /> Deletion requests
             </Link>
             <Link href="/shop" target="_blank" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
               <ExternalLink className="h-4 w-4" /> Open shop

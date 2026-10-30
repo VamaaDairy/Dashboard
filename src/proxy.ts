@@ -16,7 +16,8 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/api/") ||
     pathname.includes(".") ||
     pathname === "/favicon.ico" ||
-    pathname === "/privacy-policy"
+    pathname === "/privacy-policy" ||
+    pathname === "/delete-account"
   ) {
     return NextResponse.next();
   }
