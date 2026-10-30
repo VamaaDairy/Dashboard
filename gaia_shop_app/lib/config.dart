@@ -7,5 +7,5 @@ const String apiBase = String.fromEnvironment(
   defaultValue: 'https://production.vamadairy.in',
 );
 
-const String appName = 'Gaia';
+const String appName = 'Gaia Dairy';
 const String tagline = 'nourishment for life';

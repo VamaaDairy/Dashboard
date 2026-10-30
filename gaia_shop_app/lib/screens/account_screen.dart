@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api.dart';
 import '../config.dart';
-import '../models.dart';
 import '../store/account.dart';
 import '../store/subscriptions.dart';
 import '../theme.dart';
-import 'address_picker_screen.dart';
 import 'customer_login_screen.dart';
+import 'edit_profile_screen.dart';
 import 'my_calendar_screen.dart';
 import 'orders_screen.dart';
 import 'rider_login_screen.dart';
@@ -54,33 +52,6 @@ class AccountScreen extends ConsumerWidget {
     if (ok == true) await ref.read(accountProvider.notifier).signOut();
   }
 
-  Future<void> _editName(BuildContext context, WidgetRef ref, String now) async {
-    final name = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (c) => _NameSheet(initial: now),
-    );
-    if (name == null || name == now || !context.mounted) return;
-    try {
-      await ref.read(accountProvider.notifier).rename(name);
-      if (context.mounted) _toast(context, 'Name updated');
-    } on ApiException catch (e) {
-      if (context.mounted) _toast(context, e.message);
-    } catch (_) {
-      if (context.mounted) _toast(context, 'Could not save. Please try again.');
-    }
-  }
-
-  Future<void> _editAddress(BuildContext context, WidgetRef ref, Customer c) async {
-    final picked = await Navigator.of(context).push<PickedLocation>(MaterialPageRoute(
-      builder: (_) => AddressPickerScreen(initial: c.lat == null || c.lng == null ? null : PickedLocation(lat: c.lat!, lng: c.lng!, address: c.address)),
-    ));
-    if (picked == null) return;
-    await ref.read(accountProvider.notifier).setAddress(address: picked.address, pincode: picked.pincode ?? '', lat: picked.lat, lng: picked.lng);
-    if (context.mounted) _toast(context, 'Delivery address saved');
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final acc = ref.watch(accountProvider);
@@ -120,7 +91,7 @@ class AccountScreen extends ConsumerWidget {
                     Text('+91 ${c.phone}', style: const TextStyle(fontSize: 14.5, color: Brand.muted, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 10),
                     GestureDetector(
-                      onTap: () => _editName(context, ref, c.name),
+                      onTap: () => _go(context, const EditProfileScreen()),
                       child: const Text('Edit profile', style: TextStyle(color: Brand.accent, fontWeight: FontWeight.w700, fontSize: 14)),
                     ),
                   ]),
@@ -173,10 +144,8 @@ class AccountScreen extends ConsumerWidget {
               icon: Icons.location_on_outlined,
               title: 'Delivery address',
               subtitle: c.address.isEmpty ? 'Add the address we deliver to' : c.address,
-              onTap: () => _editAddress(context, ref, c),
+              onTap: () => _go(context, const EditProfileScreen()),
             ),
-            gap(),
-            _Row(icon: Icons.person_outline_rounded, title: 'Name', subtitle: c.name.isEmpty ? 'Add your name' : c.name, onTap: () => _editName(context, ref, c.name)),
             if (ref.read(accountProvider.notifier).biometricSaved) ...[
               gap(),
               _Row(
@@ -266,52 +235,4 @@ class _Row extends StatelessWidget {
           ]),
         ),
       );
-}
-
-/// Bottom sheet to change the name; returns the new name.
-class _NameSheet extends StatefulWidget {
-  const _NameSheet({required this.initial});
-  final String initial;
-
-  @override
-  State<_NameSheet> createState() => _NameSheetState();
-}
-
-class _NameSheetState extends State<_NameSheet> {
-  late final _c = TextEditingController(text: widget.initial);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ok = _c.text.trim().length >= 2;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Your name', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        const Text('Shown to your delivery partner.', style: TextStyle(color: Brand.muted)),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _c,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          maxLength: 80,
-          decoration: const InputDecoration(hintText: 'Full name', counterText: ''),
-          onChanged: (_) => setState(() {}),
-          onSubmitted: (v) => ok ? Navigator.pop(context, v.trim().replaceAll(RegExp(r'\s+'), ' ')) : null,
-        ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: ok ? () => Navigator.pop(context, _c.text.trim().replaceAll(RegExp(r'\s+'), ' ')) : null,
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-          child: const Text('Save'),
-        ),
-      ]),
-    );
-  }
 }

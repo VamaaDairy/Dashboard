@@ -21,7 +21,7 @@
     <!-- the Easebuzz payment SDK brings its own app label: ours wins -->
     <application
         tools:replace="android:label"
-        android:label="Gaia"
+        android:label="Gaia Dairy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

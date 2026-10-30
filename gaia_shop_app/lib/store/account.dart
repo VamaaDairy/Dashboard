@@ -129,6 +129,17 @@ class AccountStore extends Notifier<Account> {
     state = state.copyWith(customer: customer);
   }
 
+  /// Saves everything on the profile screen: name and delivery address, on the account and on this phone.
+  /// Throws [ApiException] when the server says no.
+  Future<void> updateProfile({required String name, required String address, String pincode = '', double? lat, double? lng}) async {
+    final t = _token;
+    if (t == null) throw ApiException('Please sign in again.');
+    final c = await _api.customerUpdate(t, {'name': name, 'address': address, 'pincode': pincode, 'lat': lat, 'lng': lng});
+    final customer = Customer(name: c.name.isEmpty ? name : c.name, phone: state.customer.phone, address: address, pincode: pincode, lat: lat, lng: lng);
+    await _remember(customer);
+    state = state.copyWith(customer: customer);
+  }
+
   /// Saves the delivery address on this phone (it pre-fills checkout) and on the account.
   /// The account copy also updates with the next order, so a failed save there is not fatal.
   Future<void> setAddress({required String address, String pincode = '', double? lat, double? lng}) async {
