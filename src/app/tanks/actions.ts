@@ -121,7 +121,7 @@ export async function addMovement(form: FormData): Promise<Result> {
          values ($1, $2, $3, 'out', $4, $5)`,
         [await activeScenarioId(), tankId, date, qty, optionalText(form, "notes")],
       );
-      await recomputeTank(client, tankId);
+      await recomputeTank(client, tankId, new Set(), true);
     });
   });
 }

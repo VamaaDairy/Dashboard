@@ -53,13 +53,20 @@ function apply(balance: Balance, m: MovementRow): Balance {
  *
  * Throws (the caller should roll back) if any movement would take the tank
  * negative - milk that was never recorded as coming in cannot leave it - or
- * past its capacity, when one is set.
+ * past its capacity, when one is set (`skipCapacity` waives the capacity
+ * check: a production entry taking milk out must save even if the ledger
+ * already overshoots the tank on some earlier day).
  *
  * Milk moved on to another tank carries this tank's blend: each transfer
  * 'in' is updated to what its 'out' left at and the receiving tank is
  * recomputed in turn (`seen` stops a loop of tanks feeding each other).
  */
-export async function recomputeTank(client: PoolClient, tankId: string, seen: Set<string> = new Set()): Promise<void> {
+export async function recomputeTank(
+  client: PoolClient,
+  tankId: string,
+  seen: Set<string> = new Set(),
+  skipCapacity = false,
+): Promise<void> {
   seen.add(tankId);
   const tank = await client.query<{ capacity_litre: number | null; name: string }>(
     `select capacity_litre, name from tank where id = $1`, [tankId]);
@@ -86,7 +93,7 @@ export async function recomputeTank(client: PoolClient, tankId: string, seen: Se
           `(only ${before.qty_litre.toFixed(1)} L was in it at that point).`,
       );
     }
-    if (capacity !== null && balance.qty_litre > Number(capacity) + 0.005) {
+    if (!skipCapacity && capacity !== null && balance.qty_litre > Number(capacity) + 0.005) {
       throw new Error(
         `This would overfill ${tank.rows[0]?.name ?? "the tank"} on ${m.movement_date}: ` +
           `${balance.qty_litre.toFixed(1)} L in a ${Number(capacity).toFixed(0)} L tank ` +
@@ -126,14 +133,14 @@ export async function recomputeTank(client: PoolClient, tankId: string, seen: Se
     [tankId],
   );
   for (const t of new Set(moved.rows.map((r) => r.tank_id))) {
-    if (!seen.has(t)) await recomputeTank(client, t, seen);
+    if (!seen.has(t)) await recomputeTank(client, t, seen, skipCapacity);
   }
 
   // a backdated change shifts the blend later draws left at, so batches fed from this tank follow
   const fed = await client.query<{ id: string }>(
     `select distinct bulk_batch_id as id from tank_movement where tank_id = $1 and bulk_batch_id is not null`, [tankId]);
   const batchIds = fed.rows.map((r) => r.id);
-  await syncBatchReturns(client, batchIds, seen);
+  await syncBatchReturns(client, batchIds, seen, skipCapacity);
   await syncBatchMilk(client, batchIds);
 }
 
@@ -143,7 +150,7 @@ export async function recomputeTank(client: PoolClient, tankId: string, seen: Se
  * 'in' to that and replays the tank it went to (a tank already being
  * replayed is replayed again, once - the second pass finds nothing to change).
  */
-async function syncBatchReturns(client: PoolClient, batchIds: string[], seen: Set<string>): Promise<void> {
+async function syncBatchReturns(client: PoolClient, batchIds: string[], seen: Set<string>, skipCapacity: boolean): Promise<void> {
   if (!batchIds.length) return;
   const changed = await client.query<{ tank_id: string }>(
     `update tank_movement i
@@ -163,7 +170,7 @@ async function syncBatchReturns(client: PoolClient, batchIds: string[], seen: Se
     [batchIds],
   );
   for (const t of new Set(changed.rows.map((r) => r.tank_id))) {
-    await recomputeTank(client, t, seen.has(t) ? new Set() : seen);
+    await recomputeTank(client, t, seen.has(t) ? new Set() : seen, skipCapacity);
   }
 }
 

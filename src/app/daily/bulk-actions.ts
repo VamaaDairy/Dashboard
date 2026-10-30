@@ -248,7 +248,7 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
         }
       }
 
-      for (const tankId of touched) await recomputeTank(client, tankId);
+      for (const tankId of touched) await recomputeTank(client, tankId, new Set(), true);
       await syncBatchMilk(client, batchIds);
     });
     await syncMilkProcessed(scenario, [date]);
