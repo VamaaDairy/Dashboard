@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar, type SidebarClass } from "./app-sidebar";
 
-const PUBLIC_ROUTES = ["/login"];
+const PUBLIC_ROUTES = ["/login", "/privacy-policy"];
 
 export function ConditionalShell({
   children, classes, calc,
