@@ -32,8 +32,11 @@ function apply(balance: Balance, m: MovementRow): Balance {
   if (m.direction === "in") {
     const newQty = balance.qty_litre + qty;
     if (newQty <= 0) return { ...ZERO };
+    // within a day the entries may be in the wrong order (a draw typed before the milk it used), so the
+    // tank can dip below zero for a moment: there is no milk of its own to blend in then
+    const had = Math.max(balance.qty_litre, 0);
     const blend = (existing: number, incoming: number | null) =>
-      (balance.qty_litre * existing + qty * Number(incoming ?? 0)) / newQty;
+      (had * existing + qty * Number(incoming ?? 0)) / (had + qty);
     return {
       qty_litre: newQty,
       fat_pct: blend(balance.fat_pct, m.fat_pct),
@@ -51,11 +54,15 @@ function apply(balance: Balance, m: MovementRow): Balance {
  * inside a transaction after any insert, edit or delete against the ledger,
  * so a backdated entry is folded in correctly rather than just appended.
  *
- * Throws (the caller should roll back) if any movement would take the tank
+ * Throws (the caller should roll back) if any day would end with the tank
  * negative - milk that was never recorded as coming in cannot leave it - or
- * past its capacity, when one is set (`skipCapacity` waives the capacity
- * check: a production entry taking milk out must save even if the ledger
- * already overshoots the tank on some earlier day).
+ * past its capacity, when one is set. Only the day's closing balance counts:
+ * within a day the entries replay in the order they were typed, which is not
+ * when the milk really came and went (a production draw saved again lands
+ * after the evening collection), so a check after every entry would refuse
+ * days that were fine. `skipCapacity` waives the capacity check: a production
+ * entry taking milk out must save even if the ledger already overshoots the
+ * tank on some earlier day.
  *
  * Milk moved on to another tank carries this tank's blend: each transfer
  * 'in' is updated to what its 'out' left at and the receiving tank is
@@ -82,22 +89,25 @@ export async function recomputeTank(
   );
 
   let balance = { ...ZERO };
+  let opening = 0;   // what the tank held at the start of the current day
 
-  for (const m of rows) {
+  for (const [i, m] of rows.entries()) {
     const before = balance;
+    if (i === 0 || rows[i - 1].movement_date !== m.movement_date) opening = before.qty_litre;
     balance = apply(balance, m);
 
-    if (balance.qty_litre < -0.005) {
+    const dayEnds = i === rows.length - 1 || rows[i + 1].movement_date !== m.movement_date;
+    if (dayEnds && balance.qty_litre < -0.005) {
       throw new Error(
-        `This would take ${tank.rows[0]?.name ?? "the tank"} below zero on ${m.movement_date} ` +
-          `(only ${before.qty_litre.toFixed(1)} L was in it at that point).`,
+        `This would take ${tank.rows[0]?.name ?? "the tank"} below zero on ${m.movement_date}: ` +
+          `${opening.toFixed(1)} L at the start of the day and more taken out than came in, ending at ${balance.qty_litre.toFixed(1)} L.`,
       );
     }
-    if (!skipCapacity && capacity !== null && balance.qty_litre > Number(capacity) + 0.005) {
+    if (!skipCapacity && dayEnds && capacity !== null && balance.qty_litre > Number(capacity) + 0.005) {
       throw new Error(
         `This would overfill ${tank.rows[0]?.name ?? "the tank"} on ${m.movement_date}: ` +
-          `${balance.qty_litre.toFixed(1)} L in a ${Number(capacity).toFixed(0)} L tank ` +
-          `(${before.qty_litre.toFixed(1)} L was already in it).`,
+          `the day would end with ${balance.qty_litre.toFixed(1)} L in a ${Number(capacity).toFixed(0)} L tank ` +
+          `(${opening.toFixed(1)} L at the start of the day).`,
       );
     }
 

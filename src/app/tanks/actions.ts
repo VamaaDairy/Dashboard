@@ -160,7 +160,7 @@ export async function deleteMovement(id: string, tankId: string): Promise<Result
  */
 export async function transferMilk(date: string, fromTank: string, toTank: string, raw: string, notes?: string): Promise<Result> {
   return guard(async () => {
-    if (!/^d{4}-d{2}-d{2}$/.test(date)) throw new Error("Pick a date");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Pick a date");
     if (!fromTank || !toTank) throw new Error("Pick the tank the milk goes to");
     if (fromTank === toTank) throw new Error("Pick a different tank to move the milk into");
     const qty = Number(String(raw ?? "").replace(/,/g, ""));

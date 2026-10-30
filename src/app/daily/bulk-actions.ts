@@ -227,12 +227,15 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
 
         if (milkUnchanged) continue;
 
-        await client.query(`delete from tank_movement where bulk_batch_id = $1`, [batchId]);
+        const old = await client.query<{ created_at: Date | null }>(
+          `delete from tank_movement where bulk_batch_id = $1 returning (case when direction = 'out' then created_at end) as created_at`, [batchId]);
+        // draws saved again keep their place in the day's order, so they don't move after milk that came in later
+        const placed = old.rows.map((r) => r.created_at).filter((d): d is Date => d !== null).sort((x, y) => +x - +y)[0] ?? null;
         for (const [tankId, litres] of draws) {
           await client.query(
-            `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, bulk_batch_id)
-             values ($1, $2, $3, 'out', $4, $5, 'production', $6)`,
-            [scenario, tankId, date, litres, `Production · ${name}`, batchId],
+            `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, bulk_batch_id, created_at)
+             values ($1, $2, $3, 'out', $4, $5, 'production', $6, coalesce($7, now()))`,
+            [scenario, tankId, date, litres, `Production · ${name}`, batchId, placed],
           );
           touched.add(tankId);
         }
