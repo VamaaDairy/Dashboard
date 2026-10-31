@@ -15,7 +15,7 @@ async function whoIs(req: NextRequest): Promise<{ role: PushRole; id: number; be
   if (c) return { role: "customer", id: c.id, bearer };
   const r = await riderFromRequest(req);
   if (r) return { role: "rider", id: r.id, bearer };
-  const d = await distFromRequest(req);
+  const d = await distFromRequest(req, "any");
   if (d) return { role: "distributor", id: d.id, bearer };
   return null;
 }

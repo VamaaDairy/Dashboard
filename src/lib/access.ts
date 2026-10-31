@@ -60,6 +60,16 @@ export const RESOURCES: Resource[] = [
   { key: "d2c.customers", label: "Customer Master (app customers)", group: "D2C business", path: "/d2c/customers" },
   { key: "d2c.sales", label: "Sales dashboard", group: "D2C business", path: "/d2c/sales" },
   { key: "d2c.reports", label: "Sales reports", group: "D2C business", path: "/d2c/reports" },
+  // the Gaia Salesforce staff app: each office screen is its own permission
+  { key: "emp", label: "Employee app - overview", group: "Employee app", path: "/employee-app" },
+  { key: "emp.live", label: "Live team & movement", group: "Employee app", path: "/employee-app/live" },
+  { key: "emp.attendance", label: "Attendance", group: "Employee app", path: "/employee-app/attendance" },
+  { key: "emp.leaves", label: "Leave requests", group: "Employee app", path: "/employee-app/leaves" },
+  { key: "emp.claims", label: "Reimbursements", group: "Employee app", path: "/employee-app/claims" },
+  { key: "emp.notices", label: "Notices & messages", group: "Employee app", path: "/employee-app/notices" },
+  { key: "emp.payslips", label: "Salary slips", group: "Employee app", path: "/employee-app/payslips" },
+  { key: "emp.requests", label: "Employee requests", group: "Employee app", path: "/employee-app/requests" },
+  { key: "emp.accounts", label: "Accounts & sites", group: "Employee app", path: "/employee-app/accounts" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
   { key: "grn", label: "POD", group: "Everyday", path: "/pod" },
   // every Orders screen is its own resource
