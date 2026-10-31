@@ -78,9 +78,13 @@ export function shortestPath(d: number[][]): number[] {
   return path;
 }
 
-/** Road metres between every pair of points from Ola's distance matrix; straight-line when Ola can't say. */
-async function distances(pts: Pt[]): Promise<number[][]> {
-  const line = pts.map((a) => pts.map((b) => Math.round(haversine(a, b) * 1.3))); // roads wind ~30% more than a straight line
+/**
+ * Between every pair of points: road metres and road seconds from Ola's distance matrix, or straight-line
+ * metres (x1.3, roads wind) and the time at an average 20 km/h when Ola can't say.
+ */
+async function distances(pts: Pt[]): Promise<{ m: number[][]; s: number[][]; road: boolean }> {
+  const m = pts.map((a) => pts.map((b) => Math.round(haversine(a, b) * 1.3)));
+  const line = { m, s: m.map((r) => r.map((x) => Math.round(x / 5.5))), road: false };
   if (!olaEnabled() || pts.length < 2 || pts.length > 10) return line;
   try {
     const list = pts.map((p) => `${p.lat},${p.lng}`).join("|");
@@ -90,14 +94,24 @@ async function distances(pts: Pt[]): Promise<number[][]> {
     url.searchParams.set("mode", "driving");
     url.searchParams.set("api_key", process.env.OLA_MAPS_API_KEY ?? "");
     const r = await fetch(url, { headers: { "X-Request-Id": crypto.randomUUID() }, signal: AbortSignal.timeout(8000), cache: "no-store" });
-    if (!r.ok) return line;
-    const j = (await r.json()) as { rows?: Array<{ elements?: Array<{ distance?: number; status?: string }> }> };
-    if (j.rows?.length !== pts.length) return line;
-    return pts.map((_, i) => pts.map((_, k) => {
-      const e = j.rows![i].elements?.[k];
-      return i === k ? 0 : typeof e?.distance === "number" && e.distance > 0 ? e.distance : line[i][k];
-    }));
-  } catch {
+    if (!r.ok) {
+      console.error("route plan: Ola distance matrix", r.status, (await r.text()).slice(0, 200));
+      return line;
+    }
+    const j = (await r.json()) as { rows?: Array<{ elements?: Array<{ distance?: number; duration?: number }> }> };
+    if (j.rows?.length !== pts.length) {
+      console.error("route plan: Ola distance matrix gave", j.rows?.length, "rows for", pts.length, "points");
+      return line;
+    }
+    const cell = (i: number, k: number) => j.rows![i].elements?.[k];
+    const ok = (v: unknown): v is number => typeof v === "number" && v > 0;
+    return {
+      m: pts.map((_, i) => pts.map((_, k) => (i === k ? 0 : ok(cell(i, k)?.distance) ? cell(i, k)!.distance! : line.m[i][k]))),
+      s: pts.map((_, i) => pts.map((_, k) => (i === k ? 0 : ok(cell(i, k)?.duration) ? cell(i, k)!.duration! : line.s[i][k]))),
+      road: true,
+    };
+  } catch (e) {
+    console.error("route plan: Ola distance matrix", e);
     return line;
   }
 }
@@ -114,28 +128,14 @@ export function store(): Pt & { name: string } {
 
 interface Open { id: number; status: string; lat: number | null; lng: number | null; delivery_seq: number | null; assigned_at: Date | null }
 
-/** Orders one group of stops from a start point; stops without a map pin go last, oldest first. */
-async function orderGroup(start: Pt, group: Open[]): Promise<{ id: number; legM: number | null; end: Pt | null }[]> {
-  const pinned = group.filter((o) => o.lat != null && o.lng != null);
-  const unpinned = group.filter((o) => o.lat == null || o.lng == null);
-  const out: { id: number; legM: number | null; end: Pt | null }[] = [];
-  if (pinned.length) {
-    const pts = [start, ...pinned.map((o) => ({ lat: o.lat!, lng: o.lng! }))];
-    const d = await distances(pts);
-    let at = 0;
-    for (const k of shortestPath(d)) {
-      out.push({ id: pinned[k - 1].id, legM: d[at][k], end: pts[k] });
-      at = k;
-    }
-  }
-  for (const o of unpinned) out.push({ id: o.id, legM: null, end: null });
-  return out;
-}
+/** How long, by road, the stops take in this order from the start (index 0 of the time matrix). */
+const pathSecs = (t: number[][], path: number[]) => path.reduce((sum, k, i) => sum + t[i === 0 ? 0 : path[i - 1]][k], 0);
 
 /**
- * Makes sure the rider's open orders have a delivery order: the shortest way round all of them, in any
- * order, starting from where the rider is now (or House of Gaia when the phone hasn't said lately).
- * Worked out again only when an order joins their list, so it doesn't reshuffle while they ride.
+ * The rider's open orders in the fastest order to deliver them all: any order, from where the rider is
+ * now (House of Gaia when the phone hasn't said in the last 10 minutes), by road travel time. Worked out
+ * when an order joins, and again as the rider moves - every 300 m or 2 minutes - switching only when the
+ * new order is clearly faster (a minute and 10%), so the stops don't flip back and forth.
  */
 export async function planRider(riderId: number): Promise<void> {
   await tx(async (c: PoolClient) => {
@@ -143,20 +143,42 @@ export async function planRider(riderId: number): Promise<void> {
     await c.query(`select pg_advisory_xact_lock(7201, $1)`, [riderId]);
     const { rows } = await c.query<Open>(
       `select id, status, lat, lng, delivery_seq, assigned_at from shop_order
-        where rider_id = $1 and status in ('confirmed', 'out_for_delivery') order by assigned_at, id`,
+        where rider_id = $1 and status in ('confirmed', 'out_for_delivery') order by delivery_seq nulls last, assigned_at, id`,
       [riderId],
     );
     if (!rows.length) return;
-    if (!rows.some((o) => o.delivery_seq == null)) return;
+    const r = await c.query<{ lat: number | null; lng: number | null; fresh: boolean; due: boolean }>(
+      `select lat, lng, coalesce(location_at > now() - interval '10 minutes', false) as fresh,
+              plan_at is null or plan_at < now() - interval '2 minutes' or plan_lat is null as due, plan_lat, plan_lng
+         from shop_rider where id = $1`,
+      [riderId],
+    );
+    const me = r.rows[0] as { lat: number | null; lng: number | null; fresh: boolean; due: boolean; plan_lat: number | null; plan_lng: number | null } | undefined;
+    const here = me?.fresh && me.lat != null && me.lng != null ? { lat: me.lat, lng: me.lng } : null;
+    const added = rows.some((o) => o.delivery_seq == null);
+    const moved = here != null && me?.plan_lat != null && me.plan_lng != null && haversine(here, { lat: me.plan_lat, lng: me.plan_lng }) > 300;
+    if (!added && !(here && (me?.due || moved))) return;
 
-    const r = await c.query<{ lat: number | null; lng: number | null; fresh: boolean }>(
-      `select lat, lng, coalesce(location_at > now() - interval '30 minutes', false) as fresh from shop_rider where id = $1`, [riderId]);
-    const here = r.rows[0]?.fresh && r.rows[0].lat != null && r.rows[0].lng != null ? { lat: r.rows[0].lat, lng: r.rows[0].lng } : null;
+    const start = here ?? store();
+    const pinned = rows.filter((o) => o.lat != null && o.lng != null);
+    const unpinned = rows.filter((o) => o.lat == null || o.lng == null);
+    const pts = [start, ...pinned.map((o) => ({ lat: o.lat!, lng: o.lng! }))];
+    const d = await distances(pts);
+    const best = shortestPath(d.s);
+    // the order they have now (by its stop numbers), and whether the best one is clearly faster
+    const now = pinned.map((_, i) => i + 1);
+    const keep = !added && pathSecs(d.s, now) - pathSecs(d.s, best) < Math.max(60, pathSecs(d.s, now) * 0.1);
+    const path = keep ? now : best;
 
-    const plan = await orderGroup(here ?? store(), rows);
-    for (const [i, p] of plan.entries()) {
-      await c.query(`update shop_order set delivery_seq = $2, delivery_leg_m = $3 where id = $1`, [p.id, i + 1, p.legM == null ? null : Math.round(p.legM)]);
+    let at = 0;
+    for (const [i, k] of path.entries()) {
+      await c.query(`update shop_order set delivery_seq = $2, delivery_leg_m = $3 where id = $1`, [pinned[k - 1].id, i + 1, Math.round(d.m[at][k])]);
+      at = k;
     }
+    for (const [i, o] of unpinned.entries()) {
+      await c.query(`update shop_order set delivery_seq = $2, delivery_leg_m = null where id = $1`, [o.id, pinned.length + i + 1]);
+    }
+    await c.query(`update shop_rider set plan_at = now(), plan_lat = $2, plan_lng = $3 where id = $1`, [riderId, start.lat, start.lng]);
   });
 }
 
