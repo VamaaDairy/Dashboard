@@ -105,6 +105,9 @@ export interface ShopOrder {
   picked_up_at: Date | null;
   delivered_at: Date | null;
   delivery_otp: string;
+  /** The customer's 1-5 star rating of the delivery partner, once given. */
+  rider_rating: number | null;
+  rider_rating_note: string | null;
   /** Its place in the rider's delivery order, and the metres from the stop before (see route-plan). */
   delivery_seq: number | null;
   delivery_leg_m: number | null;
@@ -192,6 +195,25 @@ export async function riderPickup(riderId: number, id: number): Promise<boolean>
   );
   if (r[0]?.changed) await notifyOrderStatus(id, "out_for_delivery");
   return r.length > 0;
+}
+
+/**
+ * The customer rates the delivery partner, 1 to 5 stars and an optional note, within a week of delivery
+ * (they can change it in that time). The order's access key is the customer's proof, as for tracking.
+ */
+export async function rateDelivery(key: string, stars: number, note: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  if (!/^[0-9a-f]{32}$/.test(key)) return { ok: false, status: 404, error: "Order not found." };
+  const r = await one<{ id: number }>(
+    `update shop_order set rider_rating = $2, rider_rating_note = $3, rated_at = now(), updated_at = now()
+      where access_key = $1 and status = 'delivered' and rider_id is not null and delivered_at > now() - interval '7 days'
+      returning id`,
+    [key, stars, note.slice(0, 300) || null],
+  );
+  if (r) return { ok: true };
+  const o = await one<{ status: string; rider_id: number | null }>(`select status, rider_id from shop_order where access_key = $1`, [key]);
+  if (!o) return { ok: false, status: 404, error: "Order not found." };
+  if (o.status !== "delivered" || o.rider_id == null) return { ok: false, status: 409, error: "You can rate the delivery once the order is delivered." };
+  return { ok: false, status: 409, error: "This delivery can no longer be rated." };
 }
 
 /** Delivered only with the customer's OTP; cash on delivery is then marked paid. */
