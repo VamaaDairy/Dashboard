@@ -23,6 +23,8 @@ export function orderJson(o: ShopOrder) {
     lng: o.lng,
     deliveryOtp: o.delivery_otp,
     deliveredAt: o.delivered_at ? new Date(o.delivered_at).toISOString() : null,
+    riderRating: o.rider_rating ?? null,
+    riderRatingNote: o.rider_rating_note ?? null,
     // the rider is only shown to the customer once the order is on its way
     rider: o.rider && o.status === "out_for_delivery"
       ? { name: o.rider.name, phone: o.rider.phone, lat: o.rider.lat, lng: o.rider.lng, locationAt: o.rider.location_at ? new Date(o.rider.location_at).toISOString() : null }
