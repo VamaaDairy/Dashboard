@@ -9,7 +9,7 @@ import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-interface Row { id: number; name: string; phone: string; active: boolean; location_at: Date | null; open_orders: number; delivered: number; pay_per_delivery: number; earned_month: number; rating: number | null; ratings: number; km_today: number; km_month: number }
+interface Row { id: number; name: string; phone: string; kind: string; vehicle_no: string | null; active: boolean; location_at: Date | null; open_orders: number; delivered: number; pay_per_delivery: number; earned_month: number; rating: number | null; ratings: number; km_today: number; km_month: number }
 
 const ago = (d: Date | null) => {
   if (!d) return "never";
@@ -19,7 +19,7 @@ const ago = (d: Date | null) => {
 
 export default async function RidersPage() {
   const [riders, me] = await Promise.all([
-    query<Row>(`select r.id, r.name, r.phone, r.active, r.location_at, r.pay_per_delivery,
+    query<Row>(`select r.id, r.name, r.phone, r.kind, r.vehicle_no, r.active, r.location_at, r.pay_per_delivery,
         (select round(avg(o.rider_rating)::numeric, 1)::float from shop_order o where o.rider_id = r.id and o.rider_rating is not null) as rating,
         (select count(o.rider_rating)::int from shop_order o where o.rider_id = r.id) as ratings,
         (select coalesce(sum(k.metres), 0)::float / 1000 from shop_rider_km k where k.rider_id = r.id and k.day = (now() at time zone 'Asia/Kolkata')::date) as km_today,
@@ -38,20 +38,21 @@ export default async function RidersPage() {
       <div className="w-full space-y-4">
         <PageHeader
           icon={Bike}
-          title="Delivery riders"
-          subtitle="Riders sign in to the Gaia Delivery Partner app with their mobile number and PIN. Set pay is what one delivery earns them; the app shows it as their income."
+          title="Delivery riders & transporters"
+          subtitle="Both sign in to the Gaia Delivery Partner app with their mobile number and PIN, choosing Delivery Boy or Transporter. Delivery boys get D2C orders; set pay is what one delivery earns them. Transporters will carry distributors' orders route by route."
           actions={<Link href="/shop-orders/live" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Live map</Link>}
         />
         {canEdit ? <AddRiderForm /> : null}
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-              <tr>{["Rider", "Mobile", "To deliver", "Delivered", "Rating", "Km today", "Km this month", "Pay / delivery", "Earned this month", "Last seen", "Status", ""].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}</tr>
+              <tr>{["Partner", "Type", "Mobile", "To deliver", "Delivered", "Rating", "Km today", "Km this month", "Pay / delivery", "Earned this month", "Last seen", "Status", ""].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}</tr>
             </thead>
             <tbody>
               {riders.map((r) => (
                 <tr key={r.id} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{r.name}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{r.kind === "transporter" ? <>Transporter{r.vehicle_no ? <span className="ml-1 font-mono text-xs text-muted-foreground">{r.vehicle_no}</span> : null}</> : "Delivery boy"}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.phone}</td>
                   <td className="num px-3 py-2">{r.open_orders}</td>
                   <td className="num px-3 py-2">{r.delivered}</td>
@@ -65,7 +66,7 @@ export default async function RidersPage() {
                   <td className="px-3 py-2">{canEdit ? <RiderActions id={r.id} active={r.active} pay={Number(r.pay_per_delivery)} /> : null}</td>
                 </tr>
               ))}
-              {riders.length === 0 ? <tr><td colSpan={12} className="px-3 py-10 text-center text-muted-foreground">No riders yet. Add one above.</td></tr> : null}
+              {riders.length === 0 ? <tr><td colSpan={13} className="px-3 py-10 text-center text-muted-foreground">No partners yet. Add one above.</td></tr> : null}
             </tbody>
           </table>
         </div>

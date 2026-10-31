@@ -20,7 +20,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
   const kind = k === "regular" || k === "subscription" ? k : undefined;
   const href = (st: string, kd: string) => { const q = new URLSearchParams(); if (st) q.set("status", st); if (kd) q.set("kind", kd); return q.size ? `/shop-orders?${q}` : "/shop-orders"; };
   const filter = status && status in STATUS_LABEL ? status : undefined;
-  const [orders, riders, me] = await Promise.all([listOrders(filter, kind), query<{ id: number; name: string }>(`select id, name from shop_rider where active order by name`), userFromToken((await cookies()).get("session")?.value)]);
+  const [orders, riders, me] = await Promise.all([listOrders(filter, kind), query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`), userFromToken((await cookies()).get("session")?.value)]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
 
   return (
