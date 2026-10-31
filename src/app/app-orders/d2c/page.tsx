@@ -19,7 +19,7 @@ export default async function D2cOrdersPage({ searchParams }: { searchParams: Pr
   const status = st && st in STATUS_LABEL ? st : undefined;
   const [orders, riders, me] = await Promise.all([
     listOrders(status, undefined, q),
-    query<{ id: number; name: string }>(`select id, name from shop_rider where active order by name`),
+    query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`),
     userFromToken((await cookies()).get("session")?.value),
   ]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");

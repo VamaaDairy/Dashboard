@@ -25,7 +25,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
   if (!o) notFound();
   const [account, riders, me, payments] = await Promise.all([
     d2cAccount(o.id),
-    query<{ id: number; name: string }>(`select id, name from shop_rider where active order by name`),
+    query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`),
     userFromToken((await cookies()).get("session")?.value),
     paymentsOf(o.id),
   ]);

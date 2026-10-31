@@ -164,6 +164,8 @@ export async function setOrderStatus(id: number, status: string): Promise<boolea
 
 /** Staff give an order to a rider (or take it back with null). A placed order becomes confirmed. */
 export async function assignRider(orderId: number, riderId: number | null): Promise<boolean> {
+  // D2C home deliveries go to delivery boys only, never to a transporter
+  if (riderId != null && !(await one(`select 1 from shop_rider where id = $1 and kind = 'delivery'`, [riderId]))) return false;
   const r = await query<{ status: string; was_status: string; was_rider: number | null }>(
     `update shop_order o set rider_id = $2, assigned_at = case when $2::int is null then null else now() end,
        delivery_seq = case when o.rider_id is distinct from $2 then null else o.delivery_seq end,

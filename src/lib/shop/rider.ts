@@ -3,7 +3,9 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { one, query } from "@/lib/db";
 
-export interface Rider { id: number; name: string; phone: string; active: boolean; lat: number | null; lng: number | null; location_at: Date | null; pay_per_delivery?: number }
+export type PartnerKind = "delivery" | "transporter";
+
+export interface Rider { id: number; name: string; phone: string; active: boolean; lat: number | null; lng: number | null; location_at: Date | null; pay_per_delivery?: number; kind?: PartnerKind; vehicle_no?: string | null }
 
 export function hashPin(pin: string): string {
   const salt = randomBytes(16);
@@ -18,10 +20,12 @@ export function pinMatches(pin: string, stored: string): boolean {
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
-/** Phone + PIN -> a fresh session token (replaces any earlier one), or null. */
-export async function riderLogin(phone: string, pin: string): Promise<{ token: string; rider: Rider } | null> {
+/** Phone + PIN -> a fresh session token (replaces any earlier one), or null; "wrong-kind" when the PIN is right
+ *  but the partner signed in as the other kind (a delivery boy choosing Transporter, or the other way round). */
+export async function riderLogin(phone: string, pin: string, kind?: PartnerKind): Promise<{ token: string; rider: Rider } | "wrong-kind" | null> {
   const r = await one<Rider & { pin_hash: string }>(`select * from shop_rider where phone = $1 and active`, [phone]);
   if (!r || !pinMatches(pin, r.pin_hash)) return null;
+  if (kind && r.kind !== kind) return "wrong-kind";
   const token = randomBytes(32).toString("hex");
   await query(`update shop_rider set token = $2 where id = $1`, [r.id, token]);
   const { pin_hash: _p, ...rider } = r;
@@ -31,5 +35,5 @@ export async function riderLogin(phone: string, pin: string): Promise<{ token: s
 export async function riderFromRequest(req: NextRequest): Promise<Rider | null> {
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;
-  return one<Rider>(`select id, name, phone, active, lat, lng, location_at, pay_per_delivery from shop_rider where token = $1 and active`, [t]);
+  return one<Rider>(`select id, name, phone, active, lat, lng, location_at, pay_per_delivery, kind, vehicle_no from shop_rider where token = $1 and active`, [t]);
 }
