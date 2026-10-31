@@ -82,11 +82,11 @@ const FIRM_ACTIVE = `(l.kind = 'salesman' or f.active = 1)`;
  * when the details are right but the customer is switched off in Customer Masters.
  */
 export async function distLogin(phone: string, pin: string, kind?: DistLogin["kind"]): Promise<{ token: string; login: DistLogin } | "inactive" | null> {
-  // the distributor and sales-officer sign-ins are separate screens: each only opens its own kind of login
+  // sales officers have their own app (Gaia Salesforce, /api/salesforce): the partner app (no kind given) never opens their logins
   const r = await one<{ id: number; pin_hash: string; open: boolean }>(
     `select l.id, l.pin_hash, ${FIRM_ACTIVE} as open
        from dist_login l left join fp_firm f on f.uid = l.firm_uid
-      where l.phone = $1 and l.active and ($2::text is null or l.kind = $2)`,
+      where l.phone = $1 and l.active and (case when $2::text is null then l.kind <> 'salesman' else l.kind = $2 end)`,
     [phone, kind ?? null],
   );
   if (!r || !pinMatches(pin, r.pin_hash)) return null;
@@ -97,11 +97,17 @@ export async function distLogin(phone: string, pin: string, kind?: DistLogin["ki
   return login ? { token, login } : null;
 }
 
-export async function distFromRequest(req: NextRequest): Promise<DistLogin | null> {
+/**
+ * The login behind a request's bearer token. `scope` keeps the two apps apart: the Gaia Partners app ("partner",
+ * the default) only accepts distributors and retailers, the Gaia Salesforce app ("salesman") only sales officers;
+ * "any" is for shared endpoints such as push registration.
+ */
+export async function distFromRequest(req: NextRequest, scope: "partner" | "salesman" | "any" = "partner"): Promise<DistLogin | null> {
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;
+  const kindOk = scope === "any" ? "true" : scope === "salesman" ? "l.kind = 'salesman'" : "l.kind <> 'salesman'";
   // checked on every call, so switching a customer off in the masters signs its phone out at once
-  return one<DistLogin>(`${LOGIN_SELECT} where l.token = $1 and l.active and ${FIRM_ACTIVE}`, [t]);
+  return one<DistLogin>(`${LOGIN_SELECT} where l.token = $1 and l.active and ${FIRM_ACTIVE} and ${kindOk}`, [t]);
 }
 
 /** The distributors this login may order for: its own firm, or (sales officer) the firms they are the sales contact of; a sales officer with none mapped can book for any distributor. */
@@ -203,7 +209,7 @@ export type PlaceResult = { ok: true; orderId: number; total: number } | { ok: f
 
 export async function placeDistOrder(
   login: DistLogin,
-  input: { firmUid?: string; lines: Array<{ sku: string; qty: number }>; notes?: string | null },
+  input: { firmUid?: string; lines: Array<{ sku: string; qty: number }>; notes?: string | null; visitId?: number | null },
 ): Promise<PlaceResult> {
   const firm = await firmAllowed(login, input.firmUid);
   if (!firm) return { ok: false, error: "Choose the distributor this order is for." };
@@ -256,15 +262,17 @@ export async function placeDistOrder(
       `insert into fp_booking_order
          (order_uid, order_id, order_type, booking_time, booking_date, total_item, week_of_month, total_quantity,
           total_cost, dealer_cost, status, current_status, reference, from_firm_uid, to_firm_uid, staff_uid,
-          app_kind, app_login_id, app_notes)
-       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9, $10, $11, $12, $13, $14, $15, $16)
+          app_kind, app_login_id, app_notes, sf_visit_id)
+       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        returning uid`,
       [
         n, type, now, now.toISOString().slice(0, 10), lines.length, Math.ceil(now.getDate() / 7), totalQty,
         total, status, notes || `Gaia app (${login.kind}: ${login.name})`,
         firm.uid, to, login.kind === "salesman" ? login.staffUid : null,
         // marks it as an app order for the dashboard's App orders section
-        login.kind, login.id, notes || null,
+        login.kind, login.id || null, notes || null,
+        // the store visit a sales officer booked it during
+        input.visitId ?? null,
       ],
     );
     const orderUid = ins.rows[0].uid;

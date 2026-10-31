@@ -132,6 +132,20 @@ const DAILY: NavItem[] = [
       { href: "/d2c/reports", key: "d2c.reports", label: "Sales reports" },
     ],
   },
+  {
+    href: "/employee-app", key: "emp", label: "Employee app", icon: Users,
+    children: [
+      { href: "/employee-app", key: "emp", label: "Overview", exact: true },
+      { href: "/employee-app/live", key: "emp.live", label: "Live team" },
+      { href: "/employee-app/attendance", key: "emp.attendance", label: "Attendance" },
+      { href: "/employee-app/leaves", key: "emp.leaves", label: "Leave" },
+      { href: "/employee-app/claims", key: "emp.claims", label: "Reimbursements" },
+      { href: "/employee-app/notices", key: "emp.notices", label: "Notices" },
+      { href: "/employee-app/payslips", key: "emp.payslips", label: "Salary slips" },
+      { href: "/employee-app/requests", key: "emp.requests", label: "Requests" },
+      { href: "/employee-app/accounts", key: "emp.accounts", label: "Accounts & sites" },
+    ],
+  },
   { href: "/price-list", key: "pricelist", label: "Price list", icon: Tags },
   {
     href: "/shop-orders", key: "shop", label: "Shop orders", icon: Store,

@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
   const phone = String(b?.phone ?? "").replace(/\D/g, "").slice(-10);
   const pin = String(b?.pin ?? "");
   if (!/^[6-9]\d{9}$/.test(phone) || !/^\d{4,8}$/.test(pin)) return fail(400, "Enter your mobile number and PIN.");
-  const kind = b?.kind === "distributor" || b?.kind === "salesman" || b?.kind === "retailer" ? b.kind : undefined;
+  if (b?.kind === "salesman") return fail(403, "Sales officers sign in to the Gaia Salesforce app.");
+  const kind = b?.kind === "distributor" || b?.kind === "retailer" ? b.kind : undefined;
   const r = await distLogin(phone, pin, kind);
   if (!r) return fail(401, "Wrong number or PIN.");
   if (r === "inactive") return fail(403, "This account is inactive. Please contact Gaia to get it switched on.");
