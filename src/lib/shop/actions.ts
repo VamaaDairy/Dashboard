@@ -54,7 +54,7 @@ export async function addRiderAction(name: string, phone: string, pin: string): 
   return { ok: true };
 }
 
-export async function setRiderAction(id: number, patch: { active?: boolean; pin?: string }): Promise<{ ok: boolean; error?: string }> {
+export async function setRiderAction(id: number, patch: { active?: boolean; pin?: string; pay?: number }): Promise<{ ok: boolean; error?: string }> {
   if (!(await canEdit())) return NO;
   if (patch.pin !== undefined) {
     if (!/^\d{4,8}$/.test(patch.pin)) return { ok: false, error: "The PIN must be 4 to 8 digits." };
@@ -62,6 +62,13 @@ export async function setRiderAction(id: number, patch: { active?: boolean; pin?
     await query(`update shop_rider set pin_hash = $2, token = null where id = $1`, [id, hashPin(patch.pin)]);
   }
   if (patch.active !== undefined) await query(`update shop_rider set active = $2, token = case when $2 then token else null end where id = $1`, [id, patch.active]);
+  if (patch.pay !== undefined) {
+    if (!Number.isFinite(patch.pay) || patch.pay < 0 || patch.pay > 10000) return { ok: false, error: "Enter the pay per delivery in rupees, e.g. 25." };
+    const pay = Math.round(patch.pay * 100) / 100;
+    await query(`update shop_rider set pay_per_delivery = $2 where id = $1`, [id, pay]);
+    // deliveries made before any rate was set earn the first rate given; later changes only count from now on
+    await query(`update shop_order set rider_pay = $2 where rider_id = $1 and status = 'delivered' and rider_pay is null`, [id, pay]);
+  }
   revalidatePath("/shop-orders/riders");
   return { ok: true };
 }

@@ -195,7 +195,13 @@ export async function riderDeliver(riderId: number, id: number, otp: string): Pr
   const o = await one<{ delivery_otp: string }>(`select delivery_otp from shop_order where id = $1 and rider_id = $2 and status = 'out_for_delivery'`, [id, riderId]);
   if (!o) return "not_found";
   if (o.delivery_otp !== otp) return "wrong_otp";
-  await query(`update shop_order set status = 'delivered', delivered_at = now(), payment_status = 'paid', updated_at = now() where id = $1`, [id]);
+  // the rider's rate at the moment of handover is what this delivery earned them
+  await query(
+    `update shop_order set status = 'delivered', delivered_at = now(), payment_status = 'paid', updated_at = now(),
+            rider_pay = (select pay_per_delivery from shop_rider where id = $2)
+      where id = $1`,
+    [id, riderId],
+  );
   await notifyOrderStatus(id, "delivered");
   return "ok";
 }

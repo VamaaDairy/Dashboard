@@ -5,11 +5,12 @@ import { riderFromRequest } from "@/lib/shop/rider";
 
 export const dynamic = "force-dynamic";
 
-interface Row { day: string; order_no: string; name: string; address: string; total: number; delivered_at: Date; items: number }
+interface Row { day: string; order_no: string; name: string; address: string; total: number; delivered_at: Date; items: number; cod: boolean; pay: number }
 
 /**
- * The signed-in rider's finished work, newest day first (India time, last 60 days):
- * per day how many deliveries and how much cash was collected, with the orders themselves.
+ * The signed-in rider's finished work, newest day first (India time, last 60 days): per day how many
+ * deliveries, how much cash was collected (cash-on-delivery orders only) and what they earned, with the
+ * orders themselves. `rate` is what one delivery pays them now.
  */
 export async function GET(req: NextRequest) {
   const rider = await riderFromRequest(req);
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
   const rows = await query<Row>(
     `select to_char(o.delivered_at at time zone 'Asia/Kolkata', 'YYYY-MM-DD') as day,
             o.order_no, o.name, o.address, o.total, o.delivered_at,
+            o.payment_method = 'cod' as cod, coalesce(o.rider_pay, 0) as pay,
             (select coalesce(sum(i.qty), 0)::int from shop_order_item i where i.order_id = o.id) as items
        from shop_order o
       where o.rider_id = $1 and o.status = 'delivered' and o.delivered_at > now() - interval '60 days'
@@ -26,13 +28,18 @@ export async function GET(req: NextRequest) {
     [rider.id],
   );
 
-  const days = new Map<string, { day: string; count: number; cash: number; orders: unknown[] }>();
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const days = new Map<string, { day: string; count: number; cash: number; pay: number; orders: unknown[] }>();
   for (const r of rows) {
-    const d = days.get(r.day) ?? { day: r.day, count: 0, cash: 0, orders: [] };
+    const d = days.get(r.day) ?? { day: r.day, count: 0, cash: 0, pay: 0, orders: [] };
     d.count++;
-    d.cash = Math.round((d.cash + Number(r.total)) * 100) / 100;
-    d.orders.push({ orderNo: r.order_no, name: r.name, address: r.address, total: Number(r.total), items: r.items, deliveredAt: new Date(r.delivered_at).toISOString() });
+    if (r.cod) d.cash = round(d.cash + Number(r.total));
+    d.pay = round(d.pay + Number(r.pay));
+    d.orders.push({
+      orderNo: r.order_no, name: r.name, address: r.address, total: Number(r.total), items: r.items,
+      deliveredAt: new Date(r.delivered_at).toISOString(), cod: r.cod, pay: Number(r.pay),
+    });
     days.set(r.day, d);
   }
-  return NextResponse.json({ days: [...days.values()] });
+  return NextResponse.json({ rate: Number(rider.pay_per_delivery ?? 0), days: [...days.values()] });
 }
