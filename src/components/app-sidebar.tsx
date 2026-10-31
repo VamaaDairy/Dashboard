@@ -124,6 +124,14 @@ const DAILY: NavItem[] = [
       { href: "/product-master/distributor", key: "productmaster.distributor", label: "Distributors" },
     ],
   },
+  {
+    href: "/d2c/sales", key: "d2c", label: "D2C business", icon: BarChart3,
+    children: [
+      { href: "/d2c/customers", key: "d2c.customers", label: "Customer Master" },
+      { href: "/d2c/sales", key: "d2c.sales", label: "Sales dashboard" },
+      { href: "/d2c/reports", key: "d2c.reports", label: "Sales reports" },
+    ],
+  },
   { href: "/price-list", key: "pricelist", label: "Price list", icon: Tags },
   {
     href: "/shop-orders", key: "shop", label: "Shop orders", icon: Store,
