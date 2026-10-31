@@ -117,7 +117,14 @@ export async function reverse(lat: number, lng: number): Promise<{ address: stri
 }
 
 export interface RouteStep { text: string; distanceM: number; maneuver: string }
-export interface Route { distanceM: number; durationS: number; points: Array<[number, number]>; steps: RouteStep[] }
+export interface Route {
+  distanceM: number;
+  durationS: number;
+  points: Array<[number, number]>;
+  steps: RouteStep[];
+  /** One per stretch between stops, in order (one for a plain from-to route). */
+  legs?: Array<{ distanceM: number; durationS: number }>;
+}
 
 /** Google-style encoded polyline (precision 5) -> [lat, lng] pairs. */
 export function decodePolyline(s: string): Array<[number, number]> {
@@ -146,5 +153,49 @@ export async function route(from: { lat: number; lng: number }, to: { lat: numbe
   const leg = r.legs?.[0];
   return { distanceM: Number(leg?.distance ?? 0), durationS: Number(leg?.duration ?? 0), points: decodePolyline(r.overview_polyline),
     steps: (leg?.steps ?? []).map((t) => ({ text: String(t.instructions ?? ""), distanceM: Number(t.distance ?? 0), maneuver: String(t.maneuver ?? "") })).filter((t) => t.text),
+  };
+}
+
+type Pt = { lat: number; lng: number };
+
+/**
+ * One route through several stops in the given order: from, each of `via`, then `to`. Asks Ola with
+ * waypoints; if that fails, joins the single routes stop to stop. Steps are the first stretch's (the
+ * turn-by-turn that matters now); legs give each stretch's distance and time.
+ */
+export async function routeVia(from: Pt, via: Pt[], to: Pt): Promise<Route | null> {
+  if (!via.length) {
+    const r = await route(from, to);
+    return r && { ...r, legs: [{ distanceM: r.distanceM, durationS: r.durationS }] };
+  }
+  const j = await call<{ routes?: Array<{ overview_polyline?: string; legs?: Array<{ distance?: number; duration?: number; steps?: Array<{ instructions?: string; distance?: number; maneuver?: string }> }> }> }>(
+    "/routing/v1/directions",
+    {
+      origin: `${from.lat},${from.lng}`, destination: `${to.lat},${to.lng}`, waypoints: via.map((p) => `${p.lat},${p.lng}`).join("|"),
+      alternatives: "false", steps: "true", overview: "full", mode: "driving",
+    },
+    "POST",
+  );
+  const r = j?.routes?.[0];
+  if (r?.overview_polyline && (r.legs?.length ?? 0) === via.length + 1) {
+    const legs = r.legs!.map((l) => ({ distanceM: Number(l.distance ?? 0), durationS: Number(l.duration ?? 0) }));
+    return {
+      distanceM: legs.reduce((s, l) => s + l.distanceM, 0),
+      durationS: legs.reduce((s, l) => s + l.durationS, 0),
+      points: decodePolyline(r.overview_polyline),
+      steps: (r.legs![0].steps ?? []).map((t) => ({ text: String(t.instructions ?? ""), distanceM: Number(t.distance ?? 0), maneuver: String(t.maneuver ?? "") })).filter((t) => t.text),
+      legs,
+    };
+  }
+  // no waypoints from Ola: the stretches one by one, joined
+  const stops = [from, ...via, to];
+  const parts = await Promise.all(stops.slice(1).map((p, i) => route(stops[i], p)));
+  if (parts.some((x) => !x)) return null;
+  return {
+    distanceM: parts.reduce((s, x) => s + x!.distanceM, 0),
+    durationS: parts.reduce((s, x) => s + x!.durationS, 0),
+    points: parts.flatMap((x) => x!.points),
+    steps: parts[0]!.steps,
+    legs: parts.map((x) => ({ distanceM: x!.distanceM, durationS: x!.durationS })),
   };
 }
