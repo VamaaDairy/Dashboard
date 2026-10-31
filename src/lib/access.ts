@@ -56,6 +56,10 @@ export const RESOURCES: Resource[] = [
   { key: "productmaster.d2c", label: "D2C app products", group: "Product Master", path: "/product-master/d2c" },
   { key: "productmaster.retail", label: "Retail app products", group: "Product Master", path: "/product-master/retail" },
   { key: "productmaster.distributor", label: "Distributor app products", group: "Product Master", path: "/product-master/distributor" },
+  // the Gaia Dairy app's business: each its own permission
+  { key: "d2c.customers", label: "Customer Master (app customers)", group: "D2C business", path: "/d2c/customers" },
+  { key: "d2c.sales", label: "Sales dashboard", group: "D2C business", path: "/d2c/sales" },
+  { key: "d2c.reports", label: "Sales reports", group: "D2C business", path: "/d2c/reports" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
   { key: "grn", label: "POD", group: "Everyday", path: "/pod" },
   // every Orders screen is its own resource
