@@ -3,6 +3,7 @@ import { one, query, tx } from "@/lib/db";
 import { shop } from "@/lib/whatsapp/config";
 import { notifyOrderStatus, notifyRiderAssigned } from "@/lib/push";
 import { expireUnpaid } from "@/lib/payments/easebuzz";
+import { haversine } from "./route-plan";
 import { photoUrlOf, pricesFor } from "./catalog";
 import { deliveryFor, MAX_LINE_QTY, MAX_LINES, type DeliveryRule } from "./pricing";
 
@@ -232,5 +233,24 @@ export async function riderDeliver(riderId: number, id: number, otp: string): Pr
   return "ok";
 }
 
-export const setRiderLocation = (riderId: number, lat: number, lng: number) =>
-  query(`update shop_rider set lat = $2, lng = $3, location_at = now() where id = $1`, [riderId, lat, lng]);
+/**
+ * The rider's phone says where it is. The stretch since its last position is added to today's distance
+ * when it looks like riding: the last position under 10 minutes old, at least 15 m (GPS jitter below
+ * that), under 2 km and under 100 km/h (a jump, not a ride).
+ */
+export async function setRiderLocation(riderId: number, lat: number, lng: number): Promise<void> {
+  const prev = await one<{ lat: number | null; lng: number | null; secs: number | null }>(
+    `update shop_rider r set lat = $2, lng = $3, location_at = now()
+       from (select lat, lng, extract(epoch from now() - location_at)::float as secs from shop_rider where id = $1) p
+      where r.id = $1 returning p.lat, p.lng, p.secs`,
+    [riderId, lat, lng],
+  );
+  if (!prev || prev.lat == null || prev.lng == null || prev.secs == null || prev.secs > 600) return;
+  const m = haversine({ lat: prev.lat, lng: prev.lng }, { lat, lng });
+  if (m < 15 || m > 2000 || m / Math.max(prev.secs, 1) > 28) return;
+  await query(
+    `insert into shop_rider_km (rider_id, day, metres) values ($1, (now() at time zone 'Asia/Kolkata')::date, $2)
+     on conflict (rider_id, day) do update set metres = shop_rider_km.metres + excluded.metres`,
+    [riderId, Math.round(m)],
+  );
+}
