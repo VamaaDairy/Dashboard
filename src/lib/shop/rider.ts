@@ -3,7 +3,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { one, query } from "@/lib/db";
 
-export interface Rider { id: number; name: string; phone: string; active: boolean; lat: number | null; lng: number | null; location_at: Date | null }
+export interface Rider { id: number; name: string; phone: string; active: boolean; lat: number | null; lng: number | null; location_at: Date | null; pay_per_delivery?: number }
 
 export function hashPin(pin: string): string {
   const salt = randomBytes(16);
@@ -31,5 +31,5 @@ export async function riderLogin(phone: string, pin: string): Promise<{ token: s
 export async function riderFromRequest(req: NextRequest): Promise<Rider | null> {
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;
-  return one<Rider>(`select id, name, phone, active, lat, lng, location_at from shop_rider where token = $1 and active`, [t]);
+  return one<Rider>(`select id, name, phone, active, lat, lng, location_at, pay_per_delivery from shop_rider where token = $1 and active`, [t]);
 }
