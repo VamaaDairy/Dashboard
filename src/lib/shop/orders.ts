@@ -105,6 +105,9 @@ export interface ShopOrder {
   picked_up_at: Date | null;
   delivered_at: Date | null;
   delivery_otp: string;
+  /** Its place in the rider's delivery order, and the metres from the stop before (see route-plan). */
+  delivery_seq: number | null;
+  delivery_leg_m: number | null;
   rider: { name: string; phone: string; lat: number | null; lng: number | null; location_at: Date | null } | null;
   items: Array<{ sku_code: string; name: string; image_url: string | null; qty: number; unit_price: number; line_total: number }>;
 }
@@ -159,6 +162,7 @@ export async function setOrderStatus(id: number, status: string): Promise<boolea
 export async function assignRider(orderId: number, riderId: number | null): Promise<boolean> {
   const r = await query<{ status: string; was_status: string; was_rider: number | null }>(
     `update shop_order o set rider_id = $2, assigned_at = case when $2::int is null then null else now() end,
+       delivery_seq = case when o.rider_id is distinct from $2 then null else o.delivery_seq end,
        status = case when $2::int is not null and o.status = 'placed' then 'confirmed' else o.status end, updated_at = now()
      from (select id, status as was_status, rider_id as was_rider from shop_order where id = $1) p
      where o.id = p.id and o.status in ('placed', 'confirmed', 'out_for_delivery')
@@ -172,9 +176,9 @@ export async function assignRider(orderId: number, riderId: number | null): Prom
   return r.length > 0;
 }
 
-/** The orders a rider still has to deliver, oldest first. */
+/** The orders a rider still has to deliver, in the order to deliver them (see route-plan). */
 export const riderOrders = (riderId: number) =>
-  query<ShopOrder>(`${WITH_ITEMS} where o.rider_id = $1 and o.status in ('confirmed', 'out_for_delivery') order by o.assigned_at`, [riderId]);
+  query<ShopOrder>(`${WITH_ITEMS} where o.rider_id = $1 and o.status in ('confirmed', 'out_for_delivery') order by o.delivery_seq nulls last, o.assigned_at`, [riderId]);
 
 export const riderOrder = (riderId: number, id: number) =>
   one<ShopOrder>(`${WITH_ITEMS} where o.rider_id = $1 and o.id = $2`, [riderId, id]);

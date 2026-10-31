@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { riderDeliver } from "@/lib/shop/orders";
 import { riderFromRequest } from "@/lib/shop/rider";
+import { earlierStop } from "@/lib/shop/route-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const otp = String(b?.otp ?? "").trim();
   if (!Number.isInteger(id)) return fail(404, "This order is not on your list.");
   if (!/^\d{4}$/.test(otp)) return fail(400, "Enter the 4-digit code the customer has.");
+  // the delivery order is followed: an earlier picked-up stop goes first
+  const before = await earlierStop(rider.id, id);
+  if (before) return fail(409, `Deliver stop ${before.seq} (${before.name}) first.`);
   const r = await riderDeliver(rider.id, id, otp);
   if (r === "wrong_otp") return fail(400, "That code is not right. Ask the customer to check their order screen.");
   if (r === "not_found") return fail(404, "This order is not out for delivery on your list.");
