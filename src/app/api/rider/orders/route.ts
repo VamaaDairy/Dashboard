@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, orderJson } from "@/lib/shop/api";
 import { riderOrders } from "@/lib/shop/orders";
 import { riderFromRequest } from "@/lib/shop/rider";
-import { planRider } from "@/lib/shop/route-plan";
+import { planRider, store } from "@/lib/shop/route-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
   const orders = await riderOrders(rider.id);
   // the rider types the code the customer reads out; the app never gets to see it
   return NextResponse.json({
+    // where orders are collected, marked on the rider's maps
+    store: store(),
     orders: orders.map((o) => ({ ...orderJson(o), id: o.id, deliveryOtp: undefined, stop: o.delivery_seq, legM: o.delivery_leg_m })),
   });
 }

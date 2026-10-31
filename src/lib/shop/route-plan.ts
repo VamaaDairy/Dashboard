@@ -102,26 +102,29 @@ async function distances(pts: Pt[]): Promise<number[][]> {
   }
 }
 
-/** Where the store is, when set (SHOP_STORE_LAT / SHOP_STORE_LNG): the start for orders still to be picked up. */
-function store(): Pt | null {
+/**
+ * House of Gaia (2, Shoppers Paradise, Pandri, Raipur), where riders collect orders and start in the
+ * morning. Fixed; SHOP_STORE_LAT / SHOP_STORE_LNG on the server move the pin if it needs to be exact.
+ */
+export function store(): Pt & { name: string } {
   const lat = Number(process.env.SHOP_STORE_LAT), lng = Number(process.env.SHOP_STORE_LNG);
-  return Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0) ? { lat, lng } : null;
+  const set = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+  return { name: "House of Gaia", lat: set ? lat : 21.2554, lng: set ? lng : 81.647 };
 }
 
 interface Open { id: number; status: string; lat: number | null; lng: number | null; delivery_seq: number | null; assigned_at: Date | null }
 
 /** Orders one group of stops from a start point; stops without a map pin go last, oldest first. */
-async function orderGroup(start: Pt | null, group: Open[]): Promise<{ id: number; legM: number | null; end: Pt | null }[]> {
+async function orderGroup(start: Pt, group: Open[]): Promise<{ id: number; legM: number | null; end: Pt | null }[]> {
   const pinned = group.filter((o) => o.lat != null && o.lng != null);
   const unpinned = group.filter((o) => o.lat == null || o.lng == null);
   const out: { id: number; legM: number | null; end: Pt | null }[] = [];
   if (pinned.length) {
-    const origin = start ?? { lat: pinned[0].lat!, lng: pinned[0].lng! };
-    const pts = [origin, ...pinned.map((o) => ({ lat: o.lat!, lng: o.lng! }))];
+    const pts = [start, ...pinned.map((o) => ({ lat: o.lat!, lng: o.lng! }))];
     const d = await distances(pts);
     let at = 0;
     for (const k of shortestPath(d)) {
-      out.push({ id: pinned[k - 1].id, legM: start || at > 0 ? d[at][k] : null, end: pts[k] });
+      out.push({ id: pinned[k - 1].id, legM: d[at][k], end: pts[k] });
       at = k;
     }
   }
@@ -130,9 +133,9 @@ async function orderGroup(start: Pt | null, group: Open[]): Promise<{ id: number
 }
 
 /**
- * Makes sure the rider's open orders have a delivery order: worked out again when an order has none yet
- * (newly given to them) or when one still at the store sits before one already picked up. Picked-up
- * orders come first, from where the rider is now; then those to collect, from the store.
+ * Makes sure the rider's open orders have a delivery order: the shortest way round all of them, in any
+ * order, starting from where the rider is now (or House of Gaia when the phone hasn't said lately).
+ * Worked out again only when an order joins their list, so it doesn't reshuffle while they ride.
  */
 export async function planRider(riderId: number): Promise<void> {
   await tx(async (c: PoolClient) => {
@@ -144,19 +147,13 @@ export async function planRider(riderId: number): Promise<void> {
       [riderId],
     );
     if (!rows.length) return;
-    const onWay = rows.filter((o) => o.status === "out_for_delivery");
-    const atStore = rows.filter((o) => o.status !== "out_for_delivery");
-    const lastOnWay = Math.max(0, ...onWay.map((o) => o.delivery_seq ?? 0));
-    const stale = rows.some((o) => o.delivery_seq == null) || atStore.some((o) => (o.delivery_seq ?? 0) < lastOnWay);
-    if (!stale) return;
+    if (!rows.some((o) => o.delivery_seq == null)) return;
 
     const r = await c.query<{ lat: number | null; lng: number | null; fresh: boolean }>(
       `select lat, lng, coalesce(location_at > now() - interval '30 minutes', false) as fresh from shop_rider where id = $1`, [riderId]);
     const here = r.rows[0]?.fresh && r.rows[0].lat != null && r.rows[0].lng != null ? { lat: r.rows[0].lat, lng: r.rows[0].lng } : null;
 
-    const first = await orderGroup(here ?? store(), onWay);
-    const second = await orderGroup(store() ?? first.at(-1)?.end ?? here, atStore);
-    const plan = [...first, ...second];
+    const plan = await orderGroup(here ?? store(), rows);
     for (const [i, p] of plan.entries()) {
       await c.query(`update shop_order set delivery_seq = $2, delivery_leg_m = $3 where id = $1`, [p.id, i + 1, p.legM == null ? null : Math.round(p.legM)]);
     }
