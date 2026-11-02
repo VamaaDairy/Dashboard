@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Database, Droplets, FileClock, Fuel, Home, LogOut,
-  MapPinned, MessageCircle, Package, PackageCheck, PackageSearch, Smartphone, Store, Tags, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Zap,
+  MapPinned, MessageCircle, Package, PackageCheck, PackageSearch, Smartphone, Store, Tags, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Warehouse, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -170,6 +170,16 @@ const DAILY: NavItem[] = [
       { href: "/cn/approvals", key: "cn.approve", label: "Approvals" },
       { href: "/cn/finance", key: "cn.finance", label: "Finance posting" },
       { href: "/cn/dashboard", key: "cn.dashboard", label: "Dashboard" },
+    ],
+  },
+  {
+    href: "/store", key: "store", label: "Store", icon: Warehouse,
+    children: [
+      { href: "/store", key: "store", label: "Stock", exact: true },
+      { href: "/store/items", key: "store.items", label: "Categories & items" },
+      { href: "/store/in", key: "store.in", label: "Stock in" },
+      { href: "/store/out", key: "store.out", label: "Stock out" },
+      { href: "/store/ledger", key: "store.ledger", label: "Ledger" },
     ],
   },
   { href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale },
