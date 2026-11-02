@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Smartphone } from "lucide-react";
 import { GaiaLogo } from "@/components/brand";
 
 const input =
@@ -11,7 +11,7 @@ const label = "mb-1.5 block text-xs font-medium text-muted-foreground";
 const primary =
   "w-full rounded-lg border border-border bg-white py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60";
 
-type Step = "email" | "code" | "done";
+type Step = "phone" | "code" | "done";
 
 async function post(url: string, body: object): Promise<{ success: boolean; error?: string }> {
   try {
@@ -23,8 +23,8 @@ async function post(url: string, body: object): Promise<{ success: boolean; erro
 }
 
 export default function ForgotPasswordPage() {
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  const [step, setStep] = useState<Step>("phone");
+  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -43,9 +43,9 @@ export default function ForgotPasswordPage() {
   const sendCode = async (e?: React.FormEvent) => {
     e?.preventDefault();
     setError("");
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError("Enter the email saved on your profile.");
+    if (!/^[6-9]\d{9}$/.test(phone.replace(/\D/g, "").slice(-10))) return setError("Enter the 10-digit mobile number saved on your account.");
     setLoading(true);
-    const r = await post("/api/auth/forgot", { email });
+    const r = await post("/api/auth/forgot", { phone });
     setLoading(false);
     if (!r.success) return setError(r.error ?? "Could not send the code.");
     setCode("");
@@ -56,11 +56,11 @@ export default function ForgotPasswordPage() {
   const reset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!/^\d{6}$/.test(code.trim())) return setError("Enter the 6-digit code from the email.");
+    if (!/^\d{6}$/.test(code.trim())) return setError("Enter the 6-digit code from the SMS.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
     if (password !== confirm) return setError("The two passwords do not match.");
     setLoading(true);
-    const r = await post("/api/auth/reset", { email, code: code.trim(), password });
+    const r = await post("/api/auth/reset", { phone, code: code.trim(), password });
     setLoading(false);
     if (!r.success) return setError(r.error ?? "Could not reset the password.");
     setStep("done");
@@ -87,9 +87,9 @@ export default function ForgotPasswordPage() {
             <>
               <h1 className="text-lg font-semibold text-foreground">Forgot password</h1>
               <p className="mt-1 mb-6 text-sm text-muted-foreground">
-                {step === "email"
-                  ? "Enter the recovery email saved on your profile and we will send you a code."
-                  : <>We sent a 6-digit code to <span className="font-medium text-foreground">{email.trim()}</span> if it is on a profile. It works for 10 minutes.</>}
+                {step === "phone"
+                  ? "Enter the mobile number saved on your account and we will text you a code."
+                  : <>We sent a 6-digit code by SMS to <span className="font-medium text-foreground">{phone.trim()}</span> if it is on an account. It works for 10 minutes.</>}
               </p>
 
               {error && (
@@ -98,20 +98,21 @@ export default function ForgotPasswordPage() {
                 </div>
               )}
 
-              {step === "email" ? (
+              {step === "phone" ? (
                 <form onSubmit={sendCode} className="space-y-4">
                   <div>
-                    <label htmlFor="email" className={label}>Recovery email</label>
+                    <label htmlFor="phone" className={label}>Mobile number</label>
                     <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Smartphone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <input
-                        id="email"
-                        type="email"
-                        autoComplete="email"
+                        id="phone"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
                         autoFocus
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@example.com"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="10-digit mobile number"
                         className={`${input} pl-10`}
                       />
                     </div>
@@ -173,8 +174,8 @@ export default function ForgotPasswordPage() {
                     {loading ? "Saving…" : "Reset password"}
                   </button>
                   <div className="flex items-center justify-between text-xs">
-                    <button type="button" onClick={() => { setError(""); setStep("email"); }} className="text-muted-foreground hover:text-foreground">
-                      Change email
+                    <button type="button" onClick={() => { setError(""); setStep("phone"); }} className="text-muted-foreground hover:text-foreground">
+                      Change number
                     </button>
                     <button
                       type="button"

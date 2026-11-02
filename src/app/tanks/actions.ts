@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { query, tx } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
@@ -129,7 +130,16 @@ export async function addMovement(form: FormData): Promise<Result> {
 export async function deleteMovement(id: string, tankId: string): Promise<Result> {
   return guard(async () => {
     await tx(async (client) => {
-      const m = await client.query<{ source: string | null }>(`select source from tank_movement where id = $1`, [id]);
+      const m = await client.query<{ source: string | null; source_ref: string | null }>(`select source, source_ref from tank_movement where id = $1`, [id]);
+      if (m.rows[0]?.source === "adjustment") {
+        // a manual edit is stored as a pair: the old balance out and the new one in
+        const group = m.rows[0].source_ref?.split(":")[1];
+        if (!group) throw new Error("That edit is no longer there - reload the page");
+        const gone = await client.query<{ tank_id: string }>(
+          `delete from tank_movement where source = 'adjustment' and source_ref like $1 returning tank_id`, [`adj:${group}:%`]);
+        for (const t of new Set(gone.rows.map((r) => r.tank_id))) await recomputeTank(client, t);
+        return;
+      }
       if (m.rows[0]?.source === "transfer") {
         // a transfer goes as a pair: the 'out' on one tank and the 'in' on the other
         const pair = await client.query<{ out_id: string; tanks: string[] }>(
@@ -145,7 +155,7 @@ export async function deleteMovement(id: string, tankId: string): Promise<Result
         for (const t of p.tanks) await recomputeTank(client, t);
         return;
       }
-      if (m.rows[0]?.source === "production" || m.rows[0]?.source === "production_return") throw new Error("This milk went into production - change it on the Production page");
+      if (m.rows[0]?.source === "production" || m.rows[0]?.source === "production_return" || m.rows[0]?.source === "production_output") throw new Error("This milk went into production - change it on the Production page");
       if (m.rows[0]?.source) throw new Error("This came from Milk in - change its tank on the Milk in page");
       await client.query(`delete from tank_movement where id = $1`, [id]);
       await recomputeTank(client, tankId);
@@ -180,6 +190,52 @@ export async function transferMilk(date: string, fromTank: string, toTank: strin
         [scenario, toTank, date, qty, notes?.trim() || `From ${name(fromTank)}`, out.rows[0].id]);
       // the source fixes the blend the milk leaves at, then carries it into the other tank
       await recomputeTank(client, fromTank);
+    });
+  });
+}
+
+/**
+ * Corrects a tank by hand: sets what it holds at the end of `date` - litres,
+ * fat % and SNF %. Stored in the ledger as the old balance taken out and the
+ * new one put in (source 'adjustment'), so the history and later days replay
+ * correctly. The rate ₹/L is kept. Delete the pair to undo it.
+ */
+export async function adjustTank(date: string, tankId: string, rawLitres: string, rawFat: string, rawSnf: string): Promise<Result> {
+  return guard(async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Pick a date");
+    const litres = numberOrNull(rawLitres);
+    const fat = numberOrNull(rawFat);
+    const snf = numberOrNull(rawSnf);
+    if (litres === null || litres < 0) throw new Error("Enter the litres in the tank (0 to empty it)");
+    if (litres > 0 && (fat === null || snf === null)) throw new Error("Enter the fat % and SNF %");
+    if (fat !== null && (fat < 0 || fat > 20)) throw new Error(`Fat ${fat}% doesn't look right - enter it as a percentage, e.g. 4.5`);
+    if (snf !== null && (snf < 0 || snf > 20)) throw new Error(`SNF ${snf}% doesn't look right - enter it as a percentage, e.g. 8.5`);
+    const scenario = await activeScenarioId();
+
+    await tx(async (client) => {
+      const t = await client.query(`select 1 from tank where id = $1 and scenario_id = $2`, [tankId, scenario]);
+      if (!t.rowCount) throw new Error("That tank no longer exists - reload the page");
+      const last = await client.query<{ balance_litre: string; balance_cost_per_litre: string }>(
+        `select balance_litre, balance_cost_per_litre from tank_movement
+          where tank_id = $1 and movement_date <= $2::date
+          order by movement_date desc, created_at desc, id desc limit 1`, [tankId, date]);
+      const had = Number(last.rows[0]?.balance_litre ?? 0);
+      if (had <= 0.005 && litres <= 0) throw new Error("The tank is already empty");
+      const cost = had > 0.005 ? Number(last.rows[0]?.balance_cost_per_litre ?? 0) : 0;
+      const group = randomUUID();
+      if (had > 0.005) {
+        await client.query(
+          `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, source_ref, created_at)
+           values ($1, $2, $3, 'out', $4, $5, 'adjustment', $6, clock_timestamp())`,
+          [scenario, tankId, date, had, "Manual edit · previous balance", `adj:${group}:out`]);
+      }
+      if (litres > 0) {
+        await client.query(
+          `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, fat_pct, snf_pct, cost_per_litre, notes, source, source_ref, created_at)
+           values ($1, $2, $3, 'in', $4, $5, $6, $7, $8, 'adjustment', $9, clock_timestamp())`,
+          [scenario, tankId, date, litres, fat, snf, cost, "Manual edit · new balance", `adj:${group}:in`]);
+      }
+      await recomputeTank(client, tankId);
     });
   });
 }

@@ -23,10 +23,14 @@ type Draw = { tank_id: string; litres: string };
 type Row = {
   output_qty: string; labour_workers: string; labour_hours: string; labour_cost: string;
   milk: Draw[]; returns: Draw[]; ingredients: Line[];
+  /** toned / cow milk: tank the yield is put back into ("" = none) */
+  output_tank: string;
 };
 type Blend = { fat: number | null; snf: number | null; rate: number | null };
 const LABOUR = ["labour_workers", "labour_hours", "labour_cost"] as const;
 const UNITS = ["kg", "g", "L", "ml", "pcs"];
+/** Products whose yield is milk again and can be put back into a tank. */
+const TANK_OUTPUT = ["toned_milk", "cow_milk"];
 
 const str = (n: number | null) => (n === null || n === undefined ? "0" : String(Number(n)));
 const val = (s: string) => {
@@ -41,7 +45,7 @@ function returned(lines: Draw[]): number {
 }
 
 function blankRow(): Row {
-  return { output_qty: "0", labour_workers: "0", labour_hours: "0", labour_cost: "0", milk: [], returns: [], ingredients: [] };
+  return { output_qty: "0", labour_workers: "0", labour_hours: "0", labour_cost: "0", milk: [], returns: [], ingredients: [], output_tank: "" };
 }
 
 const cell = "w-16 rounded-md border border-border bg-white px-1.5 py-1 text-right text-[13px] focus:border-foreground/40 focus:outline-none";
@@ -110,6 +114,7 @@ export function BulkProductionDay({
         milk: b.milk.map((m) => ({ tank_id: m.tank_id, litres: String(Number(m.litres)) })),
         returns: b.returns.map((m) => ({ tank_id: m.tank_id, litres: String(Number(m.litres)) })),
         ingredients: b.ingredients.map((i) => ({ ingredient_id: i.ingredient_id, name: i.name, qty: String(Number(i.qty)), unit: i.unit })),
+        output_tank: b.output_tank_id ?? "",
       }];
     })),
   );
@@ -158,7 +163,8 @@ export function BulkProductionDay({
   const available = (tankId: string, except?: { product: string; index: number }) => {
     const t = tanks.find((x) => x.tank_id === tankId);
     const savedToday = batches.reduce((s, b) => s + b.milk.filter((m) => m.tank_id === tankId).reduce((a, m) => a + Number(m.litres), 0), 0)
-      - batches.reduce((s, b) => s + b.returns.filter((m) => m.tank_id === tankId).reduce((a, m) => a + Number(m.litres), 0), 0);
+      - batches.reduce((s, b) => s + b.returns.filter((m) => m.tank_id === tankId).reduce((a, m) => a + Number(m.litres), 0), 0)
+      - batches.reduce((s, b) => s + (b.output_tank_id === tankId ? Number(b.output_qty ?? 0) : 0), 0);   // output put back isn't there to draw
     let asked = 0;
     for (const [pid, r] of Object.entries(rows)) {
       r.milk.forEach((d, i) => {
@@ -179,6 +185,7 @@ export function BulkProductionDay({
         labour_cost: val(r.labour_cost), notes: null,
         milk: r.milk.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => ({ tank_id: d.tank_id, litres: val(d.litres) ?? 0 })),
         returns: r.returns.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => ({ tank_id: d.tank_id, litres: val(d.litres) ?? 0 })),
+        output_tank_id: TANK_OUTPUT.includes(p.code) && r.output_tank ? r.output_tank : null,
         ingredients: r.ingredients.map((l) => ({ ingredient_id: l.ingredient_id, name: l.name, qty: Number(l.qty), unit: l.unit })),
       };
     });
@@ -234,7 +241,7 @@ export function BulkProductionDay({
 
       <Section
         title={`Bulk production · ${date}`}
-        description="Take each product's milk from the tanks - fat, SNF and cost come from the tank. Enter every ingredient's quantity: a batch is complete only once all of them are in. The yield can be added later. Save day when done."
+        description="Take each product's milk from the tanks - fat, SNF and cost come from the tank. Enter the ingredients used - a 0 is fine, and not every ingredient has to be entered. The yield can be added later; toned and cow milk can be put back into a tank. Save day when done."
         actions={
           <Link href="/daily/products" className="text-[12px] font-semibold text-muted-foreground hover:text-foreground">
             Products &amp; ingredients →
@@ -255,6 +262,7 @@ export function BulkProductionDay({
               <Th align="left">Ingredients</Th>
               <Th>Yield</Th>
               <Th>Per 100 L milk</Th>
+              <Th align="left">Put back in tank</Th>
               <Th>Workers</Th>
               <Th>Hours</Th>
               <Th>Labour ₹</Th>
@@ -269,8 +277,7 @@ export function BulkProductionDay({
                 const draws = r.milk.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0);
                 const back = Math.min(returned(r.returns), returned(r.milk));
                 const tankName = (id: string) => tanks.find((t) => t.tank_id === id)?.name ?? "Tank";
-                const entered = r.ingredients.filter((l) => Number(l.qty) > 0);
-                const missing = p.ingredients.filter((i) => !entered.some((l) => l.ingredient_id === i.ingredient_id));
+                const canPutBack = TANK_OUTPUT.includes(p.code);
                 return (
                   <tr key={p.id} className={`border-b border-border/70 ${used ? "" : "text-muted-foreground"}`}>
                     <td className="px-3 py-1.5">
@@ -289,8 +296,8 @@ export function BulkProductionDay({
                         ) : (
                           <button onClick={() => setEditing(p.id)}
                             className="inline-flex items-center rounded-full border border-dashed border-foreground/40 px-2 py-0.5 text-[11px] font-semibold text-foreground hover:bg-muted"
-                            title={missing.length ? `Missing: ${missing.map((i) => i.name).join(", ")}` : "Enter the ingredients used"}>
-                            Incomplete · {missing.length ? `${missing.length} ingredient${missing.length > 1 ? "s" : ""} missing` : "no ingredients"}
+                            title="Take milk from a tank or enter the ingredients used (0 is fine)">
+                            Incomplete · no milk or ingredients
                           </button>
                         )}
                     </td>
@@ -333,6 +340,16 @@ export function BulkProductionDay({
                     <td className="num px-3 py-1.5 text-right text-muted-foreground">
                       {m.litres > 0 && out > 0 ? `${formatNumber((out / m.litres) * 100, 1)} ${p.unit}` : "—"}
                     </td>
+                    <td className="px-1.5 py-1">
+                      {canPutBack ? (
+                        <select value={r.output_tank} onChange={(e) => set(p.id, { output_tank: e.target.value })}
+                          className="h-7 w-32 rounded-md border border-border bg-white px-1.5 text-[12px]" aria-label={`${p.name} put back in tank`}
+                          title={r.output_tank && out <= 0 ? "Enter the yield to put it back" : "Put the yield back into a tank as milk"}>
+                          <option value="">Not put back</option>
+                          {tanks.filter((t) => t.is_active || t.tank_id === r.output_tank).map((t) => <option key={t.tank_id} value={t.tank_id}>{t.name}</option>)}
+                        </select>
+                      ) : <span className="text-tertiary-foreground">—</span>}
+                    </td>
                     {LABOUR.map((f) => (
                       <td key={f} className="px-1.5 py-1 text-right">
                         <input inputMode="decimal" value={r[f]} onFocus={(e) => e.target.select()}
@@ -342,7 +359,7 @@ export function BulkProductionDay({
                   </tr>
                 );
               })}
-              {active.length === 0 ? <Empty colSpan={14}>No products yet - add them below.</Empty> : null}
+              {active.length === 0 ? <Empty colSpan={15}>No products yet - add them below.</Empty> : null}
             </tbody>
             {active.length ? (
               <tfoot>
@@ -354,7 +371,7 @@ export function BulkProductionDay({
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgFat, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgSnf, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.milkCost, 0)}</td>
-                  <td colSpan={4} />
+                  <td colSpan={5} />
                   <td className="num px-3 py-2 text-right text-muted-foreground">{formatNumber(totals.workerHours, 1)} h</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.labour, 0)}</td>
                 </tr>
@@ -683,11 +700,11 @@ function IngredientsBody({
   const used = new Set(lines.map((l) => l.ingredient_id).filter(Boolean));
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSave(lines.filter((l) => l.name.trim() && Number(l.qty) > 0).map((l) => ({ ingredient_id: l.ingredient_id, name: l.name, qty: l.qty, unit: l.unit }))); }}>
+    <form onSubmit={(e) => { e.preventDefault(); onSave(lines.filter((l) => l.name.trim() && l.qty.trim() !== "" && Number(l.qty) >= 0).map((l) => ({ ingredient_id: l.ingredient_id, name: l.name, qty: l.qty, unit: l.unit }))); }}>
       <DialogHeader>
         <DialogTitle>{product.name} · ingredients</DialogTitle>
         <DialogDescription>
-          Every ingredient on {product.name}&apos;s list needs today&apos;s quantity - the batch is complete only once all are in. Save day afterwards.
+          Enter what went into {product.name} today. Put 0 for anything not used - you don&apos;t have to enter every ingredient. Save day afterwards.
         </DialogDescription>
       </DialogHeader>
 

@@ -98,12 +98,17 @@ export interface DayRow {
   milk: { tank_id: string; litres: number }[];
   /** milk not used, put back into a tank at the blend it was drawn at */
   returns: { tank_id: string; litres: number }[];
+  /** toned / cow milk only: put the output (yield) back into this tank */
+  output_tank_id?: string | null;
   labour_workers: number | null;
   labour_hours: number | null;
   labour_cost: number | null;
   notes: string | null;
   ingredients: { ingredient_id: string | null; name: string; qty: number; unit: string }[];
 }
+
+/** Products whose output is milk again and can go back into a tank. */
+const TANK_OUTPUT = new Set(["toned_milk", "cow_milk"]);
 
 function check(v: number | null, label: string) {
   if (v === null) return;
@@ -119,6 +124,8 @@ function check(v: number | null, label: string) {
  * had, as 'out' movements on the batch date, and every tank touched is
  * replayed - so a draw a tank can't cover rolls the whole save back. The
  * fat, SNF and ₹/L come from each tank's blend, never from the page.
+ * The output of toned and cow milk can be put into a tank as milk, at the
+ * draws' blend (fat and SNF can be corrected on the tank afterwards).
  * Milk not used can be returned: an 'in' on the tank of the user's choice
  * at the draws' weighted blend, and the batch's milk is the net of the two.
  */
@@ -132,16 +139,18 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
       const batchIds: string[] = [];
 
       for (const r of rows) {
-        const products = await client.query<{ name: string }>(
-          `select name from bulk_product where id = $1 and scenario_id = $2`, [r.bulk_product_id, scenario]);
+        const products = await client.query<{ name: string; code: string }>(
+          `select name, code from bulk_product where id = $1 and scenario_id = $2`, [r.bulk_product_id, scenario]);
         const name = products.rows[0]?.name;
+        const code = products.rows[0]?.code;
         if (!name) throw new Error("A product in the table no longer exists - reload the page");
 
         check(r.output_qty, `${name}: output`);
         check(r.labour_workers, `${name}: workers`);
         check(r.labour_hours, `${name}: hours`);
         check(r.labour_cost, `${name}: labour ₹`);
-        const lines = (r.ingredients ?? []).filter((l) => l.name && Number(l.qty) > 0);
+        // a 0 is a real entry (not used today); a blank is not
+        const lines = (r.ingredients ?? []).filter((l) => l.name && String(l.qty ?? "").trim() !== "" && Number(l.qty) >= 0);
         for (const l of lines) check(Number(l.qty), `${name}: ${l.name}`);
 
         // one draw per tank: two lines on the same tank are added together
@@ -173,22 +182,34 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
           if (tanks.rowCount !== returns.size) throw new Error(`${name}: a tank picked for the returned milk no longer exists - reload the page`);
         }
 
+        // toned / cow milk: the yield goes back into a tank as milk
+        const outputs = new Map<string, number>();
+        if (r.output_tank_id) {
+          if (!TANK_OUTPUT.has(code)) throw new Error(`${name}: only toned and cow milk can be put back into a tank`);
+          if (!(Number(r.output_qty) > 0)) throw new Error(`${name}: enter the yield to put it back into a tank`);
+          const t = await client.query(`select 1 from tank where id = $1 and scenario_id = $2`, [r.output_tank_id, scenario]);
+          if (!t.rowCount) throw new Error(`${name}: the tank picked for the output no longer exists - reload the page`);
+          outputs.set(r.output_tank_id, Number(r.output_qty));
+        }
+
         // what this product drew and returned before; if the milk is unchanged
         // (e.g. only the yield was edited) the tank ledger is left alone, so a
         // back-dated edit can never fail on tank balances.
-        const before = await client.query<{ tank_id: string; direction: string; litres: string }>(
-          `select m.tank_id, m.direction, sum(m.qty_litre) as litres
+        const before = await client.query<{ tank_id: string; kind: string; litres: string }>(
+          `select m.tank_id,
+                  case when m.direction = 'out' then 'out' when m.source = 'production_output' then 'output' else 'return' end as kind,
+                  sum(m.qty_litre) as litres
              from tank_movement m join bulk_batch b on b.id = m.bulk_batch_id
             where b.scenario_id = $1 and b.batch_date = $2 and b.bulk_product_id = $3
-            group by m.tank_id, m.direction`,
+            group by m.tank_id, kind`,
           [scenario, date, r.bulk_product_id],
         );
         const sameMap = (rowsFor: string, want: Map<string, number>) => {
-          const have = before.rows.filter((x) => x.direction === rowsFor);
+          const have = before.rows.filter((x) => x.kind === rowsFor);
           return have.length === want.size
             && have.every((x) => Math.abs(Number(x.litres) - (want.get(x.tank_id) ?? -1)) < 0.0005);
         };
-        const milkUnchanged = sameMap("out", draws) && sameMap("in", returns);
+        const milkUnchanged = sameMap("out", draws) && sameMap("return", returns) && sameMap("output", outputs);
         if (!milkUnchanged) before.rows.forEach((t) => touched.add(t.tank_id));
 
         const empty = [r.output_qty, r.labour_workers, r.labour_hours, r.labour_cost].every((v) => !v)
@@ -246,6 +267,16 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
             `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, bulk_batch_id, created_at)
              values ($1, $2, $3, 'in', $4, $5, 'production_return', $6, clock_timestamp())`,
             [scenario, tankId, date, litres, `Returned from production · ${name}`, batchId],
+          );
+          touched.add(tankId);
+        }
+
+        // the output goes in after the draws; the engine sets it to the draws' blend
+        for (const [tankId, litres] of outputs) {
+          await client.query(
+            `insert into tank_movement (scenario_id, tank_id, movement_date, direction, qty_litre, notes, source, bulk_batch_id, created_at)
+             values ($1, $2, $3, 'in', $4, $5, 'production_output', $6, clock_timestamp())`,
+            [scenario, tankId, date, litres, `${name} made · put back`, batchId],
           );
           touched.add(tankId);
         }

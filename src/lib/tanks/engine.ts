@@ -155,7 +155,7 @@ export async function recomputeTank(
 }
 
 /**
- * Milk a batch gave back to a tank goes back at the blend it was drawn at:
+ * Milk a batch gave back to a tank (or, for toned / cow milk, its output put into one) goes in at the blend it was drawn at:
  * the weighted fat, SNF and ₹/L of the batch's draws. Updates each return
  * 'in' to that and replays the tank it went to (a tank already being
  * replayed is replayed again, once - the second pass finds nothing to change).
@@ -172,7 +172,7 @@ async function syncBatchReturns(client: PoolClient, batchIds: string[], seen: Se
                from tank_movement o
               where o.bulk_batch_id = any($1) and o.direction = 'out'
               group by o.bulk_batch_id) x
-      where i.bulk_batch_id = x.id and i.direction = 'in' and i.source = 'production_return'
+      where i.bulk_batch_id = x.id and i.direction = 'in' and i.source in ('production_return', 'production_output')
         and (abs(coalesce(i.fat_pct, -1) - coalesce(x.fat, 0)) > 0.0001
              or abs(coalesce(i.snf_pct, -1) - coalesce(x.snf, 0)) > 0.0001
              or abs(coalesce(i.cost_per_litre, -1) - coalesce(x.cost, 0)) > 0.0001)
@@ -204,7 +204,7 @@ export async function syncBatchMilk(client: PoolClient, batchIds: string[]): Pro
                       / nullif(sum(case when m.direction = 'out' then m.qty_litre else -m.qty_litre end), 0) as snf,
                     round(sum(case when m.direction = 'out' then m.qty_litre * m.cost_per_litre else -m.qty_litre * m.cost_per_litre end), 2) as cost
                from bulk_batch b2
-               left join tank_movement m on m.bulk_batch_id = b2.id
+               left join tank_movement m on m.bulk_batch_id = b2.id and m.source is distinct from 'production_output'
               where b2.id = any($1)
               group by b2.id) x
       where x.id = b.id`,
