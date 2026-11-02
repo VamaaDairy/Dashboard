@@ -66,6 +66,8 @@ export interface Batch {
   milk: BatchMilk[];
   /** milk put back into a tank, at the blend it was drawn at */
   returns: BatchReturn[];
+  /** toned / cow milk only: the tank its output (yield) was put into, if any */
+  output_tank_id: string | null;
 }
 
 export interface ProductionDaySummary {
@@ -111,7 +113,7 @@ export async function getIngredientOptions(): Promise<IngredientOption[]> {
 /** Every batch on one date, in the order entered, with its ingredients. */
 export async function getBatches(date: string): Promise<Batch[]> {
   const scenario = await activeScenarioId();
-  const batches = await query<Omit<Batch, "ingredients" | "milk" | "returns">>(
+  const batches = await query<Omit<Batch, "ingredients" | "milk" | "returns" | "output_tank_id">>(
     `select b.id, to_char(b.batch_date, 'YYYY-MM-DD') as batch_date, b.bulk_product_id,
             p.name as product_name, p.unit as product_unit, b.batch_no, b.output_qty,
             b.milk_litre, b.milk_fat_pct, b.milk_snf_pct,
@@ -134,26 +136,24 @@ export async function getBatches(date: string): Promise<Batch[]> {
       where m.bulk_batch_id = any($1) and m.direction = 'out' order by t.sort_order, m.created_at, m.id`,
     [batches.map((b) => b.id)],
   );
-  const returns = await query<BatchReturn & { batch_id: string }>(
-    `select m.id, m.bulk_batch_id as batch_id, m.tank_id, t.name as tank_name, m.qty_litre as litres
+  const ins = await query<BatchReturn & { batch_id: string; source: string }>(
+    `select m.id, m.bulk_batch_id as batch_id, m.tank_id, t.name as tank_name, m.qty_litre as litres, m.source
        from tank_movement m join tank t on t.id = m.tank_id
       where m.bulk_batch_id = any($1) and m.direction = 'in' order by t.sort_order, m.created_at, m.id`,
     [batches.map((b) => b.id)],
   );
+  const returns = ins.filter((m) => m.source === "production_return");
   return batches.map((b) => ({
     ...b,
     ingredients: lines.filter((l) => l.batch_id === b.id),
     milk: milk.filter((m) => m.batch_id === b.id),
     returns: returns.filter((m) => m.batch_id === b.id),
+    output_tank_id: ins.find((m) => m.batch_id === b.id && m.source === "production_output")?.tank_id ?? null,
   }));
 }
 
-// SQL twin of batchComplete() for batch b: every standing ingredient entered, or - with no list - milk or any ingredient.
-const COMPLETE = `case when exists (select 1 from bulk_product_ingredient s where s.bulk_product_id = b.bulk_product_id)
-  then not exists (select 1 from bulk_product_ingredient s where s.bulk_product_id = b.bulk_product_id
-                     and not exists (select 1 from bulk_batch_ingredient l
-                                      where l.batch_id = b.id and l.ingredient_id = s.ingredient_id and l.qty > 0))
-  else coalesce(b.milk_litre, 0) > 0 or exists (select 1 from bulk_batch_ingredient l where l.batch_id = b.id and l.qty > 0) end`;
+// SQL twin of batchComplete() for batch b: milk, or any ingredient line (a 0 counts).
+const COMPLETE = `(coalesce(b.milk_litre, 0) > 0 or exists (select 1 from bulk_batch_ingredient l where l.batch_id = b.id))`;
 
 /** The most recent production days, newest first, for the history list. */
 export async function getProductionDays(limit = 30): Promise<ProductionDaySummary[]> {

@@ -18,6 +18,10 @@ export interface UserInput {
   name: string;
   email: string;
   role: string;
+  /** typed in by the owner, e.g. "Production", "Accounts" */
+  department: string;
+  /** 10-digit mobile: where the forgot-password code is texted */
+  mobile: string;
   isActive: boolean;
   access: AccessMap;
   /** Required for a new user; on an existing one, only set when changing it. */
@@ -38,6 +42,10 @@ export async function saveUser(input: UserInput): Promise<UserResult> {
   const email = input.email.trim().toLowerCase();
   const role = input.role as Role;
   const password = input.password?.trim() ?? "";
+  const department = input.department.trim().replace(/\s+/g, " ") || null;
+  const mobile = input.mobile.replace(/\D/g, "").slice(-10) || null;
+  if (department && department.length > 80) return fail("Department is too long.");
+  if (mobile && !/^[6-9]\d{9}$/.test(mobile)) return fail("Enter a valid 10-digit mobile number.");
   if (!name) return fail("Name is required.");
   if (!/^\S+@\S+\.\S+$/.test(email)) return fail("Enter a valid email - it is the user name they sign in with.");
   if (!ROLES.includes(role)) return fail("Unknown role.");
@@ -48,9 +56,9 @@ export async function saveUser(input: UserInput): Promise<UserResult> {
     if (!input.id) {
       if (!password) return fail("Set a password for the new user.");
       await query(
-        `insert into app_user (email, name, role, password_hash, is_active, access)
-         values ($1, $2, $3, $4, $5, $6::jsonb)`,
-        [email, name, role, await hashPassword(password), input.isActive, access],
+        `insert into app_user (email, name, role, password_hash, is_active, access, department, mobile)
+         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
+        [email, name, role, await hashPassword(password), input.isActive, access, department, mobile],
       );
     } else {
       // an owner can't lock themselves out by accident
@@ -58,15 +66,19 @@ export async function saveUser(input: UserInput): Promise<UserResult> {
         return fail("You can't remove your own owner access or deactivate yourself.");
       }
       await query(
-        `update app_user set email = $2, name = $3, role = $4, is_active = $5, access = $6::jsonb
+        `update app_user set email = $2, name = $3, role = $4, is_active = $5, access = $6::jsonb,
+                            department = $7, mobile = $8
           where id = $1`,
-        [input.id, email, name, role, input.isActive, access],
+        [input.id, email, name, role, input.isActive, access, department, mobile],
       );
       if (password) {
         await query(`update app_user set password_hash = $2 where id = $1`, [input.id, await hashPassword(password)]);
       }
     }
   } catch (e) {
+    if (e instanceof Error && /app_user_mobile_uq/.test(e.message)) {
+      return fail("Another account already uses that mobile number.");
+    }
     if (e instanceof Error && /app_user_email_key|duplicate key/.test(e.message)) {
       return fail("Someone already uses that email.");
     }

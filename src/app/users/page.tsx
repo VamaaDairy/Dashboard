@@ -9,9 +9,11 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage() {
   const rows = await query<{
     id: string; email: string; name: string; role: string; is_active: boolean; access: unknown;
-  }>(`select id, email, name, role, is_active, access from app_user order by created_at`);
+    department: string | null; mobile: string | null;
+  }>(`select id, email, name, role, is_active, access, department, mobile from app_user order by created_at`);
   const users: UserRecord[] = rows.map((r) => ({
     id: r.id, email: r.email, name: r.name, role: r.role,
+    department: r.department ?? "", mobile: r.mobile ?? "",
     isActive: r.is_active, access: cleanAccess(r.access),
   }));
 

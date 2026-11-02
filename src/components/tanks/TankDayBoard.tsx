@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { deleteMovement } from "@/app/tanks/actions";
 import {
   DeleteButton, Empty, Num, Section, THead, Th,
 } from "./ui";
 import { TankForm } from "./TankList";
 import { TakeOutDialog } from "./TakeOutDialog";
+import { EditTankDialog } from "./EditTankDialog";
 import { formatNumber } from "@/lib/format";
 import { addDays } from "@/lib/dates";
 import { kgOfSolid } from "@/lib/units";
@@ -117,6 +118,7 @@ export function TankDayBoard({
 }) {
   const [adding, setAdding] = useState(false);
   const [takingFrom, setTakingFrom] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const kgFat = (d: TankDay) => kgOfSolid(d.close_litre, d.close_fat_pct, kgPerLitre) ?? 0;
   const kgSnf = (d: TankDay) => kgOfSolid(d.close_litre, d.close_snf_pct, kgPerLitre) ?? 0;
   const sum = (f: (d: TankDay) => number) => days.reduce((s, d) => s + f(d), 0);
@@ -151,7 +153,7 @@ export function TankDayBoard({
 
       <Section
         title={`Tanks · ${date}`}
-        description="Milk comes in from Milk in. Rate is the weighted average ₹/L of everything in the tank; cost = litres × rate. Use the icon at the end of a row to take milk out."
+        description="Milk comes in from Milk in. Rate is the weighted average ₹/L of everything in the tank; cost = litres × rate. Use the icons at the end of a row to take milk out or edit the litres, fat and SNF by hand."
       >
         {adding ? <TankForm onDone={() => setAdding(false)} /> : null}
         <div className="overflow-x-auto">
@@ -167,6 +169,7 @@ export function TankDayBoard({
               <Th>Cost ₹</Th>
               <Th>Today</Th>
               <Th className="w-14 text-center">Take out</Th>
+              <Th className="w-14 text-center">Edit</Th>
             </THead>
             <tbody>
               {days.map((d) => {
@@ -203,10 +206,16 @@ export function TankDayBoard({
                           <ArrowUpFromLine className="h-4 w-4" />
                         </button>
                       </td>
+                      <td className="px-2 py-2.5 text-center">
+                        <button onClick={() => setEditing(d.tank_id)} title={`Edit litres, fat and SNF of ${d.name}`}
+                          className="rounded-md p-1.5 text-foreground hover:bg-muted">
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </td>
                     </tr>
                 );
               })}
-              {days.length === 0 ? <Empty colSpan={10}>No tanks yet.</Empty> : null}
+              {days.length === 0 ? <Empty colSpan={11}>No tanks yet.</Empty> : null}
             </tbody>
           </table>
         </div>
@@ -219,6 +228,8 @@ export function TankDayBoard({
         kgPerLitre={kgPerLitre}
         onClose={() => setTakingFrom(null)}
       />
+
+      <EditTankDialog tank={days.find((d) => d.tank_id === editing) ?? null} date={date} onClose={() => setEditing(null)} />
 
       <Section title={`Added · ${date}`} description="Milk put into tanks from Milk in. To move or undo one, change its tank there.">
         <MovementTable
@@ -308,7 +319,12 @@ export function MovementTable<M extends MovementRow>({
                     onDelete={() => deleteMovement(m.id, tankIdOf(m))}
                     confirmLabel={`the move of ${formatNumber(m.qty_litre, 0)} L on ${m.movement_date} (both tanks)`}
                   />
-                ) : m.source === "production" || m.source === "production_return" ? (
+                ) : m.source === "adjustment" ? (
+                  <DeleteButton
+                    onDelete={() => deleteMovement(m.id, tankIdOf(m))}
+                    confirmLabel={`this manual edit on ${m.movement_date} (undoes both its lines)`}
+                  />
+                ) : m.source === "production" || m.source === "production_return" || m.source === "production_output" ? (
                   <Link href={`/daily?date=${m.movement_date}`} className="text-[10px] text-tertiary-foreground hover:underline" title="Change it on the Production page">Production</Link>
                 ) : m.source ? (
                   <span className="text-[10px] text-tertiary-foreground" title="Change its tank on the Milk in page">Milk in</span>

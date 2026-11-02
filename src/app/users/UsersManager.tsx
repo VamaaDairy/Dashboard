@@ -10,16 +10,19 @@ export interface UserRecord {
   email: string;
   name: string;
   role: string;
+  department: string;
+  mobile: string;
   isActive: boolean;
   access: AccessMap;
 }
 
-const BLANK: UserRecord = { id: "", email: "", name: "", role: "viewer", isActive: true, access: {} };
+const BLANK: UserRecord = { id: "", email: "", name: "", role: "viewer", department: "", mobile: "", isActive: true, access: {} };
 
 const field =
   "w-full rounded-lg border border-border bg-input/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30";
 
 export function UsersManager({ users }: { users: UserRecord[] }) {
+  const departments = [...new Set(users.map((u) => u.department).filter(Boolean))].sort();
   const router = useRouter();
   const [editing, setEditing] = useState<UserRecord | null>(null);
   const [password, setPassword] = useState("");
@@ -54,6 +57,8 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
         name: editing.name,
         email: editing.email,
         role: editing.role,
+        department: editing.department,
+        mobile: editing.mobile,
         isActive: editing.isActive,
         access: editing.access,
         password,
@@ -104,6 +109,30 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
                 value={editing.email}
                 placeholder="name@vamaadairy.com"
                 onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+              />
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Department
+              <input
+                className={`${field} mt-1.5`}
+                list="departments"
+                value={editing.department}
+                placeholder="e.g. Production, Accounts, Dispatch"
+                onChange={(e) => setEditing({ ...editing, department: e.target.value })}
+              />
+              <datalist id="departments">
+                {departments.map((d) => <option key={d} value={d} />)}
+              </datalist>
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Mobile number (forgot-password code is texted here)
+              <input
+                className={`${field} mt-1.5`}
+                type="tel"
+                inputMode="numeric"
+                value={editing.mobile}
+                placeholder="10-digit mobile number"
+                onChange={(e) => setEditing({ ...editing, mobile: e.target.value })}
               />
             </label>
             <label className="block text-xs font-medium text-muted-foreground">
@@ -209,6 +238,8 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
           <tr className="border-b border-border bg-secondary text-[10px] font-mono uppercase tracking-wide text-tertiary-foreground">
             <th className="px-4 py-2 text-left font-bold">Name</th>
             <th className="px-3 py-2 text-left font-bold">Email</th>
+            <th className="px-3 py-2 text-left font-bold">Department</th>
+            <th className="px-3 py-2 text-left font-bold">Mobile</th>
             <th className="px-3 py-2 text-left font-bold">Role</th>
             <th className="px-3 py-2 text-left font-bold">Status</th>
             <th className="px-3 py-2" />
@@ -219,6 +250,8 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
             <tr key={u.id} className="border-b border-border/70 hover:bg-muted">
               <td className="px-4 py-2 font-medium text-foreground">{u.name}</td>
               <td className="px-3 py-2 text-muted-foreground">{u.email}</td>
+              <td className="px-3 py-2">{u.department || <span className="text-tertiary-foreground">—</span>}</td>
+              <td className="px-3 py-2">{u.mobile || <span className="text-tertiary-foreground">—</span>}</td>
               <td className="px-3 py-2 capitalize">{u.role}</td>
               <td className="px-3 py-2">{u.isActive ? "Active" : <span className="text-destructive">Deactivated</span>}</td>
               <td className="px-3 py-2 text-right">
