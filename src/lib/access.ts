@@ -70,6 +70,11 @@ export const RESOURCES: Resource[] = [
   { key: "emp.payslips", label: "Salary slips", group: "Employee app", path: "/employee-app/payslips" },
   { key: "emp.requests", label: "Employee requests", group: "Employee app", path: "/employee-app/requests" },
   { key: "emp.accounts", label: "Accounts & sites", group: "Employee app", path: "/employee-app/accounts" },
+  { key: "store", label: "Store - stock overview", group: "Store", path: "/store" },
+  { key: "store.items", label: "Categories & items", group: "Store", path: "/store/items" },
+  { key: "store.in", label: "Stock in (purchases)", group: "Store", path: "/store/in" },
+  { key: "store.out", label: "Stock out (issues)", group: "Store", path: "/store/out" },
+  { key: "store.ledger", label: "Store ledger", group: "Store", path: "/store/ledger" },
   { key: "outstandings", label: "Outstandings", group: "Everyday", path: "/outstandings" },
   { key: "grn", label: "POD", group: "Everyday", path: "/pod" },
   // every Orders screen is its own resource
