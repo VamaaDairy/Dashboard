@@ -4,7 +4,7 @@ import { pinSignIn } from "@/lib/employee";
 
 export const dynamic = "force-dynamic";
 
-/** Sign in with mobile number and PIN (sales officers). Body: { phone, pin, device? }. Returns what /verify does. */
+/** Sign in with mobile number and PIN. Body: { phone, pin, device? }. Returns what /verify does. */
 export async function POST(req: NextRequest) {
   if (tooMany(req, "emp-pin", 8)) return fail(429, "Too many attempts. Please wait a minute.");
   const b = (await readJson(req, 2000)) as { phone?: unknown; pin?: unknown; device?: unknown } | null;
