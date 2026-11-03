@@ -3,7 +3,7 @@ import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import type { NextRequest } from "next/server";
 import { one, query } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
-import { pinMatches } from "@/lib/shop/rider";
+import { hashPin, pinMatches } from "@/lib/shop/rider";
 
 /** The Gaia Salesforce app is the staff app: everything an employee does with the company lives here. */
 
@@ -115,15 +115,18 @@ export type VerifyOutcome =
 
 /**
  * Checks the code. A number that belongs to an active employee (a login the office made, or the mobile on the staff
- * record) signs in. Any other number, when `signup` details are given, becomes a request the office reviews.
+ * record) signs in, and with `newPin` (Forgot PIN) that becomes their PIN. Any other number, when `signup` details
+ * are given, becomes a request the office reviews.
  */
 export async function verifyEmployee(
   phoneRaw: string,
   code: string,
   signup: { name?: string; email?: string; department?: string } | null,
   device: string | null,
+  newPin: string | null = null,
 ): Promise<VerifyOutcome> {
   const phone = normPhone(phoneRaw);
+  if (newPin !== null && !/^\d{4,8}$/.test(newPin)) return fail("The PIN must be 4 to 8 digits.");
   if (!(await consumeOtp(phone, code))) return fail("That code is wrong or has expired. Ask for a new one.");
 
   // a login the office made for this number, else the mobile saved on an active staff record
@@ -144,7 +147,10 @@ export async function verifyEmployee(
     }
   }
 
-  if (login) return signIn(login, device);
+  if (login) {
+    if (newPin) await query(`update emp_login set pin_hash = $2 where id = $1`, [login.id, hashPin(newPin)]);
+    return signIn(login, device);
+  }
 
   // not an employee on file yet
   const name = (signup?.name ?? "").trim().slice(0, 80);
@@ -171,24 +177,31 @@ async function signIn(login: { id: number; staff_uid: string; active: boolean },
 }
 
 /**
- * Sign-in with mobile number and PIN, for sales officers: the PIN is the one Gaia gave them for ordering
- * (their sales-officer login, dist_login). It opens the same staff app account the SMS code would.
+ * Sign-in with mobile number and PIN: the PIN the employee set (Forgot PIN sets one with an SMS code), or for a
+ * sales officer who has not set one, the PIN Gaia gave them for ordering (their sales-officer login).
  */
 export async function pinSignIn(phoneRaw: string, pin: string, device: string | null): Promise<VerifyOutcome> {
   const phone = normPhone(phoneRaw);
+  const wrong = fail("Wrong number or PIN. Forgot it? Tap Forgot PIN to set a new one.");
+  const own = await one<{ id: number; staff_uid: string; active: boolean; pin_hash: string | null }>(`select id, staff_uid, active, pin_hash from emp_login where phone = $1`, [phone]);
+  if (own?.pin_hash) return pinMatches(pin, own.pin_hash) ? signIn(own, device) : wrong;
+
   const so = await one<{ staff_uid: string; pin_hash: string; active: boolean }>(
     `select staff_uid, pin_hash, active from dist_login where phone = $1 and kind = 'salesman' and staff_uid is not null`,
     [phone],
   );
-  if (!so || !pinMatches(pin, so.pin_hash)) return fail("Wrong number or PIN. No PIN? Sign in with an SMS code instead.");
+  if (!so) return fail("No PIN is set for this number yet. Tap Forgot PIN to set one with an SMS code.");
+  if (!pinMatches(pin, so.pin_hash)) return wrong;
   if (!so.active) return fail("This account is switched off. Please contact HR.");
-  // the staff app login for this person; made now if they never signed in with a code
-  const login = await one<{ id: number; staff_uid: string; active: boolean }>(
-    `insert into emp_login (staff_uid, phone) values ($1, $2)
-     on conflict (staff_uid) do update set phone = emp_login.phone returning id, staff_uid, active`,
-    [so.staff_uid, phone],
-  ).catch(() => one<{ id: number; staff_uid: string; active: boolean }>(`select id, staff_uid, active from emp_login where staff_uid = $1`, [so.staff_uid]));
-  return login ? signIn(login, device) : fail("Could not sign you in. Please use an SMS code.");
+  // the staff app login for this person; made now if they never signed in before
+  const login =
+    (own && own.staff_uid === so.staff_uid ? own : null) ??
+    (await one<{ id: number; staff_uid: string; active: boolean }>(
+      `insert into emp_login (staff_uid, phone) values ($1, $2)
+       on conflict (staff_uid) do update set phone = emp_login.phone returning id, staff_uid, active`,
+      [so.staff_uid, phone],
+    ).catch(() => one<{ id: number; staff_uid: string; active: boolean }>(`select id, staff_uid, active from emp_login where staff_uid = $1`, [so.staff_uid])));
+  return login ? signIn(login, device) : fail("Could not sign you in. Tap Forgot PIN to set a PIN with an SMS code.");
 }
 
 /** Whether this number has an account request waiting for the office. */
