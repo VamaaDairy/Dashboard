@@ -3,6 +3,7 @@ import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import type { NextRequest } from "next/server";
 import { one, query } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
+import { pinMatches } from "@/lib/shop/rider";
 
 /** The Gaia Salesforce app is the staff app: everything an employee does with the company lives here. */
 
@@ -143,15 +144,7 @@ export async function verifyEmployee(
     }
   }
 
-  if (login) {
-    if (!login.active) return fail("This account is switched off. Please contact HR.");
-    const live = await one(`select 1 from fp_staff where uid = $1 and active = 1`, [login.staff_uid]);
-    if (!live) return fail("This employee record is not active. Please contact HR.");
-    const token = randomBytes(32).toString("hex");
-    await query(`update emp_login set token = $2, last_login = now(), device = $3 where id = $1`, [login.id, token, device?.slice(0, 120) ?? null]);
-    const employee = await one<Employee>(`${EMP_SELECT} where l.id = $1`, [login.id]);
-    return employee ? { ok: true, status: "signed_in", token, employee } : fail("Could not sign you in.");
-  }
+  if (login) return signIn(login, device);
 
   // not an employee on file yet
   const name = (signup?.name ?? "").trim().slice(0, 80);
@@ -164,6 +157,38 @@ export async function verifyEmployee(
     [phone, name, email || null, (signup?.department ?? "").trim().slice(0, 80) || null],
   );
   return { ok: true, status: "pending" };
+}
+
+/** Gives the employee's login a fresh session token (replacing any other phone's), if the person is still active. */
+async function signIn(login: { id: number; staff_uid: string; active: boolean }, device: string | null): Promise<VerifyOutcome> {
+  if (!login.active) return fail("This account is switched off. Please contact HR.");
+  const live = await one(`select 1 from fp_staff where uid = $1 and active = 1`, [login.staff_uid]);
+  if (!live) return fail("This employee record is not active. Please contact HR.");
+  const token = randomBytes(32).toString("hex");
+  await query(`update emp_login set token = $2, last_login = now(), device = $3 where id = $1`, [login.id, token, device?.slice(0, 120) ?? null]);
+  const employee = await one<Employee>(`${EMP_SELECT} where l.id = $1`, [login.id]);
+  return employee ? { ok: true, status: "signed_in", token, employee } : fail("Could not sign you in.");
+}
+
+/**
+ * Sign-in with mobile number and PIN, for sales officers: the PIN is the one Gaia gave them for ordering
+ * (their sales-officer login, dist_login). It opens the same staff app account the SMS code would.
+ */
+export async function pinSignIn(phoneRaw: string, pin: string, device: string | null): Promise<VerifyOutcome> {
+  const phone = normPhone(phoneRaw);
+  const so = await one<{ staff_uid: string; pin_hash: string; active: boolean }>(
+    `select staff_uid, pin_hash, active from dist_login where phone = $1 and kind = 'salesman' and staff_uid is not null`,
+    [phone],
+  );
+  if (!so || !pinMatches(pin, so.pin_hash)) return fail("Wrong number or PIN. No PIN? Sign in with an SMS code instead.");
+  if (!so.active) return fail("This account is switched off. Please contact HR.");
+  // the staff app login for this person; made now if they never signed in with a code
+  const login = await one<{ id: number; staff_uid: string; active: boolean }>(
+    `insert into emp_login (staff_uid, phone) values ($1, $2)
+     on conflict (staff_uid) do update set phone = emp_login.phone returning id, staff_uid, active`,
+    [so.staff_uid, phone],
+  ).catch(() => one<{ id: number; staff_uid: string; active: boolean }>(`select id, staff_uid, active from emp_login where staff_uid = $1`, [so.staff_uid]));
+  return login ? signIn(login, device) : fail("Could not sign you in. Please use an SMS code.");
 }
 
 /** Whether this number has an account request waiting for the office. */
