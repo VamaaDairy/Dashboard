@@ -73,7 +73,7 @@ export function BannerForm({ products, banner, onDone }: { products: ProductOpti
   const [subtitle, setSubtitle] = useState(banner?.subtitle ?? "");
   const [cta, setCta] = useState(banner?.cta ?? "");
   const [sku, setSku] = useState(banner?.sku ?? "");
-  const [bg, setBg] = useState(banner?.bgColor ?? "#7EAEF5");
+  const [bg, setBg] = useState(banner?.bgColor ?? "#2F3992");
   const [poster, setPoster] = useState<string | null>(banner?.image ?? null);
   const [removeImage, setRemoveImage] = useState(false);
   const [error, setError] = useState("");
@@ -95,7 +95,7 @@ export function BannerForm({ products, banner, onDone }: { products: ProductOpti
           setError("");
           if (onDone) return onDone();
           formRef.current?.reset();
-          setTitle(""); setSubtitle(""); setCta(""); setSku(""); setBg("#7EAEF5"); setPoster(null);
+          setTitle(""); setSubtitle(""); setCta(""); setSku(""); setBg("#2F3992"); setPoster(null);
         });
       }}
     >

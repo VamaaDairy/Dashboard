@@ -87,7 +87,7 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   const id = Number(text("id")) || null;
   const title = text("title");
   const sku = text("sku") || null;
-  const bg = text("bgColor") || "#7EAEF5";
+  const bg = text("bgColor") || "#2F3992";
   const priority = Number(text("priority") || 0);
   const starts = text("startsAt") || null;
   const ends = text("endsAt") || null;
