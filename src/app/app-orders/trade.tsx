@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Mail, MapPin, Phone, Smartphone } from "lucide-react";
+import { ArrowLeft, FileText, Mail, MapPin, Phone, Smartphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Panel, Pill } from "@/components/cn/ui";
@@ -114,6 +114,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
           actions={
             <div className="flex items-center gap-2">
               {decide && o.status.toLowerCase() === "pending" ? <OrderDecision id={o.uid} orderId={String(o.orderId)} decide={decideAppOrderAction} size="md" /> : null}
+              {o.appKind ? <Link href={`/app-orders/invoice/${o.uid}`} className={buttonVariants({ variant: "outline" })}><FileText className="size-4" /> Invoice</Link> : null}
               <Link href={back} className={buttonVariants({ variant: "outline" })}><ArrowLeft className="size-4" /> {t.title}</Link>
             </div>
           }

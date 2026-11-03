@@ -6,6 +6,7 @@ import { listAllProducts, type ShopProduct } from "@/lib/shop/catalog";
 import { hashPin, pinMatches } from "@/lib/shop/rider";
 import { loadRecord, saveRecord } from "@/lib/masters/entity/service";
 import { MASTERS } from "@/lib/masters/schemas";
+import { issueInvoice } from "./invoice";
 
 export { hashPin };
 
@@ -285,6 +286,15 @@ export async function placeDistOrder(
         [l.mrp, l.dp, l.qty, Math.round(l.qty * l.dp * 100) / 100, orderUid, l.uid, ++i],
       );
     }
+    // its GST invoice, numbered now; should that fail the order still stands and the invoice is issued when first opened
+    await c.query("savepoint invoice");
+    try {
+      await issueInvoice(c, orderUid);
+      await c.query("release savepoint invoice");
+    } catch (e) {
+      await c.query("rollback to savepoint invoice");
+      console.error("invoice for order", n, e);
+    }
     return { ok: true as const, orderId: n, total };
   });
 }
@@ -299,14 +309,26 @@ export interface DistOrderRow {
   total: number;
   /** why the office cancelled it */
   reason: string | null;
+  /** its GST invoice number, once issued */
+  invoiceNo: string | null;
   lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number }>;
+}
+
+/** The order's uid when this login may see it (as on its Orders list), else null. */
+export async function distOrderUid(login: DistLogin, orderId: number): Promise<string | null> {
+  const r = await one<{ uid: string }>(
+    `select b.uid from fp_booking_order b where b.order_id = $2 and ${login.kind !== "salesman" ? "b.from_firm_uid = $1" : "b.staff_uid = $1"}`,
+    [login.kind !== "salesman" ? login.firmUid : login.staffUid, orderId],
+  );
+  return r?.uid ?? null;
 }
 
 export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> {
   const rows = await query<Omit<DistOrderRow, "lines"> & { uid: string }>(
     `select b.uid, b.order_id as "orderId", b.booking_time as date, f.name as distributor, b.status,
             b.total_item as items, b.total_quantity as qty, b.total_cost as total,
-            nullif(trim(b.rejection_reason), '') as reason
+            nullif(trim(b.rejection_reason), '') as reason,
+            (select v.invoice_no from dist_invoice v where v.booking_order_uid = b.uid) as "invoiceNo"
      from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid
      where ${login.kind !== "salesman" ? "b.from_firm_uid = $1" : "b.staff_uid = $1"}
      order by b.booking_time desc limit 100`,
