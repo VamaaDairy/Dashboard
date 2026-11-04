@@ -135,6 +135,19 @@ export const getOrderByKey = (key: string) =>
 export const getOrderById = (id: number) =>
   Number.isInteger(id) && id > 0 ? one<ShopOrder>(`${WITH_ITEMS} where o.id = $1`, [id]) : Promise.resolve(null);
 
+/**
+ * A customer's orders for an invoice: every order whose day falls from [from] to [to] (YYYY-MM-DD, both
+ * included), oldest first. The day is the delivery day of a subscription order, else the day it was placed in India.
+ */
+export const listCustomerOrdersBetween = (customerId: number, phone: string, from: string, to: string) =>
+  query<ShopOrder & { bill_day: string }>(
+    `select f.*, to_char(f.day, 'YYYY-MM-DD') as bill_day from (
+       select w.*, coalesce(w.subscription_day, (w.created_at at time zone 'Asia/Kolkata')::date) as day
+       from (${WITH_ITEMS} where o.customer_id = $1 or o.phone = $2) w
+     ) f where f.day between $3::date and $4::date order by f.day, f.created_at`,
+    [customerId, phone, from, to],
+  );
+
 /** [q] matches the order number, customer name or phone, or the address. */
 export const listOrders = (status?: string, kind?: "regular" | "subscription", q?: string) => {
   const params: unknown[] = [];
