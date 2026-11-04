@@ -9,8 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import type { AppChannel, AppProduct } from "@/lib/products/app-products";
 import { cn } from "@/lib/utils";
 import {
-  addCategoryAction, addPhotoAction, addToListAction, createProductAction, makeFirstPhotoAction, moveCategoryAction, moveProductAction,
-  photosAction, removeFromListAction, removePhotoAction, renameCategoryAction, setPricesAction, updateProductAction,
+  addCategoryAction, addPhotoAction, addToListAction, categoryIconAction, createProductAction, descriptionAction, makeFirstPhotoAction,
+  moveCategoryAction, moveProductAction, photosAction, removeFromListAction, removePhotoAction, renameCategoryAction, setPricesAction, updateProductAction,
 } from "../actions";
 
 export type Line = AppProduct & { rate: number | null };
@@ -37,9 +37,11 @@ function useRun() {
   return { run, pending, error, setError };
 }
 
-export function ProductList({ channel, categories, lines, addable, canEdit }: {
+export function ProductList({ channel, categories, icons, lines, addable, canEdit }: {
   channel: AppChannel;
   categories: string[];
+  /** category name -> its icon link (only categories that have one) */
+  icons: Record<string, string>;
   lines: Line[];
   addable: Addable[];
   canEdit: boolean;
@@ -86,6 +88,7 @@ export function ProductList({ channel, categories, lines, addable, canEdit }: {
           <CategoryHeader
             channel={channel}
             name={g.name}
+            icon={icons[g.name] ?? null}
             count={g.lines.length}
             first={categories[0] === g.name}
             last={categories[categories.length - 1] === g.name}
@@ -136,13 +139,47 @@ export function ProductList({ channel, categories, lines, addable, canEdit }: {
 
 type Run = ReturnType<typeof useRun>["run"];
 
-function CategoryHeader({ channel, name, count, first, last, canEdit, run }: {
-  channel: AppChannel; name: string; count: number; first: boolean; last: boolean; canEdit: boolean; run: Run;
+function CategoryHeader({ channel, name, icon, count, first, last, canEdit, run }: {
+  channel: AppChannel; name: string; icon: string | null; count: number; first: boolean; last: boolean; canEdit: boolean; run: Run;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [text, setText] = useState(name);
+  const file = useRef<HTMLInputElement>(null);
+  const setIcon = (f: File | null) => {
+    const form = new FormData();
+    form.set("channel", channel);
+    form.set("name", name);
+    if (f) form.set("icon", f);
+    run(() => categoryIconAction(form));
+  };
   return (
     <div className="flex items-center gap-2 bg-muted/50 px-3 py-2">
+      {/* the category's icon in the app; without one the app shows the first product's photo */}
+      <div className="group relative size-9 shrink-0 overflow-hidden rounded-full border border-border bg-white">
+        {icon ? (
+          // eslint-disable-next-line @next/next/no-img-element -- category icons come from our own icon route
+          <img src={icon} alt="" className="size-full object-contain p-1" />
+        ) : (
+          <span className="flex size-full items-center justify-center text-[9px] leading-tight text-tertiary-foreground text-center">no icon</span>
+        )}
+        {canEdit ? (
+          <div className="absolute inset-0 hidden items-center justify-center gap-0.5 bg-white/90 group-hover:flex">
+            <button type="button" title={icon ? "Change category icon" : "Add category icon"} onClick={() => file.current?.click()}><ImagePlus className="size-3.5" /></button>
+            {icon ? <button type="button" title="Remove category icon" onClick={() => { if (confirm(`Remove the ${name} icon?`)) setIcon(null); }}><Trash2 className="size-3.5" /></button> : null}
+          </div>
+        ) : null}
+        <input
+          ref={file}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) setIcon(f);
+          }}
+        />
+      </div>
       {canEdit ? (
         <div className="flex">
           <Button variant="ghost" size="icon-sm" disabled={first} title="Move category up" onClick={() => run(() => moveCategoryAction(channel, name, -1))}><ArrowUp /></Button>
@@ -291,6 +328,7 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
   const [name, setName] = useState(l.own.name ?? l.name);
   const [size, setSize] = useState(l.own.size ?? l.size ?? "");
   const [category, setCategory] = useState(l.category);
+  const [description, setDescription] = useState(l.description ?? "");
   const [photos, setPhotos] = useState<Array<{ uid: string; url: string }> | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const loadPhotos = () => photosAction(channel, l.uid).then(setPhotos);
@@ -299,16 +337,16 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
   }, [channel, l.uid]);
 
   const save = () =>
-    run(
-      () =>
-        updateProductAction(channel, l.uid, {
-          // what equals the Product Master's own value is not stored, so a later Product Master change still flows through
-          name: name.trim() === l.masterName.trim() ? null : name,
-          size,
-          category,
-        }),
-      onClose,
-    );
+    run(async () => {
+      const r = await updateProductAction(channel, l.uid, {
+        // what equals the Product Master's own value is not stored, so a later Product Master change still flows through
+        name: name.trim() === l.masterName.trim() ? null : name,
+        size,
+        category,
+      });
+      if (!r.ok || description.trim() === (l.description ?? "").trim()) return r;
+      return descriptionAction(channel, l.uid, description);
+    }, onClose);
   const photoRun = (fn: () => Promise<Res | { ok: boolean; error?: string }>) => run(fn, () => void loadPhotos());
 
   return (
@@ -317,7 +355,7 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
         <DialogHeader>
           <DialogTitle>Edit product</DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{l.sku}</span> · Product Master name: {l.masterName}. Name, size and category apply to this list only; photos and MRP to every app.
+            <span className="font-mono">{l.sku}</span> · Product Master name: {l.masterName}. Name, size and category apply to this list only; photos, description and MRP to every app.
           </DialogDescription>
         </DialogHeader>
         <div className="mt-3 grid gap-3">
@@ -336,6 +374,17 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
               <datalist id="pm-categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
             </label>
           </div>
+          <label className="grid gap-1 text-[13px] font-medium">
+            <span>Description <span className="font-normal text-tertiary-foreground">shown on the product page, in every app</span></span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="e.g. Thick, creamy dahi set from fresh cow milk. Keep refrigerated."
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-foreground"
+            />
+          </label>
           {/* as the app will show it */}
           <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
             <div className="text-[10px] text-tertiary-foreground uppercase">In the app</div>

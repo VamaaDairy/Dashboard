@@ -137,7 +137,7 @@ async function firmAllowed(login: DistLogin, firmUid: string | undefined): Promi
 }
 
 /** Which Product Master list a login orders from: retailers the Retail list, distributors and sales officers the Distributors list. */
-const appChannelOf = (login: DistLogin): "retail" | "distributor" => (login.kind === "retailer" ? "retail" : "distributor");
+export const appChannelOf = (login: DistLogin): "retail" | "distributor" => (login.kind === "retailer" ? "retail" : "distributor");
 
 /** The catalogue the retail app shows, priced at this distributor's dealer price. */
 export async function catalogFor(login: DistLogin, firmUid: string | undefined): Promise<ShopProduct[] | null> {

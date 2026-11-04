@@ -115,3 +115,18 @@ export async function makeFirstPhotoAction(channel: AppChannel, productUid: stri
   const who = await editor(channel);
   return who ? done(await ap.makeFirstPhoto(productUid, photoUid, who)) : NO;
 }
+
+/** Form: channel, name (category), icon (file); no file = remove the icon. */
+export async function categoryIconAction(form: FormData) {
+  const channel = String(form.get("channel") ?? "") as AppChannel;
+  const who = await editor(channel);
+  if (!who) return NO;
+  const file = form.get("icon");
+  const icon = file instanceof File && file.size > 0 ? { bytes: Buffer.from(await file.arrayBuffer()), mime: file.type } : null;
+  return done(await ap.setCategoryIcon(channel, String(form.get("name") ?? ""), icon, who));
+}
+
+export async function descriptionAction(channel: AppChannel, uid: string, text: string) {
+  const who = await editor(channel);
+  return who ? done(await ap.setDescription(uid, text, who)) : NO;
+}
