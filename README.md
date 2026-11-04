@@ -198,23 +198,9 @@ Everything else in the file is accounted for: the loose cells that no formula re
 (curd dilution ratios, the ghee pack-transport derivations, "assumption random, no basis" against
 the shrikhand making charge) are carried as notes on the rows they belong to rather than dropped.
 
-## Deploying to Vercel
+## Deploying
 
-`vercel.json` runs a plain `npm run build` - no database scripts run during a deploy, and the `db/`
-folder is left out of the deployment (`.vercelignore`) and out of the build's type check (`tsconfig.json`).
-The build needs no database at all; pages read it when they are requested. Functions run in Cleveland
-(`cle1`), next to the Neon database in AWS us-east-2, with up to 60 s per request.
+See [docs/DEPLOY.md](docs/DEPLOY.md). The build needs no database; pages read it when they are requested.
 
-When a new `db/NNN_*.sql` migration is added, apply it to the hosted database by hand from this PC:
-`DATABASE_URL="<neon url>" npm run db:setup` (it only applies what that database hasn't had yet).
-
-1. **A hosted Postgres.** The local database on this PC can't be reached from Vercel. Create one on
-   Neon, Supabase or Vercel Postgres and copy its connection string (use the pooled one, with
-   `?sslmode=require`).
-2. **Copy your data across** (optional - a new database starts empty):
-   `pg_dump -Fc costing_erp > costing.dump` then `pg_restore --no-owner -d "<hosted url>" costing.dump`.
-3. **Environment variables** in the Vercel project (Settings → Environment Variables):
-   `DATABASE_URL`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`, and for Milk in
-   `VAMAA_API_BASE_URL`, `VAMAA_API_KEY`, `VAMAA_ORG_ID`, `VAMAA_USERNAME`, `VAMAA_PASSWORD`,
-   `VAMAA_CENTER_SHORT_NAME`.
-4. Import the GitHub repo in Vercel and deploy.
+When a new `db/NNN_*.sql` migration is added, apply it to the production database by hand:
+`DATABASE_URL="<production url>" npm run db:setup` (it only applies what that database hasn't had yet).
