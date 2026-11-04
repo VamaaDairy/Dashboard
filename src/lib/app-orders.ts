@@ -136,7 +136,7 @@ export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
   const lines = await query<TradeOrder["lines"][number]>(
     `select p.sku_code as sku, p.sku_name as name, i.quantity as qty, i.selling_price as rate, i.mrp, i.total_cost as amount,
             (select case when pi.data is not null then '/api/shop/product-image/' || pi.uid else pi.image_url end
-               from fp_product_image pi where pi.product_uid = p.uid order by pi.imagesno nulls last limit 1) as image
+               from fp_product_image pi where pi.product_uid = p.uid and pi.archived_at is null order by pi.imagesno nulls last limit 1) as image
      from fp_booking_order_item i join fp_product p on p.uid = i.product_uid
      where i.booking_order_uid = $1 order by i.order_item_number`,
     [uid],

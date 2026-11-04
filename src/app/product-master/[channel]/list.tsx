@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Eye, EyeOff, ImagePlus, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Eye, EyeOff, ImagePlus, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AppChannel, AppProduct } from "@/lib/products/app-products";
 import { cn } from "@/lib/utils";
 import {
-  addCategoryAction, addPhotoAction, addToListAction, categoryIconAction, createProductAction, descriptionAction, makeFirstPhotoAction,
-  moveCategoryAction, moveProductAction, photosAction, removeFromListAction, removePhotoAction, renameCategoryAction, setPricesAction, updateProductAction,
+  addCategoryAction, addPhotoAction, addToListAction, archivedPhotosAction, archivePhotoAction, categoryIconAction, createProductAction, descriptionAction, makeFirstPhotoAction,
+  moveCategoryAction, moveProductAction, photosAction, restorePhotoAction, removeFromListAction, removePhotoAction, renameCategoryAction, setPricesAction, updateProductAction,
 } from "../actions";
 
 export type Line = AppProduct & { rate: number | null };
@@ -331,9 +331,12 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
   const [description, setDescription] = useState(l.description ?? "");
   const [photos, setPhotos] = useState<Array<{ uid: string; url: string }> | null>(null);
   const file = useRef<HTMLInputElement>(null);
-  const loadPhotos = () => photosAction(channel, l.uid).then(setPhotos);
+  const [archived, setArchived] = useState<Array<{ uid: string; url: string }>>([]);
+  const [showArchive, setShowArchive] = useState(false);
+  const loadPhotos = () => Promise.all([photosAction(channel, l.uid).then(setPhotos), archivedPhotosAction(channel, l.uid).then(setArchived)]);
   useEffect(() => {
     photosAction(channel, l.uid).then(setPhotos);
+    archivedPhotosAction(channel, l.uid).then(setArchived);
   }, [channel, l.uid]);
 
   const save = () =>
@@ -403,7 +406,8 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
                   <img src={p.url} alt="" className="size-full object-contain" />
                   <div className="absolute inset-x-0 bottom-0 hidden justify-center gap-1 bg-white/90 py-0.5 group-hover:flex">
                     {i > 0 ? <button title="Make main photo" onClick={() => photoRun(() => makeFirstPhotoAction(channel, l.uid, p.uid))}><Star className="size-3.5" /></button> : null}
-                    <button title="Delete photo" onClick={() => { if (confirm("Delete this photo from the product?")) photoRun(() => removePhotoAction(channel, l.uid, p.uid)); }}><Trash2 className="size-3.5" /></button>
+                    <button title="Archive photo (hide it from the apps, keep it here)" onClick={() => photoRun(() => archivePhotoAction(channel, l.uid, p.uid))}><Archive className="size-3.5" /></button>
+                    <button title="Delete photo" onClick={() => { if (confirm("Delete this photo from the product for good? Archive keeps it instead.")) photoRun(() => removePhotoAction(channel, l.uid, p.uid)); }}><Trash2 className="size-3.5" /></button>
                   </div>
                 </div>
               ))}
@@ -433,6 +437,27 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
               />
             </div>
             {photos === null ? <p className="mt-1 text-[12px] text-tertiary-foreground">Loading photos…</p> : null}
+            {archived.length ? (
+              <div className="mt-2">
+                <button type="button" onClick={() => setShowArchive((v) => !v)} className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
+                  <Archive className="size-3.5" /> Archive ({archived.length}) {showArchive ? "- hide" : "- not shown in the apps"}
+                </button>
+                {showArchive ? (
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {archived.map((p) => (
+                      <div key={p.uid} className="group relative size-16 overflow-hidden rounded-md border border-dashed border-border bg-white opacity-70 hover:opacity-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- product photos come from our own photo route */}
+                        <img src={p.url} alt="" className="size-full object-contain" />
+                        <div className="absolute inset-x-0 bottom-0 hidden justify-center gap-1 bg-white/90 py-0.5 group-hover:flex">
+                          <button title="Restore to the product (goes last)" onClick={() => photoRun(() => restorePhotoAction(channel, l.uid, p.uid))}><ArchiveRestore className="size-3.5" /></button>
+                          <button title="Delete for good" onClick={() => { if (confirm("Delete this archived photo for good?")) photoRun(() => removePhotoAction(channel, l.uid, p.uid)); }}><Trash2 className="size-3.5" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>

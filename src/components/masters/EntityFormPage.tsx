@@ -22,7 +22,7 @@ export async function EntityFormPage({ slug, id }: { slug: string; id: string | 
     id !== null && def.entity.fields.some((f) => f.type === "photos")
       ? await query<{ id: string; url: string }>(
           `select uid::text as id, case when data is not null then '/api/shop/product-image/' || uid || '?v=' || extract(epoch from updated_at)::bigint else image_url end as url
-             from fp_product_image where product_uid = $1 order by imagesno nulls last`,
+             from fp_product_image where product_uid = $1 and archived_at is null order by imagesno nulls last`,
           [id],
         )
       : [];

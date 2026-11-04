@@ -14,7 +14,7 @@ export const products: MasterDef = {
     {
       key: "photo", label: "Photo", kind: "image",
       expr: `(select case when i.data is not null then '/api/shop/product-image/' || i.uid || '?v=' || extract(epoch from i.updated_at)::bigint else i.image_url end
-              from fp_product_image i where i.product_uid = p.uid order by i.imagesno nulls last limit 1)`,
+              from fp_product_image i where i.product_uid = p.uid and i.archived_at is null order by i.imagesno nulls last limit 1)`,
     },
     { key: "sku", label: "SKU", expr: "p.sku_code", kind: "mono" },
     { key: "name", label: "Product", expr: "p.sku_name" },
