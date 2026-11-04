@@ -121,7 +121,7 @@ const WITH_ITEMS = `
     -- the product's photo as it is now (the link saved with an old order may no longer open)
     select json_agg(json_build_object('sku_code', i.sku_code, 'name', i.name, 'qty', i.qty,
                                       'image_url', coalesce((select ${photoUrlOf("ph")} from fp_product p join fp_product_image ph on ph.product_uid = p.uid
-                                                             where p.sku_code = i.sku_code order by ph.imagesno nulls last limit 1), i.image_url),
+                                                             where p.sku_code = i.sku_code and ph.archived_at is null order by ph.imagesno nulls last limit 1), i.image_url),
                                       'unit_price', i.unit_price, 'line_total', i.line_total) order by i.id)
     from shop_order_item i where i.order_id = o.id), '[]'::json) as items,
     (select json_build_object('name', r.name, 'phone', r.phone, 'lat', r.lat, 'lng', r.lng, 'location_at', r.location_at)

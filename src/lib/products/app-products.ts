@@ -111,8 +111,8 @@ async function rows(channel: AppChannel, where = "true", params: unknown[] = [])
             nullif(trim(p.sku_size), '') as "masterSize", nullif(trim(a.name), '') as "ownName", nullif(trim(a.size), '') as "ownSize",
             nullif(trim(a.category), '') as "ownCategory", a.visible, a.sort, p.mrp::float as mrp, si.price::float as "shopPrice",
             nullif(trim(p.description), '') as description, coalesce(p.active, 0) = 1 and p.mrp > 0 as active,
-            (select ${photo()} from fp_product_image i where i.product_uid = p.uid order by i.imagesno nulls last limit 1) as image,
-            coalesce((select array_agg(${photo()} order by i.imagesno nulls last) from fp_product_image i where i.product_uid = p.uid), '{}') as images
+            (select ${photo()} from fp_product_image i where i.product_uid = p.uid and i.archived_at is null order by i.imagesno nulls last limit 1) as image,
+            coalesce((select array_agg(${photo()} order by i.imagesno nulls last) from fp_product_image i where i.product_uid = p.uid and i.archived_at is null), '{}') as images
      from app_product a
      join fp_product p on p.uid = a.product_uid
      left join shop_item si on si.sku_code = p.sku_code
@@ -415,8 +415,8 @@ export async function addPhoto(uid: string, bytes: Buffer, mime: string, first: 
   if (!owner) return { ok: false, error: "No employee to file the photo under - add one in Employee Profile first." };
   if (!(await one(`select 1 from fp_product where uid = $1`, [uid]))) return { ok: false, error: "That product no longer exists." };
   await tx(async (c) => {
-    if (first) await c.query(`update fp_product_image set imagesno = coalesce(imagesno, 0) + 1, updated_at = now() where product_uid = $1`, [uid]);
-    const n = first ? 1 : (await c.query<{ n: number }>(`select coalesce(max(imagesno), 0) + 1 as n from fp_product_image where product_uid = $1`, [uid])).rows[0].n;
+    if (first) await c.query(`update fp_product_image set imagesno = coalesce(imagesno, 0) + 1, updated_at = now() where product_uid = $1 and archived_at is null`, [uid]);
+    const n = first ? 1 : (await c.query<{ n: number }>(`select coalesce(max(imagesno), 0) + 1 as n from fp_product_image where product_uid = $1 and archived_at is null`, [uid])).rows[0].n;
     const id = randomUUID();
     await c.query(
       `insert into fp_product_image (uid, image_url, data, mime, source_url, imagesno, product_uid, staff_uid)
@@ -431,9 +431,38 @@ export async function addPhoto(uid: string, bytes: Buffer, mime: string, first: 
 /** The photos of a product, first one = what the apps show. */
 export async function photosOf(uid: string) {
   return query<{ uid: string; url: string }>(
-    `select i.uid, ${photo()} as url from fp_product_image i where i.product_uid = $1 order by i.imagesno nulls last, i.created_at`,
+    `select i.uid, ${photo()} as url from fp_product_image i where i.product_uid = $1 and i.archived_at is null order by i.imagesno nulls last, i.created_at`,
     [uid],
   );
+}
+
+/** The product's archived photos (no app shows them), most recently archived first. */
+export async function archivedPhotosOf(uid: string) {
+  return query<{ uid: string; url: string }>(
+    `select i.uid, ${photo()} as url from fp_product_image i where i.product_uid = $1 and i.archived_at is not null order by i.archived_at desc, i.imagesno`,
+    [uid],
+  );
+}
+
+/** Takes a photo out of the apps without deleting it; it waits in the product's Archive. */
+export async function archivePhoto(productUid: string, photoUid: string, who: string): Promise<Result> {
+  const r = await one(`update fp_product_image set archived_at = now(), updated_at = now() where uid = $1 and product_uid = $2 and archived_at is null returning uid`, [photoUid, productUid]);
+  if (!r) return { ok: false, error: "That photo is not on the product any more." };
+  await query(`insert into master_audit (actor, slug, record_id, action, summary) values ($1, 'fpproducts', $2, 'update', 'Photo archived')`, [who, productUid]);
+  return OK;
+}
+
+/** Puts an archived photo back on the product, after its other photos. */
+export async function restorePhoto(productUid: string, photoUid: string, who: string): Promise<Result> {
+  const r = await one(
+    `update fp_product_image set archived_at = null, updated_at = now(),
+            imagesno = (select coalesce(max(imagesno), 0) + 1 from fp_product_image where product_uid = $2 and archived_at is null)
+      where uid = $1 and product_uid = $2 and archived_at is not null returning uid`,
+    [photoUid, productUid],
+  );
+  if (!r) return { ok: false, error: "That photo is not in the archive any more." };
+  await query(`insert into master_audit (actor, slug, record_id, action, summary) values ($1, 'fpproducts', $2, 'update', 'Photo restored from archive')`, [who, productUid]);
+  return OK;
 }
 
 export async function removePhoto(productUid: string, photoUid: string, who: string): Promise<Result> {

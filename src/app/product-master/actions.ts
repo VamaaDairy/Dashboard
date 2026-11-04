@@ -97,6 +97,22 @@ export async function photosAction(channel: AppChannel, uid: string) {
   return ap.photosOf(uid);
 }
 
+export async function archivedPhotosAction(channel: AppChannel, uid: string) {
+  const me = await userFromToken((await cookies()).get("session")?.value);
+  if (!me || !ap.isAppChannel(channel) || !atLeast(levelFor(me, `productmaster.${channel}`), "view")) return [];
+  return ap.archivedPhotosOf(uid);
+}
+
+export async function archivePhotoAction(channel: AppChannel, productUid: string, photoUid: string) {
+  const who = await editor(channel);
+  return who ? done(await ap.archivePhoto(productUid, photoUid, who)) : NO;
+}
+
+export async function restorePhotoAction(channel: AppChannel, productUid: string, photoUid: string) {
+  const who = await editor(channel);
+  return who ? done(await ap.restorePhoto(productUid, photoUid, who)) : NO;
+}
+
 /** Form: channel, uid, photo (file), first ("1" = make it the main photo). */
 export async function addPhotoAction(form: FormData) {
   const who = await editor(String(form.get("channel") ?? "") as AppChannel);
