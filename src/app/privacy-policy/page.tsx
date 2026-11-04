@@ -3,7 +3,7 @@ import { GaiaLogo } from "@/components/brand";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Gaia Dairy",
-  description: "Privacy Policy for the Gaia Fresh platform, operated by Vamaa Dairy Private Limited.",
+  description: "Privacy Policy for the Gaia Fresh, Gaia Delivery Partner, Gaia Partners and Gaia Salesforce apps, operated by Vamaa Dairy Private Limited.",
 };
 
 const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: string[] }[] = [
@@ -23,6 +23,61 @@ const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: str
     title: "Your Information",
     paras: [
       "Please note that Your personally identifiable information, including Your name, phone number, email address, region, location, address and demographic information (age/gender), and other content as is voluntarily submitted by You on our Platform, such as reviews and ordering details, purchase history, usage, preference information, and transaction information may be stored with Us and may use it to process your requests and automatically complete forms for future transactions and to enable Us to offer better shopping experience for You.",
+    ],
+  },
+  {
+    title: "Apps Covered by This Policy",
+    paras: ["This Privacy Policy applies to the website www.gaiadairy.com and to all of the following apps published by Vamaa Dairy Private Limited:"],
+    list: [
+      "Gaia Fresh (Gaia Dairy), for customers who buy our products;",
+      "Gaia Delivery Partner, for our delivery boys and transporters;",
+      "Gaia Partners, for our distributors and retailers;",
+      "Gaia Salesforce, for our sales officers and other employees.",
+    ],
+    after: [
+      "The sections below explain what each partner and staff app collects. Everything else in this policy applies to all of them.",
+    ],
+  },
+  {
+    title: "Location",
+    list: [
+      "Gaia Fresh: only when you choose to use your current location to fill in a delivery address. The app never reads your location in the background.",
+      "Gaia Delivery Partner: your precise location while you are on duty, including when the screen is off or another app is open. A notification (“Sharing location while you deliver”) stays on the screen the whole time. It is used to show the customer where their order is, to plan routes and dispatch, and to record deliveries. Switching to off duty or signing out stops it.",
+      "Gaia Salesforce: your precise location when you punch in and out and when you check in at a store, and your route during the working day (from punch-in to punch-out), including when the screen is off. A notification stays on the screen while the route is being recorded. It is used for attendance, to confirm store visits and to work out travel claims. Nothing is recorded after you punch out.",
+      "Gaia Partners: only when you choose to use your current location to set your firm’s or delivery address.",
+    ],
+  },
+  {
+    title: "Partner and Staff Information",
+    list: [
+      "Gaia Delivery Partner: name, mobile number, vehicle number (transporters), the orders you deliver, delivery confirmation codes, and ratings that customers give you.",
+      "Gaia Partners: firm and owner name, mobile number, GSTIN, PAN, business address and location, orders, invoices and payment records.",
+      "Gaia Salesforce: your employee profile from our HR records (such as designation, department, date of birth, address, emergency contact, bank account and IFSC, PAN and the last four digits of Aadhaar), attendance, leave, expense claims with photos of receipts you attach, salary slips, an optional profile photo, and the store visits and orders you record.",
+      "All apps: your mobile number and PIN. The PIN is stored only in encrypted (hashed) form, and repeated wrong PINs lock the number for a short time. One-time codes for signing up or resetting a PIN are sent by SMS.",
+      "Fingerprint or face unlock, where offered, is checked by your phone. We never receive or store biometric data.",
+      "To send notifications (new orders, dispatch updates, approvals), the apps register a notification token for your device.",
+    ],
+  },
+  {
+    title: "Who Can See Partner and Staff Information",
+    paras: [
+      "This information is used only to run our business with you. It is seen by the Vamaa Dairy staff who need it, such as your manager, HR, accounts and dispatch. A customer sees their delivery partner’s name and phone number, and the partner’s live location only while the order is out for delivery. We do not sell this information.",
+    ],
+  },
+  {
+    title: "Service Providers",
+    paras: ["We use these service providers to run the apps. Each receives only what it needs:"],
+    list: [
+      "Google Firebase Cloud Messaging, to deliver notifications;",
+      "Ola Maps, for maps, address search and routes (map requests go through our server and carry only coordinates or the address being searched);",
+      "an SMS provider, to send one-time codes;",
+      "Easebuzz, to process online payments in Gaia Fresh.",
+    ],
+  },
+  {
+    title: "Keeping and Deleting Your Data",
+    paras: [
+      "We keep your information while your account is active and afterwards only for as long as the law requires (for example invoices, tax and payroll records) or as needed to settle disputes. Gaia Fresh customers can delete their account at production.vamadairy.in/delete-account. Users of Gaia Delivery Partner, Gaia Partners or Gaia Salesforce can ask for their account and its data to be deleted by writing to customercare@vamaadairy.com from their registered email or calling +91 8085959595 from their registered number. Records that we must keep by law (such as invoices, tax and payroll records) are retained for the period the law requires and are not used for anything else.",
     ],
   },
   {
@@ -93,7 +148,8 @@ export default function PrivacyPolicyPage() {
   return (
     <article className="mx-auto max-w-3xl px-5 py-10 text-sm leading-relaxed">
       <GaiaLogo className="mx-auto mb-6 w-40" />
-      <h1 className="mb-6 text-2xl font-semibold">Privacy Policy</h1>
+      <h1 className="mb-1 text-2xl font-semibold">Privacy Policy</h1>
+      <p className="mb-6 text-muted-foreground">Last updated: 4 November 2026</p>
       {SECTIONS.map((s, i) => (
         <section key={i} className="mb-6 space-y-3">
           {s.title && <h2 className="text-base font-semibold uppercase tracking-wide">{s.title}</h2>}
