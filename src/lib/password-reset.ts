@@ -22,19 +22,23 @@ const template = () =>
 const hashCode = (userId: string, code: string) =>
   createHmac("sha256", process.env.JWT_SECRET || "dev-secret-change-me").update(`${userId}:${code}`).digest("hex");
 
+export type SendResult = { status: "sent" | "wait"; masked: string } | { status: "no-mobile" };
+
 /**
- * Texts a reset code to the mobile number saved on an active account. Silent when no account has this
- * number (or a code was sent a moment ago), so the answer never reveals which numbers are registered.
- * Throws if the SMS gateway fails, so the caller can tell the user.
+ * Texts a reset code to the mobile number linked to the account with this email. Returns "no-mobile" when
+ * there is no such active account or it has no valid mobile number (nothing is sent). Throws if the SMS
+ * gateway fails, so the caller can tell the user.
  */
-export async function sendResetCode(phone: string): Promise<void> {
-  const u = await one<{ id: string; sent_at: Date | null }>(
-    `select u.id, r.sent_at from app_user u left join password_reset r on r.user_id = u.id
-      where u.mobile = $1 and u.is_active`,
-    [phone],
+export async function sendResetCode(email: string): Promise<SendResult> {
+  const u = await one<{ id: string; mobile: string | null; sent_at: Date | null }>(
+    `select u.id, u.mobile, r.sent_at from app_user u left join password_reset r on r.user_id = u.id
+      where lower(u.email) = lower($1) and u.is_active`,
+    [email.trim()],
   );
-  if (!u) return;
-  if (u.sent_at && Date.now() - new Date(u.sent_at).getTime() < RESEND_AFTER_SEC * 1000) return;
+  const phone = normPhone(u?.mobile);
+  if (!u || !phone) return { status: "no-mobile" };
+  const masked = `******${phone.slice(-4)}`;
+  if (u.sent_at && Date.now() - new Date(u.sent_at).getTime() < RESEND_AFTER_SEC * 1000) return { status: "wait", masked };
 
   const code = String(randomInt(100000, 1000000));
   await query(
@@ -44,18 +48,19 @@ export async function sendResetCode(phone: string): Promise<void> {
     [u.id, hashCode(u.id, code), CODE_TTL_MIN],
   );
   await sendSms(phone, template().replace("{otp}", code));
+  return { status: "sent", masked };
 }
 
 export type ResetResult = { ok: true } | { ok: false; error: string };
 
-/** Checks the code for this mobile number and, if right, sets the new password (and uses the code up). */
-export async function resetPassword(phone: string, code: string, newPassword: string): Promise<ResetResult> {
+/** Checks the code for this account and, if right, sets the new password (and uses the code up). */
+export async function resetPassword(email: string, code: string, newPassword: string): Promise<ResetResult> {
   const bad: ResetResult = { ok: false, error: "That code is wrong or has expired. Ask for a new one." };
   const u = await one<{ id: string; code_hash: string; attempts: number; expired: boolean }>(
     `select u.id, r.code_hash, r.attempts, r.expires_at < now() as expired
        from app_user u join password_reset r on r.user_id = u.id
-      where u.mobile = $1 and u.is_active`,
-    [phone],
+      where lower(u.email) = lower($1) and u.is_active`,
+    [email.trim()],
   );
   if (!u || u.expired || u.attempts >= MAX_ATTEMPTS) return bad;
 
