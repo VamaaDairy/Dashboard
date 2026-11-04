@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import "@/lib/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { liveSnapshot, type Live } from "@/lib/shop/live";
 

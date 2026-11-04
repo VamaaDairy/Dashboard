@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
+import { lockedMessage, pinCleared, pinFailed, pinLockedFor } from "@/lib/pin-guard";
 import { distLogin } from "@/lib/distributor";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +14,14 @@ export async function POST(req: NextRequest) {
   if (!/^[6-9]\d{9}$/.test(phone) || !/^\d{4,8}$/.test(pin)) return fail(400, "Enter your mobile number and PIN.");
   if (b?.kind === "salesman") return fail(403, "Sales officers sign in to the Gaia Salesforce app.");
   const kind = b?.kind === "distributor" || b?.kind === "retailer" ? b.kind : undefined;
+  const locked = await pinLockedFor("dist", phone);
+  if (locked) return fail(429, lockedMessage(locked));
   const r = await distLogin(phone, pin, kind);
-  if (!r) return fail(401, "Wrong number or PIN.");
+  if (!r) {
+    await pinFailed("dist", phone);
+    return fail(401, "Wrong number or PIN.");
+  }
+  await pinCleared("dist", phone);
   if (r === "inactive") return fail(403, "This account is inactive. Please contact Gaia to get it switched on.");
   return NextResponse.json({ token: r.token, login: { kind: r.login.kind, name: r.login.name, phone: r.login.phone } });
 }

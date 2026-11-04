@@ -43,11 +43,22 @@ export const fail = (status: number, error: string, fields?: Record<string, stri
 
 // These endpoints are public (the app has no login yet), so they defend themselves.
 
+/**
+ * The caller's address. IIS (ARR) in front of the app appends the address it saw as the LAST
+ * X-Forwarded-For entry (with a port), so only that one is trusted: anything before it was sent
+ * by the client and can be made up. The port is dropped so every connection from one address counts together.
+ */
+export function clientIp(req: NextRequest): string {
+  const last = (req.headers.get("x-forwarded-for") ?? "").split(",").pop()?.trim() ?? "";
+  const ip = last.startsWith("[") ? last.slice(1, last.indexOf("]")) : /^[\d.]+:\d+$/.test(last) ? last.split(":")[0] : last;
+  return ip || "unknown";
+}
+
 const hits = new Map<string, { n: number; reset: number }>();
 
 /** At most `max` calls per minute from one address. Resets with the process; the order code adds a per-phone limit in the database. */
 export function tooMany(req: NextRequest, bucket: string, max: number): boolean {
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  const ip = clientIp(req);
   const key = `${bucket}:${ip}`;
   const now = Date.now();
   const h = hits.get(key);

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import "@/lib/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { teamSnapshot, teamTrail } from "@/app/employee-app/actions";
 import type { TeamMember, TrailPoint, TrailVisit } from "@/lib/employee/admin";
