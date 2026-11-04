@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { one, query, tx } from "@/lib/db";
-import { photoUrlOf, type ShopProduct } from "@/lib/shop/catalog";
+import { PUBLIC_URL, photoUrlOf, type ShopProduct } from "@/lib/shop/catalog";
 import { displayName, shopCategory } from "@/lib/shop/pricing";
 
 /**
@@ -287,9 +287,10 @@ export async function renameCategory(channel: AppChannel, from: string, to: stri
   await tx(async (c) => {
     await c.query(`update app_product set category = $3, updated_at = now() where channel = $1 and product_uid = any($2::uuid[])`, [channel, uids, name]);
     await c.query(
-      `insert into app_category (channel, name, sort)
-       select $1, $3, sort from app_category where channel = $1 and name = $2
-       on conflict (channel, name) do nothing`,
+      `insert into app_category (channel, name, sort, icon_data, icon_mime)
+       select $1, $3, sort, icon_data, icon_mime from app_category where channel = $1 and name = $2
+       on conflict (channel, name) do update set icon_data = coalesce(app_category.icon_data, excluded.icon_data),
+         icon_mime = coalesce(app_category.icon_mime, excluded.icon_mime)`,
       [channel, from, name],
     );
     await c.query(`delete from app_category where channel = $1 and name = $2`, [channel, from]);
@@ -525,4 +526,57 @@ export async function createProduct(input: NewProduct, channels: AppChannel[], w
     return id;
   });
   return { ok: true, uid };
+}
+
+// ---------------------------------------------------------------- category icons and descriptions
+
+/** The link of each category's own icon on this list (versioned, so a new upload is not served from cache). */
+export async function categoryIcons(channel: AppChannel): Promise<Map<string, string>> {
+  const rows = await query<{ name: string; v: string }>(
+    `select name, extract(epoch from updated_at)::bigint::text as v from app_category where channel = $1 and icon_data is not null`,
+    [channel],
+  );
+  return new Map(rows.map((r) => [r.name, `${PUBLIC_URL}/api/shop/category-icon/${channel}/${encodeURIComponent(r.name)}?v=${r.v}`]));
+}
+
+export async function categoryIcon(channel: string, name: string): Promise<{ bytes: Buffer; mime: string } | null> {
+  if (!isAppChannel(channel)) return null;
+  const r = await one<{ data: Buffer; mime: string | null }>(
+    `select icon_data as data, icon_mime as mime from app_category where channel = $1 and name = $2 and icon_data is not null`,
+    [channel, name],
+  );
+  return r ? { bytes: r.data, mime: r.mime ?? "image/png" } : null;
+}
+
+/** Sets (bytes) or removes (null) a category's icon on this list. */
+export async function setCategoryIcon(channel: AppChannel, name: string, icon: { bytes: Buffer; mime: string } | null, who: string): Promise<Result> {
+  if (icon) {
+    if (!PHOTO_TYPES.has(icon.mime)) return { ok: false, error: "The icon must be a JPG, PNG or WebP image." };
+    if (icon.bytes.length > PHOTO_MAX) return { ok: false, error: "The icon must be under 4 MB." };
+  }
+  const { categories } = await appList(channel);
+  if (!categories.includes(name)) return { ok: false, error: "That category is not on this list." };
+  // a category used by products but never ordered has no row yet: give it one at the end
+  await query(
+    `insert into app_category (channel, name, sort, icon_data, icon_mime, updated_at)
+     values ($1, $2, coalesce((select max(sort) from app_category where channel = $1), 0) + 10, $3, $4, now())
+     on conflict (channel, name) do update set icon_data = excluded.icon_data, icon_mime = excluded.icon_mime, updated_at = now()`,
+    [channel, name, icon?.bytes ?? null, icon?.mime ?? null],
+  );
+  await audit(who, channel, name, "update", `${label(channel)}: category ${name} icon ${icon ? "changed" : "removed"}`);
+  return OK;
+}
+
+/** The product's description (Product Master, so every app shows the same text); empty = none. */
+export async function setDescription(uid: string, text: string, who: string): Promise<Result> {
+  const d = text.replace(/\r\n/g, "\n").trim().slice(0, 2000) || null;
+  const r = await one<{ before: string | null }>(
+    `update fp_product p set description = $2 from (select description as before from fp_product where uid = $1) o where p.uid = $1 returning o.before`,
+    [uid, d],
+  );
+  if (!r) return { ok: false, error: "That product no longer exists." };
+  if ((r.before ?? null) !== d) {
+    await query(`insert into master_audit (actor, slug, record_id, action, summary) values ($1, 'fpproducts', $2, 'update', 'Description changed')`, [who, uid]);
+  }
+  return OK;
 }

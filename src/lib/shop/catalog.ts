@@ -17,7 +17,7 @@ export interface ShopProduct {
 }
 
 /** Where the app reaches this server: stored photos are given to it as full links. */
-const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy.in").replace(/\/+$/, "").replace(/'/g, "");
+export const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy.in").replace(/\/+$/, "").replace(/'/g, "");
 
 /** A photo's link: our own copy when we hold the picture (versioned, so a new upload is not served from cache), else the imported link. */
 export const photoUrlOf = (a: string) =>
