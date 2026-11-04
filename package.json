@@ -40,7 +40,7 @@
     "maplibre-gl": "^6.16.0",
     "mssql": "^12.7.11",
     "next": "^16.4.5",
-    "nodemailer": "^10.1.7",
+    "nodemailer": "^10.3.1",
     "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
