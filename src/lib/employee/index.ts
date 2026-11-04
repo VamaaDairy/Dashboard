@@ -3,6 +3,7 @@ import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import type { NextRequest } from "next/server";
 import { one, query } from "@/lib/db";
 import { sendSms } from "@/lib/sms";
+import { pinCleared } from "@/lib/pin-guard";
 import { hashPin, pinMatches } from "@/lib/shop/rider";
 
 /** The Gaia Salesforce app is the staff app: everything an employee does with the company lives here. */
@@ -148,7 +149,10 @@ export async function verifyEmployee(
   }
 
   if (login) {
-    if (newPin) await query(`update emp_login set pin_hash = $2 where id = $1`, [login.id, hashPin(newPin)]);
+    if (newPin) {
+      await query(`update emp_login set pin_hash = $2 where id = $1`, [login.id, hashPin(newPin)]);
+      await pinCleared("emp", phone); // a PIN set with an SMS code ends any wrong-PIN lock
+    }
     return signIn(login, device);
   }
 
