@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Beaker, BarChart3, Boxes, CalendarDays, ChevronRight, ClipboardCheck, Contact, ShoppingBag, Cylinder, Database, Droplets, FileClock, Fuel, Home, LogOut,
-  MapPinned, MessageCircle, Package, PackageCheck, PackageSearch, Smartphone, Store, Tags, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Warehouse, Zap,
+  MapPinned, MessageCircle, Package, PackageCheck, PackageSearch, Route, Smartphone, Store, Tags, ReceiptText, RefreshCw, Scale, Settings2, Sparkles, Target, Truck, UserPlus, Users, Warehouse, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -114,6 +114,15 @@ const DAILY: NavItem[] = [
       { href: "/app-orders/d2c", key: "apporders", label: "D2C" },
       { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
       { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },
+    ],
+  },
+  {
+    href: "/route-orders", key: "routeorders", label: "Route orders", icon: Route,
+    children: [
+      { href: "/route-orders", key: "routeorders", label: "Route sheet", exact: true },
+      { href: "/route-orders/products", key: "routeorders", label: "Product totals" },
+      { href: "/route-orders/billing", key: "routeorders.billing", label: "Billing" },
+      { href: "/route-orders/masters", key: "routeorders.masters", label: "Customers & products" },
     ],
   },
   {

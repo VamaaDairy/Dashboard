@@ -51,6 +51,9 @@ export const RESOURCES: Resource[] = [
   { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
   { key: "shop", label: "Online shop orders", group: "Everyday", path: "/shop-orders" },
   { key: "apporders", label: "App orders (D2C, retailers, distributors)", group: "Everyday", path: "/app-orders" },
+  { key: "routeorders", label: "Route sheet & product totals", group: "Route orders", path: "/route-orders" },
+  { key: "routeorders.billing", label: "Billing & Tally file", group: "Route orders", path: "/route-orders/billing" },
+  { key: "routeorders.masters", label: "Customers & products", group: "Route orders", path: "/route-orders/masters" },
   { key: "pricelist", label: "Price list (customer prices)", group: "Everyday", path: "/price-list" },
   // each app list is its own permission: access to one does not open the others
   { key: "productmaster.d2c", label: "D2C app products", group: "Product Master", path: "/product-master/d2c" },
