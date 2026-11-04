@@ -559,13 +559,16 @@ export async function createProduct(input: NewProduct, channels: AppChannel[], w
 
 // ---------------------------------------------------------------- category icons and descriptions
 
-/** The link of each category's own icon on this list (versioned, so a new upload is not served from cache). */
+/**
+ * The link of each category's own icon on this list (versioned, so a new upload is not served from cache). The name goes
+ * in the query string: IIS in front of the app rejects an encoded `&` in a path ("Lassi & Chass" -> 400).
+ */
 export async function categoryIcons(channel: AppChannel): Promise<Map<string, string>> {
   const rows = await query<{ name: string; v: string }>(
     `select name, extract(epoch from updated_at)::bigint::text as v from app_category where channel = $1 and icon_data is not null`,
     [channel],
   );
-  return new Map(rows.map((r) => [r.name, `${PUBLIC_URL}/api/shop/category-icon/${channel}/${encodeURIComponent(r.name)}?v=${r.v}`]));
+  return new Map(rows.map((r) => [r.name, `${PUBLIC_URL}/api/shop/category-icon/${channel}?c=${encodeURIComponent(r.name)}&v=${r.v}`]));
 }
 
 export async function categoryIcon(channel: string, name: string): Promise<{ bytes: Buffer; mime: string } | null> {
