@@ -10,6 +10,7 @@ process.env.EASEBUZZ_KEY = "TESTKEY";
 process.env.EASEBUZZ_SALT = "TESTSALT";
 process.env.EASEBUZZ_ENV = "test";
 process.env.AUTOPAY_FAST = "1";
+process.env.AUTOPAY_ENABLED = "1";
 if (!/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL ?? "")) throw new Error("Local database only.");
 
 const sha = (...p: Array<string | number>) => createHash("sha512").update([...p.map(String), "TESTSALT"].join("|")).digest("hex");
