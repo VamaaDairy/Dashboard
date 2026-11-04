@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Store, UserX } from "lucide-react";
+import { Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Store, UserX, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusSelect } from "@/components/shop/StatusSelect";
 import { AssignSelect } from "@/components/shop/AssignSelect";
@@ -37,6 +37,9 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
             </Link>
             <Link href="/shop-orders/subscriptions" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
               <CalendarClock className="h-4 w-4" /> Subscriptions
+            </Link>
+            <Link href="/shop-orders/autopay" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
+              <Repeat className="h-4 w-4" /> Autopay
             </Link>
             <Link href="/shop-orders/banners" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
               <GalleryHorizontal className="h-4 w-4" /> Banners

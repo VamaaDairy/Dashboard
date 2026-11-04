@@ -1,4 +1,5 @@
 import "server-only";
+import { required as autopayRequired } from "./autopay";
 import { query, tx } from "@/lib/db";
 import { notifyOrderStatus, notifySubscription } from "@/lib/push";
 import { pricesFor } from "./catalog";
@@ -333,8 +334,21 @@ export async function generateOrders(day: string): Promise<{ created: number; it
     byCustomer.set(s.customer_id, [...(byCustomer.get(s.customer_id) ?? []), { sub: s, qty }]);
   }
 
+  // customers paying by UPI Autopay get autopay orders (no cash); with autopay required, no mandate means no order
+  const autopay = new Set(
+    (await query<{ customer_id: number }>(
+      `select distinct customer_id from shop_mandate where status = 'authorized' and end_date >= $1::date and customer_id = any($2)`,
+      [day, [...byCustomer.keys()]],
+    )).map((r) => r.customer_id),
+  );
+  const mustAutopay = autopayRequired();
+
   let created = 0, items = 0;
   for (const [customerId, lines] of byCustomer) {
+    if (mustAutopay && !autopay.has(customerId)) {
+      skipped += lines.length;
+      continue;
+    }
     const to = lines[lines.length - 1].sub; // the newest subscription's address
     const rows = lines.map(({ sub, qty }) => {
       const p = prices.get(sub.sku_code)!;
@@ -344,10 +358,10 @@ export async function generateOrders(day: string): Promise<{ created: number; it
     const fee = deliveryFor(subtotal, deliveryRule);
     const made = await tx(async (c) => {
       const o = await c.query(
-        `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, status, customer_id, subscription_day)
-         values ($1, $2, $3, $4, 'Subscription delivery', $5, $6, $7, $8, $9, 'confirmed', $10, $11)
+        `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, status, customer_id, subscription_day, payment_method)
+         values ($1, $2, $3, $4, 'Subscription delivery', $5, $6, $7, $8, $9, 'confirmed', $10, $11, $12)
          on conflict do nothing returning id`,
-        [to.name, to.phone, to.address, to.pincode, to.lat, to.lng, subtotal, fee, subtotal + fee, customerId, day],
+        [to.name, to.phone, to.address, to.pincode, to.lat, to.lng, subtotal, fee, subtotal + fee, customerId, day, autopay.has(customerId) ? "autopay" : "cod"],
       );
       if (!o.rows.length) return 0;
       for (const r of rows) {

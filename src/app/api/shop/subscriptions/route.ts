@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { customerFromRequest } from "@/lib/shop/customer";
+import { activeMandate, required as autopayRequired } from "@/lib/shop/autopay";
 import { createSubscription, customerCalendar, parsePlan, setDay, todayIST, type PlanInput } from "@/lib/shop/subscriptions";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,10 @@ export async function POST(req: NextRequest) {
   if (!b) return fail(400, "Send a JSON body.");
   const p = parsePlan(b);
   if (!p.ok) return fail(400, p.error);
+  // subscriptions are paid by UPI Autopay, never cash: the app sets autopay up first ({ code } tells it to)
+  if (autopayRequired() && !(await activeMandate(c.id))) {
+    return NextResponse.json({ error: "Set up UPI Autopay to start a subscription.", code: "autopay_required" }, { status: 402 });
+  }
 
   const name = String(b.name ?? c.name ?? "").trim();
   const phone = String(b.phone ?? c.phone ?? "").replace(/\D/g, "").slice(-10);

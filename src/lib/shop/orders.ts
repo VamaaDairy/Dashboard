@@ -1,4 +1,5 @@
 import "server-only";
+import { chargeDelivered } from "./autopay";
 import { one, query, tx } from "@/lib/db";
 import { shop } from "@/lib/whatsapp/config";
 import { notifyOrderStatus, notifyRiderAssigned } from "@/lib/push";
@@ -153,12 +154,14 @@ export const listOrders = (status?: string, kind?: "regular" | "subscription", q
 export async function setOrderStatus(id: number, status: string): Promise<boolean> {
   const r = await query<{ changed: boolean }>(
     `update shop_order o set status = $2, updated_at = now(),
-       payment_status = case when $2 = 'delivered' then 'paid' else o.payment_status end
+       -- cash is collected at the door; an autopay order is paid when its debit goes through
+       payment_status = case when $2 = 'delivered' and o.payment_method <> 'autopay' then 'paid' else o.payment_status end
      from (select id, status as was from shop_order where id = $1) p
      where o.id = p.id returning p.was is distinct from $2 as changed`,
     [id, status],
   );
   if (r[0]?.changed) await notifyOrderStatus(id, status);
+  if (r[0]?.changed && status === "delivered") await chargeDelivered(id);
   return r.length > 0;
 }
 
@@ -226,12 +229,14 @@ export async function riderDeliver(riderId: number, id: number, otp: string): Pr
   if (o.delivery_otp !== otp) return "wrong_otp";
   // the rider's rate at the moment of handover is what this delivery earned them
   await query(
-    `update shop_order set status = 'delivered', delivered_at = now(), payment_status = 'paid', updated_at = now(),
+    `update shop_order set status = 'delivered', delivered_at = now(), updated_at = now(),
+            payment_status = case when payment_method = 'autopay' then payment_status else 'paid' end,
             rider_pay = (select pay_per_delivery from shop_rider where id = $2)
       where id = $1`,
     [id, riderId],
   );
   await notifyOrderStatus(id, "delivered");
+  await chargeDelivered(id);
   return "ok";
 }
 

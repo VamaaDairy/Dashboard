@@ -19,6 +19,14 @@ export async function register() {
     } catch (e) {
       console.error("[subscriptions] auto-create failed:", e instanceof Error ? e.message : e);
     }
+    // UPI Autopay: read back what's waiting on Easebuzz; in the evening window, debit and send notices
+    try {
+      const { runAutopay } = await import("@/lib/shop/autopay");
+      const r = await runAutopay();
+      if (r.notified || r.debited) console.log(`[autopay] ${r.notified} notice(s) sent, ${r.debited} debit(s) raised, ${r.checked} checked`);
+    } catch (e) {
+      console.error("[autopay] run failed:", e instanceof Error ? e.message : e);
+    }
   };
   g.__subscriptionTimer = setInterval(tick, 10 * 60 * 1000);
   setTimeout(tick, 30 * 1000);
