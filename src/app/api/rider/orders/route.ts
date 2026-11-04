@@ -19,6 +19,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     // where orders are collected, marked on the rider's maps
     store: store(),
-    orders: orders.map((o) => ({ ...orderJson(o), id: o.id, deliveryOtp: undefined, stop: o.delivery_seq, legM: o.delivery_leg_m })),
+    orders: orders.map((o) => ({
+      ...orderJson(o),
+      id: o.id,
+      deliveryOtp: undefined,
+      stop: o.delivery_seq,
+      legM: o.delivery_leg_m,
+      // UPI Autopay orders are charged to the customer's bank after delivery: nothing to collect at the door
+      // (the rider app treats anything not 'paid' as cash)
+      ...(o.payment_method === "autopay" ? { paymentStatus: "paid" } : {}),
+    })),
   });
 }
