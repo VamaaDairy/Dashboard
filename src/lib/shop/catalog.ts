@@ -1,6 +1,6 @@
 import "server-only";
 import { query } from "@/lib/db";
-import { appCatalog } from "@/lib/products/app-products";
+import { appCatalog, appCatalogWithUnavailable } from "@/lib/products/app-products";
 
 export interface ShopProduct {
   sku: string;
@@ -14,6 +14,8 @@ export interface ShopProduct {
   image: string | null;
   /** Every photo, first one = `image`; the app's product page swipes through them. */
   images: string[];
+  /** false: hidden or switched off - the new app shows it greyed as out of stock (only with ?all=1). */
+  available?: boolean;
 }
 
 /** Where the app reaches this server: stored photos are given to it as full links. */
@@ -34,6 +36,11 @@ export async function listAllProducts(channel: "retail" | "distributor"): Promis
 /** Everything on sale in the D2C app, in the order it shows it (Product Master > D2C). */
 export async function listProducts(): Promise<ShopProduct[]> {
   return appCatalog("d2c");
+}
+
+/** The D2C list for display: on sale, plus the hidden / switched-off ones marked unavailable (out of stock). */
+export async function listProductsForDisplay(): Promise<ShopProduct[]> {
+  return appCatalogWithUnavailable("d2c");
 }
 
 export async function getProduct(sku: string): Promise<ShopProduct | null> {

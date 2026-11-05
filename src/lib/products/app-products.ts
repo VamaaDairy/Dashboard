@@ -192,6 +192,36 @@ export async function appCatalog(channel: AppChannel, skus?: string[]): Promise<
   }));
 }
 
+/**
+ * The list as the new D2C app shows it: what is on sale, then (last in each category) the hidden or switched-off
+ * products that have an MRP, marked `available: false` - the app shows those greyed as out of stock. Only for
+ * display: orders and prices always go through [appCatalog] (on sale only).
+ */
+export async function appCatalogWithUnavailable(channel: AppChannel): Promise<ShopProduct[]> {
+  const raw = await rows(channel, `p.mrp > 0`);
+  const products = raw.map(shape);
+  const cats = await categoryOrder(channel, products.map((p) => p.category));
+  const sorts = new Map(raw.map((r) => [r.uid, r.sort]));
+  const ordered = inOrder(products, sorts, cats);
+  const on = (p: AppProduct) => p.visible && p.active;
+  // within each category: the ones on sale first, out of stock after them
+  const byCat = new Map<string, AppProduct[]>();
+  for (const p of ordered) byCat.set(p.category, [...(byCat.get(p.category) ?? []), p]);
+  return [...byCat.values()].flatMap((list) => [...list.filter(on), ...list.filter((p) => !on(p))]).map((p) => ({
+    sku: p.sku,
+    name: p.name,
+    category: p.category,
+    subCategory: p.category,
+    size: p.size,
+    mrp: p.mrp,
+    price: p.shopPrice ?? p.mrp,
+    description: p.description,
+    image: p.image,
+    images: p.images,
+    available: on(p),
+  }));
+}
+
 /** "Gaia Toned Milk" + "500 ml": the full name for an order line or a message. */
 export const fullName = (p: { name: string; size: string | null }) => (p.size ? `${p.name} ${p.size}` : p.name);
 
