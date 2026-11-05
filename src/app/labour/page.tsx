@@ -1,4 +1,4 @@
-import { Users } from "lucide-react";
+import { FileSpreadsheet, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { LabourDay } from "@/components/daily/HeadDayEntry";
 import { getHeadDay, getHeadDays, getLabourRates, getLabourShifts } from "@/lib/daily/heads";
@@ -20,6 +20,20 @@ export default async function LabourPage({ searchParams }: PageProps<"/labour">)
           icon={Users}
           title="Labour"
           subtitle="Day, night and contract labour each day. Divided across that day's production by milk processed."
+          actions={
+            // a plain form: the browser downloads the file straight from /labour/export
+            <form action="/labour/export" method="get" className="flex flex-wrap items-center gap-2 text-sm">
+              <label className="flex items-center gap-1 text-muted-foreground">
+                From <input type="date" name="from" defaultValue={`${now.slice(0, 7)}-01`} max={now} className="h-8 rounded-md border border-input bg-background px-2 text-foreground" />
+              </label>
+              <label className="flex items-center gap-1 text-muted-foreground">
+                To <input type="date" name="to" defaultValue={now} max={now} className="h-8 rounded-md border border-input bg-background px-2 text-foreground" />
+              </label>
+              <button type="submit" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 font-medium hover:bg-muted">
+                <FileSpreadsheet className="size-4" /> Export to Excel
+              </button>
+            </form>
+          }
         />
         {/* keyed by date so the entry starts from that day's saved values */}
         <LabourDay key={date} date={date} today={now} entry={entry} history={history} shifts={shifts} rates={rates} />
