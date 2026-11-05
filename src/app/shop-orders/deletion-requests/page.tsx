@@ -24,20 +24,21 @@ export default async function DeletionRequestsPage() {
         <PageHeader
           icon={UserX}
           title="Account deletion requests"
-          subtitle="Gaia app customers who asked for their account to be deleted, from the public page /delete-account. Delete within 7 days, then mark it done."
+          subtitle="Customers (public page /delete-account) and delivery partners (Delete my account in the Delivery Partner app) who asked for their account to be deleted. A partner's account is switched off at once. Delete within 7 days, then mark it done."
         />
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-              <tr>{["Asked on", "Customer", "Mobile", "Reason", "Status", ""].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}</tr>
+              <tr>{["Asked on", "Who", "Name", "Mobile", "Reason", "Status", ""].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}</tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">No requests yet.</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">No requests yet.</td></tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-border align-top">
                   <td className="whitespace-nowrap px-3 py-2">{when(r.created_at)}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{r.kind === "delivery_partner" ? "Delivery partner" : "Customer"}</td>
                   <td className="px-3 py-2 font-medium">{r.name}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.phone}</td>
                   <td className="max-w-sm px-3 py-2 text-muted-foreground">{r.reason ?? "—"}</td>
