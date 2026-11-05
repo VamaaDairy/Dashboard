@@ -4,11 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import { deleteMovement } from "@/app/tanks/actions";
+import { deleteCan, deleteMovement } from "@/app/tanks/actions";
 import {
   DeleteButton, Empty, Num, Section, THead, Th,
 } from "./ui";
-import { TankForm } from "./TankList";
+import { CansForm, TankForm } from "./TankList";
 import { TakeOutDialog } from "./TakeOutDialog";
 import { EditTankDialog } from "./EditTankDialog";
 import { formatNumber } from "@/lib/format";
@@ -116,7 +116,7 @@ export function TankDayBoard({
   movements: DayMovementRow[];
   kgPerLitre: number;
 }) {
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<"tank" | "cans" | null>(null);
   const [takingFrom, setTakingFrom] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const kgFat = (d: TankDay) => kgOfSolid(d.close_litre, d.close_fat_pct, kgPerLitre) ?? 0;
@@ -131,12 +131,17 @@ export function TankDayBoard({
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <DateBar date={date} today={today} basePath="/tanks" />
-        <button
-          onClick={() => setAdding((v) => !v)}
-          className="text-[12px] font-semibold text-muted-foreground hover:text-foreground"
-        >
-          {adding ? "Cancel" : "+ Add tank"}
-        </button>
+        <div className="flex items-center gap-4">
+          {(["tank", "cans"] as const).map((what) => (
+            <button
+              key={what}
+              onClick={() => setAdding((v) => (v === what ? null : what))}
+              className="text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+            >
+              {adding === what ? "Cancel" : what === "tank" ? "+ Add tank" : "+ Add cans"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -155,7 +160,8 @@ export function TankDayBoard({
         title={`Tanks · ${date}`}
         description="Milk comes in from Milk in. Rate is the weighted average ₹/L of everything in the tank; cost = litres × rate. Use the icons at the end of a row to take milk out or edit the litres, fat and SNF by hand."
       >
-        {adding ? <TankForm onDone={() => setAdding(false)} /> : null}
+        {adding === "tank" ? <TankForm onDone={() => setAdding(null)} /> : null}
+        {adding === "cans" ? <CansForm onDone={() => setAdding(null)} /> : null}
         <div className="overflow-x-auto">
           <table className="w-full whitespace-nowrap text-[13px]">
             <THead>
@@ -211,6 +217,7 @@ export function TankDayBoard({
                           className="rounded-md p-1.5 text-foreground hover:bg-muted">
                           <Pencil className="h-4 w-4" />
                         </button>
+                        {/^can_\d+$/.test(d.code) && empty ? <DeleteButton onDelete={() => deleteCan(d.tank_id)} confirmLabel={d.name} /> : null}
                       </td>
                     </tr>
                 );
