@@ -79,6 +79,52 @@ export async function saveTank(form: FormData): Promise<Result> {
   });
 }
 
+/** Adds as many cans as asked for, numbered on from the highest can there has been: Can 4, Can 5... */
+export async function addCans(form: FormData): Promise<Result> {
+  return guard(async () => {
+    const count = Number(text(form, "count"));
+    if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error("Enter how many cans, from 1 to 200");
+    const capacity = numberField(form, "capacity_litre");
+    if (capacity !== null && capacity <= 0) throw new Error("Capacity has to be above 0");
+    const scenarioId = await activeScenarioId();
+    await tx(async (client) => {
+      const { rows } = await client.query<{ last: number; sort: number }>(
+        `select coalesce(max(substring(code from '^can_(\\d+)$')::int), 0) as last, coalesce(max(sort_order), 0) as sort
+           from tank where scenario_id = $1`,
+        [scenarioId],
+      );
+      for (let i = 1; i <= count; i++) {
+        const n = rows[0].last + i;
+        await client.query(
+          `insert into tank (scenario_id, code, name, capacity_litre, sort_order) values ($1, $2, $3, $4, $5)`,
+          [scenarioId, `can_${n}`, `Can ${n}`, capacity, rows[0].sort + i],
+        );
+      }
+    });
+  });
+}
+
+/**
+ * Deletes a can. One holding milk can't go. One that has had milk through it is only taken off the list, because its
+ * ledger is part of the milk's history; one that never held any is removed outright.
+ */
+export async function deleteCan(id: string): Promise<Result> {
+  return guard(async () => {
+    await tx(async (client) => {
+      const { rows } = await client.query<{ code: string; name: string; qty_litre: number; used: boolean }>(
+        `select code, name, qty_litre, exists (select 1 from tank_movement m where m.tank_id = t.id) as used
+           from tank t where id = $1 for update`,
+        [id],
+      );
+      const can = rows[0];
+      if (!can || !/^can_\d+$/.test(can.code)) throw new Error("Only cans can be deleted");
+      if (Number(can.qty_litre) > 0.005) throw new Error(`${can.name} still holds milk. Empty it first`);
+      if (can.used) await client.query(`update tank set is_active = false where id = $1`, [id]);
+      else await client.query(`delete from tank where id = $1`, [id]);
+    });
+  });
+}
+
 export async function addMovement(form: FormData): Promise<Result> {
   return guard(async () => {
     const tankId = text(form, "tank_id");
