@@ -31,24 +31,40 @@ export async function requestDeletion(phone: string, pin: string, reason: string
   await query(`update shop_customer set failed_tries = 0, locked_until = null where id = $1`, [c.id]);
   const made = await one<{ id: number }>(
     `insert into shop_deletion_request (customer_id, name, phone, reason) values ($1, $2, $3, $4)
-     on conflict (phone) where status = 'pending' do nothing returning id`,
+     on conflict (kind, phone) where status = 'pending' do nothing returning id`,
     [c.id, c.name, phone, reason.slice(0, 500) || null],
   );
   return { ok: true, already: !made };
 }
 
 export interface DeletionRequest {
-  id: number; name: string; phone: string; reason: string | null; status: "pending" | "done" | "rejected";
+  id: number; kind: "customer" | "delivery_partner"; name: string; phone: string; reason: string | null; status: "pending" | "done" | "rejected";
   created_at: Date; handled_at: Date | null; handled_by: string | null;
 }
 
 export const listDeletionRequests = () =>
   query<DeletionRequest>(
-    `select id, name, phone, reason, status, created_at, handled_at, handled_by from shop_deletion_request
+    `select id, kind, name, phone, reason, status, created_at, handled_at, handled_by from shop_deletion_request
       order by status = 'pending' desc, created_at desc limit 500`,
   );
 
 /** Marks a request handled (done or rejected) by this dashboard user. */
 export async function closeDeletionRequest(id: number, status: "done" | "rejected", by: string): Promise<void> {
   await query(`update shop_deletion_request set status = $2, handled_at = now(), handled_by = $3 where id = $1 and status = 'pending'`, [id, status, by]);
+}
+
+/**
+ * A delivery partner asks, from the app, for their account to be deleted (Play requires an in-app way). The request
+ * waits with the customers' ones for the office; meanwhile the account is switched off and signed out everywhere.
+ */
+export async function requestPartnerDeletion(riderId: number, reason: string): Promise<{ already: boolean }> {
+  const r = await one<{ name: string; phone: string }>(`select name, phone from shop_rider where id = $1`, [riderId]);
+  if (!r) return { already: true };
+  const ins = await one<{ id: number }>(
+    `insert into shop_deletion_request (kind, rider_id, name, phone, reason) values ('delivery_partner', $1, $2, $3, $4)
+     on conflict (kind, phone) where status = 'pending' do nothing returning id`,
+    [riderId, r.name, r.phone, reason.trim().slice(0, 500) || null],
+  );
+  await query(`update shop_rider set active = false, token = null where id = $1`, [riderId]);
+  return { already: !ins };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { saveTank } from "@/app/tanks/actions";
+import { addCans, saveTank } from "@/app/tanks/actions";
 import { ActionForm, Field, SubmitButton, Text } from "./ui";
 import { formatNumber } from "@/lib/format";
 import type { TankRow } from "@/lib/tanks/data";
@@ -23,6 +23,24 @@ export function TankForm({ onDone }: { onDone?: () => void }) {
         Active
       </label>
       <SubmitButton>Add tank</SubmitButton>
+    </ActionForm>
+  );
+}
+
+export function CansForm({ onDone }: { onDone?: () => void }) {
+  return (
+    <ActionForm
+      action={addCans}
+      onSuccess={onDone}
+      className="flex flex-wrap items-end gap-3 border-b border-border bg-muted/30 px-4 py-4"
+    >
+      <Field label="How many cans" width="w-36">
+        <Text name="count" placeholder="10" required />
+      </Field>
+      <Field label="Litres per can" width="w-36" hint="optional">
+        <Text name="capacity_litre" placeholder="40" />
+      </Field>
+      <SubmitButton>Add cans</SubmitButton>
     </ActionForm>
   );
 }

@@ -32,6 +32,19 @@ export async function riderLogin(phone: string, pin: string, kind?: PartnerKind)
   return { token, rider };
 }
 
+/** A partner creates their own account from the app (the number is already confirmed by SMS). Signed in straight away;
+ *  orders still only reach them once the office assigns one. Null when the number already has an account, even a deactivated one. */
+export async function riderSignup(name: string, phone: string, pin: string, kind: PartnerKind, vehicleNo: string | null): Promise<{ token: string; rider: Rider } | null> {
+  const token = randomBytes(32).toString("hex");
+  const rider = await one<Rider>(
+    `insert into shop_rider (name, phone, pin_hash, kind, vehicle_no, token) values ($1, $2, $3, $4, $5, $6)
+     on conflict (phone) do nothing
+     returning id, name, phone, active, lat, lng, location_at, pay_per_delivery, kind, vehicle_no`,
+    [name, phone, hashPin(pin), kind, vehicleNo, token],
+  );
+  return rider ? { token, rider } : null;
+}
+
 export async function riderFromRequest(req: NextRequest): Promise<Rider | null> {
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;
