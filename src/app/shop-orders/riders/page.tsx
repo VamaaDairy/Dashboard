@@ -51,7 +51,10 @@ export default async function RidersPage() {
             <tbody>
               {riders.map((r) => (
                 <tr key={r.id} className="border-t border-border">
-                  <td className="px-3 py-2 font-medium">{r.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <Link href={`/shop-orders/riders/${r.id}`} className="text-primary hover:underline">{r.name}</Link>
+                    <div className="text-xs font-normal text-muted-foreground">Route today →</div>
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2">{r.kind === "transporter" ? <>Transporter{r.vehicle_no ? <span className="ml-1 font-mono text-xs text-muted-foreground">{r.vehicle_no}</span> : null}</> : "Delivery boy"}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.phone}</td>
                   <td className="num px-3 py-2">{r.open_orders}</td>
