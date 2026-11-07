@@ -1,5 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import type { MasterDef } from "../../types";
+import { productCols, productJoin } from "../product-cols";
 
 /**
  * Products Status (Recibo route `productsStatus`).
@@ -13,16 +14,15 @@ export const productsStatus: MasterDef = {
   title: "Products Status",
   subtitle: "Products received from the ERP and whether each one synced.",
   icon: RefreshCw,
-  from: `fp_crons_jobs_product m`,
+  from: `fp_crons_jobs_product m${productJoin("m.sku_code")}`,
   dateRange: { expr: "m.created_at", days: 30 },
   cols: [
     { key: "no", label: "No", expr: "row_number() over (order by m.created_at desc)", kind: "num" },
-    { key: "productName", label: "Product Name", expr: "m.sku_name" },
-    { key: "productCode", label: "Product Code", expr: "m.sku_code", kind: "mono" },
+    ...productCols("m.sku_code", "m.sku_name"),
     { key: "mrp", label: "Mrp", expr: "m.mrp", kind: "money" },
     { key: "syncRemarks", label: "Sync Remarks", expr: "m.remark" },
   ],
-  search: ["m.sku_code", "m.sku_name"],
+  search: ["pl.name", "m.sku_code", "m.sku_name"],
   filters: [
     { key: "synced", label: "Synced", expr: "m.synced" },
   ],

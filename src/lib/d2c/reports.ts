@@ -1,7 +1,7 @@
 import "server-only";
 import { salesByArea, salesByCategory, salesByCustomer, salesByDay, salesByPayment, salesByProduct } from "./sales";
 
-export type ColKind = "text" | "int" | "money" | "date" | "day" | "mono";
+export type ColKind = "text" | "int" | "money" | "date" | "day" | "mono" | "image";
 export interface Col { key: string; label: string; kind: ColKind; total?: boolean }
 export interface ReportDef {
   key: string;
@@ -16,7 +16,8 @@ export const REPORTS: ReportDef[] = [
   {
     key: "products", label: "Product-wise", description: "Every product sold: quantity, revenue, orders and customers.",
     cols: [
-      { key: "name", label: "Product", kind: "text" }, { key: "sku", label: "SKU", kind: "mono" }, { key: "category", label: "Category", kind: "text" },
+      { key: "image", label: "Photo", kind: "image" }, { key: "sku", label: "SKU", kind: "mono" }, { key: "name", label: "Product", kind: "text" },
+      { key: "pack_qty", label: "Pack qty", kind: "text" }, { key: "unit", label: "Unit", kind: "text" }, { key: "category", label: "Category", kind: "text" },
       { key: "qty", label: "Qty sold", kind: "int", total: true }, { key: "avg_price", label: "Avg price", kind: "money" },
       { key: "revenue", label: "Revenue", kind: "money", total: true }, { key: "orders", label: "Orders", kind: "int" }, { key: "customers", label: "Customers", kind: "int" },
     ],
@@ -94,6 +95,7 @@ const esc = (v: string) => {
 };
 
 /** CSV (with a BOM so Excel reads UTF-8) of rows under the given columns. */
-export function csvOf(cols: Col[], rows: Array<Record<string, unknown>>): string {
+export function csvOf(all: Col[], rows: Array<Record<string, unknown>>): string {
+  const cols = all.filter((c) => c.kind !== "image"); // photos are for the screen
   return "﻿" + [cols.map((c) => esc(c.label)).join(","), ...rows.map((r) => cols.map((c) => esc(cell(c.kind, r[c.key], true))).join(","))].join("\r\n");
 }

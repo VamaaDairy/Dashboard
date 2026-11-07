@@ -1,5 +1,6 @@
 import "server-only";
 import { query } from "@/lib/db";
+import { labelOf, productLabels, type ProductLabel } from "@/lib/products/names";
 import { activeScenarioId } from "@/lib/model/load";
 import type { Basis } from "@/lib/production/packing";
 
@@ -7,7 +8,10 @@ import type { Basis } from "@/lib/production/packing";
 export interface SkuDayRow {
   sku_id: string;
   code: string;
+  /** the one product name (Product Master / D2C app) - or this list's own when the code clashes or is missing */
   name: string;
+  /** photo, SKU, name, pack qty and unit as every screen shows them */
+  label: ProductLabel;
   category: string;
   case_unit: string;
   pcs_per_case: number;
@@ -38,7 +42,15 @@ export interface SkuHistoryDay {
 
 /** Every SKU (inactive ones only if packed that day), in the stock app's order, with that day's packing. */
 export async function getSkuDay(date: string): Promise<SkuDayRow[]> {
-  return query<SkuDayRow>(
+  const [rows, labels] = await Promise.all([getSkuDayRows(date), productLabels()]);
+  return rows.map((r) => {
+    const label = labelOf(labels, r.code, r.name);
+    return { ...r, name: label.name, label };
+  });
+}
+
+async function getSkuDayRows(date: string) {
+  return query<Omit<SkuDayRow, "label">>(
     `select s.id as sku_id, s.code, s.name, s.category, s.case_unit, s.pcs_per_case, s.shelf_life_days,
             s.bulk_product_id, s.bulk_qty_per_pc, s.pack_rate_per_pc, s.is_active,
             (d.id is not null) as saved, coalesce(d.cases, 0) as cases, coalesce(d.loose_pcs, 0) as loose_pcs

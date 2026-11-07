@@ -9,6 +9,8 @@ import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { listOrders } from "@/lib/shop/orders";
 import { rupees, STATUS_LABEL } from "@/lib/shop/pricing";
+import { labelOf, productLabels } from "@/lib/products/names";
+import { ProductLine } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +30,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
     return p.size ? `/shop-orders?${p}` : "/shop-orders";
   };
   const filter = status && status in STATUS_LABEL ? status : undefined;
-  const [orders, riders, me] = await Promise.all([listOrders(filter, kind, q), query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`), userFromToken((await cookies()).get("session")?.value)]);
+  const [orders, riders, me, labels] = await Promise.all([listOrders(filter, kind, q), query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`), userFromToken((await cookies()).get("session")?.value), productLabels()]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
 
   return (
@@ -111,7 +113,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
                   <td className="whitespace-nowrap px-3 py-2">{when(o.created_at)}</td>
                   <td className="px-3 py-2"><div className="font-medium">{o.name}</div><div className="font-mono text-xs text-muted-foreground">{o.phone}</div></td>
                   <td className="min-w-56 px-3 py-2 text-muted-foreground">{o.address}{o.pincode ? ` - ${o.pincode}` : ""}{o.notes ? <div className="text-xs italic">Note: {o.notes}</div> : null}</td>
-                  <td className="min-w-48 px-3 py-2">{o.items.map((i) => `${i.name} × ${i.qty}`).join(", ")}</td>
+                  <td className="min-w-72 px-3 py-2">{o.items.map((i) => <ProductLine key={i.sku_code} p={labelOf(labels, i.sku_code, i.name, i.image_url)} count={i.qty} />)}</td>
                   <td className="num whitespace-nowrap px-3 py-2 text-right">{rupees(o.total)}<div className="text-xs text-muted-foreground">{o.payment_method === "online" ? "Online" : "COD"} · {o.payment_status}</div></td>
                   <td className="px-3 py-2">
                     {canEdit ? <AssignSelect orderId={o.id} riderId={o.rider_id} riders={riders} /> : o.rider?.name ?? "-"}

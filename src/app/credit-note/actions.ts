@@ -8,6 +8,7 @@ import { levelFor, atLeast } from "@/lib/access";
 import { today } from "@/lib/dates";
 import { activeScenarioId } from "@/lib/model/load";
 import { joinQty } from "@/lib/creditnote/qty";
+import { withLabels } from "@/lib/creditnote/data";
 
 export type CreditResult = { ok: true; id: string } | { ok: false; error: string };
 const fail = (error: string): CreditResult => ({ ok: false, error });
@@ -51,14 +52,15 @@ async function parseItems(f: FormData) {
   let raw: ItemInput[];
   try { raw = JSON.parse(text(f, "items")); } catch { throw new Error("Items could not be read"); }
   if (!Array.isArray(raw) || raw.length === 0) throw new Error("Add at least one item");
-  const skus = await query<{ code: string; name: string; case_unit: string; pcs_per_case: number }>(
+  const skus = await withLabels(await query<{ code: string; name: string; case_unit: string; pcs_per_case: number }>(
     `select code, name, case_unit, pcs_per_case from sku where scenario_id = $1`, [await activeScenarioId()],
-  );
+  ));
   return raw.map((it, n) => {
     const label = `Item ${n + 1}`;
     const name = String(it.material_name ?? "").trim();
     if (!name) throw new Error(`${label}: name of the material is required`);
-    const sku = skus.find((s) => s.name === name);
+    // picked from the list ("1042 · Gaia Maxx UHT · 110 ml"), or an older note's SKU-list name
+    const sku = skus.find((s) => s.name === name) ?? skus.find((s) => s.raw === name);
     const ppc = sku ? Number(sku.pcs_per_case) : 1;
     const unit = sku ? sku.case_unit : String(it.return_unit ?? "").trim() || "Pcs";
     const total = (c: string, l: string, what: string) => {

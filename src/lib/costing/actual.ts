@@ -1,5 +1,6 @@
 import "server-only";
 import { query } from "@/lib/db";
+import { labelOf, productLabels, type ProductLabel } from "@/lib/products/names";
 import { activeScenarioId } from "@/lib/model/load";
 import { batchComplete } from "@/lib/production/complete";
 
@@ -57,7 +58,9 @@ export interface SkuCost {
   day: string;
   sku_id: string;
   code: string;
+  /** the one product name (Product Master / D2C app), or this list's own when the code clashes or is missing */
   name: string;
+  label: ProductLabel;
   category: string;
   pcs: number;
   case_unit: string;          // CRT, CBX, PCS, KG
@@ -216,7 +219,8 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
     const q = n(s.pcs) * n(s.per_pc);
     packedQty.set(s.day, (packedQty.get(s.day) ?? 0) + q);
   }
-  const skuCosts: SkuCost[] = skuRows.map((s) => {
+  const labels = await productLabels();
+  const skuCosts: Omit<SkuCost, "label">[] = skuRows.map((s) => {
     const pcs = n(s.pcs);
     const bulkQty = pcs * n(s.per_pc);
     const b = s.bulk_product_id ? batchFor(s.bulk_product_id, s.day) : null;
@@ -260,6 +264,9 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
     heads: [...sharedHeads.entries()].map(([code, label]) => ({ code, label })),
     days: [...dayMap.values()].sort((a, b) => a.day.localeCompare(b.day)),
     batches: batchCosts,
-    skus: skuCosts,
+    skus: skuCosts.map((s) => {
+      const label = labelOf(labels, s.code, s.name);
+      return { ...s, name: label.name, label };
+    }),
   };
 }

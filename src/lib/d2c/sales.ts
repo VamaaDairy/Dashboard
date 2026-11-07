@@ -1,5 +1,6 @@
 import "server-only";
 import { one, query } from "@/lib/db";
+import { labelJoin, syncProductLabels } from "@/lib/products/names";
 
 /**
  * The D2C business in numbers: who the app's customers are and what they buy. A sale is an order that
@@ -67,25 +68,27 @@ export interface CustomerOrder { id: number; order_no: string; created_at: Date;
 
 /** One customer in full: the account, every order, their subscriptions and what they buy most. */
 export async function customerDetail(id: number) {
+  await syncProductLabels();
   const c = (await listCustomers("", "newest")).find((x) => x.id === id);
   if (!c) return null;
   const [orders, subs, products] = await Promise.all([
     query<CustomerOrder>(
       `select o.id, o.order_no, o.created_at, o.status, o.total::float as total, o.payment_method, o.subscription_day,
-              coalesce((select string_agg(i.name || ' × ' || i.qty, ', ' order by i.id) from shop_order_item i where i.order_id = o.id), '') as items
+              coalesce((select string_agg(concat_ws(' · ', coalesce(pl.sku_code, i.sku_code), coalesce(pl.name, i.name), nullif(concat_ws(' ', pl.qty, pl.unit), ''))
+                                          || ' × ' || i.qty, ', ' order by i.id)
+                          from shop_order_item i left join ${labelJoin("i.sku_code")} where i.order_id = o.id), '') as items
          from shop_order o where o.customer_id = $1 order by o.created_at desc limit 500`,
       [id],
     ),
-    query<{ id: number; sku_code: string; qty: number; frequency: string; start_date: string; end_date: string | null; status: string; name: string | null }>(
-      `select s.id, s.sku_code, s.qty, s.frequency, to_char(s.start_date, 'YYYY-MM-DD') as start_date, to_char(s.end_date, 'YYYY-MM-DD') as end_date, s.status,
-              (select p.sku_name from fp_product p where p.sku_code = s.sku_code limit 1) as name
+    query<{ id: number; sku_code: string; qty: number; frequency: string; start_date: string; end_date: string | null; status: string }>(
+      `select s.id, s.sku_code, s.qty, s.frequency, to_char(s.start_date, 'YYYY-MM-DD') as start_date, to_char(s.end_date, 'YYYY-MM-DD') as end_date, s.status
          from shop_subscription s where s.customer_id = $1 order by s.status = 'active' desc, s.start_date desc`,
       [id],
     ),
-    query<{ name: string; qty: number; amount: number }>(
-      `select i.name, sum(i.qty)::int as qty, sum(i.line_total)::float as amount
+    query<{ sku: string; name: string; qty: number; amount: number }>(
+      `select i.sku_code as sku, min(i.name) as name, sum(i.qty)::int as qty, sum(i.line_total)::float as amount
          from shop_order o join shop_order_item i on i.order_id = o.id
-        where o.customer_id = $1 and ${SOLD} group by i.name order by amount desc limit 10`,
+        where o.customer_id = $1 and ${SOLD} group by i.sku_code order by amount desc limit 10`,
       [id],
     ),
   ]);
@@ -145,15 +148,21 @@ export function salesByDay(from: string, to: string): Promise<DayRow[]> {
   );
 }
 
-export interface ProductRow { sku: string; name: string; category: string; qty: number; revenue: number; orders: number; customers: number; avg_price: number }
+export interface ProductRow {
+  image: string | null; sku: string; name: string; pack_qty: string | null; unit: string | null; category: string;
+  qty: number; revenue: number; orders: number; customers: number; avg_price: number;
+}
 
-export function salesByProduct(from: string, to: string): Promise<ProductRow[]> {
+/** Product-wise sales; the name, pack qty, unit and photo are the Product Master's one name (product_label). */
+export async function salesByProduct(from: string, to: string): Promise<ProductRow[]> {
+  await syncProductLabels();
   return query<ProductRow>(
-    `select i.sku_code as sku, min(i.name) as name, ${CATEGORY} as category,
+    `select min(pl.image) as image, coalesce(min(pl.sku_code), i.sku_code) as sku, coalesce(min(pl.name), min(i.name)) as name,
+            min(pl.qty) as pack_qty, min(pl.unit) as unit, ${CATEGORY} as category,
             sum(i.qty)::int as qty, sum(i.line_total)::float as revenue, count(distinct o.id)::int as orders,
             count(distinct coalesce(o.customer_id::text, o.phone))::int as customers,
             (sum(i.line_total) / nullif(sum(i.qty), 0))::float as avg_price
-       from shop_order o join shop_order_item i on i.order_id = o.id
+       from shop_order o join shop_order_item i on i.order_id = o.id left join ${labelJoin("i.sku_code")}
       where ${SOLD} and ${IN_RANGE}
       group by i.sku_code order by revenue desc`,
     [from, to],

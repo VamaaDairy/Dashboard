@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Panel, Tiles } from "@/components/dash/Dash";
 import { customerDetail } from "@/lib/d2c/sales";
 import { STATUS_LABEL } from "@/lib/shop/pricing";
+import { labelOf, productLabels } from "@/lib/products/names";
+import { ProductLine } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,7 @@ export default async function D2cCustomerPage({ params }: { params: Promise<{ id
   const d = Number.isInteger(id) ? await customerDetail(id) : null;
   if (!d) notFound();
   const { customer: c, orders, subs, products } = d;
+  const labels = await productLabels();
   const cancelled = orders.filter((o) => o.status === "cancelled").length;
 
   return (
@@ -45,7 +48,7 @@ export default async function D2cCustomerPage({ params }: { params: Promise<{ id
             {products.length === 0 ? <p className="text-sm text-muted-foreground">Nothing yet.</p> : (
               <ul className="space-y-1.5 text-sm">
                 {products.map((p) => (
-                  <li key={p.name} className="flex justify-between gap-3"><span className="truncate">{p.name} <span className="text-muted-foreground">× {p.qty}</span></span><span className="num font-medium">{rs(p.amount)}</span></li>
+                  <li key={p.sku} className="flex items-center justify-between gap-3"><span className="min-w-0 truncate"><ProductLine p={labelOf(labels, p.sku, p.name)} count={p.qty} /></span><span className="num font-medium">{rs(p.amount)}</span></li>
                 ))}
               </ul>
             )}
@@ -55,7 +58,7 @@ export default async function D2cCustomerPage({ params }: { params: Promise<{ id
               <ul className="space-y-2 text-sm">
                 {subs.map((s) => (
                   <li key={s.id} className="flex justify-between gap-3">
-                    <span><span className="font-medium">{s.name ?? s.sku_code}</span> × {s.qty}<span className="block text-xs text-muted-foreground">{FREQ[s.frequency] ?? s.frequency} · from {date(s.start_date)}{s.end_date ? ` to ${date(s.end_date)}` : ""}</span></span>
+                    <span><ProductLine p={labelOf(labels, s.sku_code)} count={s.qty} /><span className="block text-xs text-muted-foreground">{FREQ[s.frequency] ?? s.frequency} · from {date(s.start_date)}{s.end_date ? ` to ${date(s.end_date)}` : ""}</span></span>
                     <span className="text-xs font-semibold capitalize text-muted-foreground">{s.status}</span>
                   </li>
                 ))}

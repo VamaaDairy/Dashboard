@@ -6,10 +6,12 @@ import { Pill } from "@/components/cn/ui";
 import { Stat } from "@/app/app-orders/parts";
 import { dayLines, filterLines, listRoutes, validDate, type DayLine } from "@/lib/route-orders/data";
 import { Chip, DayFilters, Notice, cases, inr, kg } from "./parts";
+import { labelOf, productLabels, type ProductLabel } from "@/lib/products/names";
+import { ProductThumb } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
-interface Column { sku: string; name: string; category: string; pack: number; sort: number }
+interface Column { sku: string; label: ProductLabel; name: string; category: string; pack: number; sort: number }
 
 const skuKey = (l: DayLine) => (l.product ? `p${l.product.sku_no}` : `s${l.sku}`);
 
@@ -19,7 +21,7 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
   const buyer = sp.buyer || "all";
   const confirmed = sp.confirmed === "1";
   const route = sp.route || "all";
-  const [all, routes] = await Promise.all([dayLines(date), listRoutes()]);
+  const [all, routes, labels] = await Promise.all([dayLines(date), listRoutes(), productLabels()]);
   const forBuyer = filterLines(all, { buyer, confirmed });
   const lines = filterLines(forBuyer, { route });
 
@@ -36,7 +38,8 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
   for (const l of lines) {
     columns.set(skuKey(l), {
       sku: skuKey(l),
-      name: l.product?.name ?? l.skuName,
+      label: labelOf(labels, l.sku, l.product?.name ?? l.skuName),
+      name: labelOf(labels, l.sku, l.product?.name ?? l.skuName).name,
       category: l.product?.category ?? "Not in master",
       pack: Number(l.product?.pack_size ?? 1),
       sort: l.product?.sort ?? 9999,
@@ -117,7 +120,10 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
               <tr>
                 {cols.map((c) => (
                   <th key={c.sku} className="min-w-20 border-l border-t border-border px-2 py-1.5 text-right align-bottom font-medium">
+                    <div className="flex justify-end"><ProductThumb image={c.label.image} size={28} /></div>
+                    <div className="font-mono text-[10px] font-normal text-tertiary-foreground">{c.label.sku}</div>
                     {c.name.replace(/^Gaia /, "")}
+                    <div className="font-normal text-muted-foreground">{[c.label.qty, c.label.unit].filter(Boolean).join(" ") || "—"}</div>
                     <div className="font-normal text-tertiary-foreground">{c.pack > 1 ? `case of ${c.pack} + pcs` : "pcs"}</div>
                   </th>
                 ))}

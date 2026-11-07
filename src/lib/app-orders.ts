@@ -1,5 +1,6 @@
 import "server-only";
 import { one, query } from "@/lib/db";
+import { labelJoin, syncProductLabels } from "@/lib/products/names";
 
 /**
  * Every order placed from the Gaia app, in three kinds:
@@ -111,7 +112,8 @@ export interface TradeOrder extends TradeOrderRow {
   };
   supplierCode: string | null;
   supplierCity: string | null;
-  lines: Array<{ sku: string; name: string; qty: number; rate: number; mrp: number; amount: number; image: string | null }>;
+  /** name / packQty / unit / image: the Product Master's one name for the product (product_label). */
+  lines: Array<{ sku: string; name: string; packQty: string | null; unit: string | null; qty: number; rate: number; mrp: number; amount: number; image: string | null }>;
 }
 
 export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
@@ -133,11 +135,11 @@ export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
     [uid],
   );
   if (!o) return null;
+  await syncProductLabels();
   const lines = await query<TradeOrder["lines"][number]>(
-    `select p.sku_code as sku, p.sku_name as name, i.quantity as qty, i.selling_price as rate, i.mrp, i.total_cost as amount,
-            (select case when pi.data is not null then '/api/shop/product-image/' || pi.uid else pi.image_url end
-               from fp_product_image pi where pi.product_uid = p.uid and pi.archived_at is null order by pi.imagesno nulls last limit 1) as image
-     from fp_booking_order_item i join fp_product p on p.uid = i.product_uid
+    `select p.sku_code as sku, coalesce(pl.name, p.sku_name) as name, pl.qty as "packQty", pl.unit,
+            i.quantity as qty, i.selling_price as rate, i.mrp, i.total_cost as amount, pl.image
+     from fp_booking_order_item i join fp_product p on p.uid = i.product_uid left join ${labelJoin("p.sku_code")}
      where i.booking_order_uid = $1 order by i.order_item_number`,
     [uid],
   );

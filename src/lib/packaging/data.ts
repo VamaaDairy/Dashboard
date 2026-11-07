@@ -1,4 +1,5 @@
 import "server-only";
+import { labelOf, labelText, productLabels } from "@/lib/products/names";
 import { query } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
 
@@ -34,11 +35,15 @@ export async function getPackagingMaster(): Promise<PackagingRow[]> {
       order by coalesce(d.category, 'zzz'), o.name`,
     [scenario],
   );
-  const used = await query<{ packaging_id: string; name: string }>(
-    `select distinct i.packaging_id, s.name from sku_packing_item i join sku s on s.id = i.sku_id
-      where s.scenario_id = $1 order by s.name`, [scenario]);
+  const [used, labels] = await Promise.all([
+    query<{ packaging_id: string; code: string; name: string }>(
+      `select distinct i.packaging_id, s.code, s.name from sku_packing_item i join sku s on s.id = i.sku_id
+        where s.scenario_id = $1 order by s.name`, [scenario]),
+    productLabels(),
+  ]);
   const by = new Map<string, string[]>();
-  for (const u of used) by.set(u.packaging_id, [...(by.get(u.packaging_id) ?? []), u.name]);
+  // each SKU as every screen names it: "1042 · Gaia Maxx UHT · 110 ml"
+  for (const u of used) by.set(u.packaging_id, [...(by.get(u.packaging_id) ?? []), labelText(labelOf(labels, u.code, u.name))]);
   return rows.map((r) => ({
     ...r, rate: Number(r.rate), base_rate: r.base_rate === null ? null : Number(r.base_rate),
     gst_pct: Number(r.gst_pct), freight: Number(r.freight), used_in: by.get(r.id) ?? [],

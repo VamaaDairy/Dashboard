@@ -1,6 +1,7 @@
 import "server-only";
 import { one, query, tx } from "@/lib/db";
 import { displayName } from "@/lib/shop/pricing";
+import { labelJoin, syncProductLabels } from "@/lib/products/names";
 import { firmPrices, type FirmPrice } from "@/lib/distributor";
 
 /**
@@ -16,8 +17,11 @@ export const CHANNEL_LABEL: Record<Channel, string> = { RT: "Retailer", DB: "Dis
 export interface PriceRow {
   uid: string;
   sku: string;
-  /** The Product Master name, tidied exactly as the Gaia app shows it. */
+  /** The one product name (as the Gaia D2C app shows it), with the pack quantity, unit and photo kept apart. */
   name: string;
+  packQty: string | null;
+  unit: string | null;
+  image: string | null;
   category: string;
   mrp: number;
   rt: number | null;
@@ -35,16 +39,17 @@ const latestRate = (code: Channel) => `(
 
 /** Every active product with its MRP and standard retailer / distributor prices. */
 export async function standardPrices(): Promise<PriceRow[]> {
-  const rows = await query<PriceRow>(
-    `select p.uid, p.sku_code as sku, p.sku_name as name, coalesce(nullif(trim(p.category), ''), 'Other') as category, p.mrp::float as mrp,
+  await syncProductLabels();
+  const rows = await query<PriceRow & { labelled: boolean }>(
+    `select p.uid, p.sku_code as sku, coalesce(pl.name, p.sku_name) as name, pl.qty as "packQty", pl.unit, pl.image, pl.name is not null as labelled, coalesce(nullif(trim(p.category), ''), 'Other') as category, p.mrp::float as mrp,
             ${latestRate("RT")}::float as rt, ${latestRate("DB")}::float as db,
             p.mrp > 0 as "inApp",
             (p.mrp > 0 and exists (select 1 from app_product a where a.channel = 'd2c' and a.product_uid = p.uid and a.visible)) as "inShop"
-     from fp_product p
+     from fp_product p left join ${labelJoin("p.sku_code")}
      where p.active = 1
      order by category, p.sku_name`,
   );
-  return rows.map((r) => ({ ...r, name: displayName(r.name) }));
+  return rows.map(({ labelled, ...r }) => ({ ...r, name: labelled ? r.name : displayName(r.name) }));
 }
 
 // ---------------------------------------------------------------- overview (every price on one screen)

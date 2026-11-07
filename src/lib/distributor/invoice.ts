@@ -1,6 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { one, tx } from "@/lib/db";
+import { labelJoin, syncProductLabels } from "@/lib/products/names";
 
 /**
  * Invoices for the orders placed from the Gaia Partners app (db/081). The seller is the firm the order is
@@ -21,7 +22,12 @@ export interface InvoiceParty {
 
 export interface InvoiceLine {
   sku: string;
+  /** Name with pack size, for the apps ("Gaia Toned Milk 500 ml"); the dashboard shows product / packQty / unit apart. */
   name: string;
+  /** The Product Master's one name, pack quantity and unit (product_label). */
+  product: string;
+  packQty: string | null;
+  unit: string | null;
   qty: number;
   /** price per unit, GST included */
   rate: number;
@@ -110,8 +116,9 @@ async function draft(c: PoolClient, orderUid: string): Promise<Omit<InvoiceData,
   )).rows[0] as { order_id: number; booking_time: Date; buyer: Record<string, unknown> | null; seller: Record<string, unknown> | null } | undefined;
   if (!o) return null;
   const lines = ((await c.query(
-    `select p.sku_code as sku, p.sku_name as name, i.quantity::float as qty, i.selling_price::float as rate, coalesce(i.mrp, p.mrp)::float as mrp, i.total_cost::float as amount
-     from fp_booking_order_item i join fp_product p on p.uid = i.product_uid
+    `select p.sku_code as sku, coalesce(pl.name, p.sku_name) as product, pl.qty as "packQty", pl.unit,
+            trim(concat_ws(' ', coalesce(pl.name, p.sku_name), pl.qty, pl.unit)) as name, i.quantity::float as qty, i.selling_price::float as rate, coalesce(i.mrp, p.mrp)::float as mrp, i.total_cost::float as amount
+     from fp_booking_order_item i join fp_product p on p.uid = i.product_uid left join ${labelJoin("p.sku_code")}
      where i.booking_order_uid = $1 order by i.order_item_number`,
     [orderUid],
   )).rows as InvoiceLine[]).map((l) => ({ ...l, amount: r2(l.amount || l.qty * l.rate) }));
@@ -144,6 +151,8 @@ export async function issueInvoice(c: PoolClient, orderUid: string): Promise<Inv
 
 /** The order's invoice with its status now, issuing it first if the order has none yet. */
 export async function invoiceFor(orderUid: string): Promise<Invoice | null> {
+  // an invoice once issued keeps its lines as they were; a new one takes the product names as they are now
+  await syncProductLabels();
   const data = (await one<{ data: InvoiceData }>(`select data from dist_invoice where booking_order_uid = $1`, [orderUid]))?.data ?? (await tx((c) => issueInvoice(c, orderUid)));
   if (!data) return null;
   const status = (await one<{ status: string }>(`select status from fp_booking_order where uid = $1`, [orderUid]))?.status ?? "";

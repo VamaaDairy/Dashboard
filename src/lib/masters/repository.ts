@@ -2,6 +2,10 @@ import "server-only";
 import { query } from "@/lib/db";
 import { DISPLAY_TZ, EXPORT_LIMIT, FILTER_OPTION_LIMIT, PAGE_SIZE } from "./constants";
 import type { ListRequest, Listing, MasterDef } from "./types";
+import { syncProductLabels } from "@/lib/products/names";
+
+/** Reports that show products read product_label; make sure it matches the Product Master first. */
+const freshLabels = (def: MasterDef) => (def.from.includes("product_label") ? syncProductLabels() : undefined);
 
 function where(def: MasterDef, req: ListRequest): { sql: string; args: unknown[] } {
   const conds: string[] = [];
@@ -34,6 +38,7 @@ const selectWithIds = (def: MasterDef) => {
 };
 
 export async function listMaster(def: MasterDef, req: ListRequest): Promise<Listing> {
+  await freshLabels(def);
   const w = where(def, req);
   const group = def.groupBy ? `group by ${def.groupBy}` : "";
   const countSql = def.groupBy
@@ -76,6 +81,7 @@ export async function listMaster(def: MasterDef, req: ListRequest): Promise<List
 
 /** Every row that matches (capped at EXPORT_LIMIT), for the CSV download. */
 export async function exportMaster(def: MasterDef, req: ListRequest) {
+  await freshLabels(def);
   const w = where(def, req);
   const group = def.groupBy ? `group by ${def.groupBy}` : "";
   return query(

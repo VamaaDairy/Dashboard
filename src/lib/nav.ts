@@ -362,6 +362,7 @@ const WORKING: NavSection[] = [
     groups: [
       { label: "Customer prices", items: [priceList] },
       { label: "App products", items: [appProductPrices] },
+      { label: "Names", items: [{ href: "/product-names", key: "productnames", label: "Product names check", icon: ClipboardCheck }] },
       { label: "Distributor & retail", items: items(marginsSlabs, schemes) },
       {
         label: "Milk purchase",
@@ -433,6 +434,7 @@ const WORKING: NavSection[] = [
       {
         label: "System",
         items: [
+          { href: "/product-names", key: "productnames", label: "Product names check", icon: Tags },
           { href: "/audit", key: "audit", label: "Change log", icon: FileClock },
           { href: "/users", key: "", label: "Users", icon: UserPlus, ownerOnly: true },
         ],

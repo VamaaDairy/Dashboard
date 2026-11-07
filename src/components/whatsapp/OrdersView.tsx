@@ -7,6 +7,8 @@ import { askForReview, saveOrderNotes, setOrderStatus, setPaymentStatus } from "
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ORDER_STATUSES, type OrderStatus, type PaymentStatus } from "@/lib/whatsapp/statuses";
 import type { Message, Order, OrderItem } from "@/lib/whatsapp/store";
+import type { ProductLabel } from "@/lib/products/names";
+import { ProductLine } from "@/components/products/Product";
 import { Empty, MediaThumb, OrderStatusBadge, PaymentBadge, getJson, money, phone, usePoll, when } from "./shared";
 
 const FILTERS = [
@@ -18,6 +20,8 @@ const FILTERS = [
 interface Detail {
   order: Order;
   items: OrderItem[];
+  /** each item's product as the dashboard names it, by retailer id (SKU) */
+  labels?: Record<string, ProductLabel>;
   media: Message[];
   review: { rating: number; comment: string | null; created_at: string } | null;
   messages: Pick<Message, "id" | "direction" | "sender" | "type" | "body" | "created_at" | "status">[];
@@ -192,7 +196,9 @@ function OrderDetail({ d, onClose, refresh }: { d: Detail; onClose: () => void; 
                 <img src={i.image_url} alt="" className="h-12 w-12 rounded-md object-cover" />
               ) : <span className="flex h-12 w-12 items-center justify-center rounded-md bg-muted"><ImageIcon className="h-4 w-4 text-muted-foreground" /></span>}
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{i.name}</div>
+                {d.labels?.[i.retailer_id] ? (
+                  <ProductLine p={{ ...d.labels[i.retailer_id], image: null }} />
+                ) : <div className="truncate text-sm font-medium">{i.name}</div>}
                 <div className="text-xs text-muted-foreground">{i.retailer_id} · {money(i.unit_price, o.currency)} × {i.qty}</div>
               </div>
               <span className="num text-sm font-semibold">{money(i.line_total, o.currency)}</span>

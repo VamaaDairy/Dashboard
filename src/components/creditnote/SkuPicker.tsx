@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import type { SkuOption } from "@/lib/creditnote/data";
+import { ProductThumb } from "@/components/products/Product";
 
 /**
  * Type to search the SKU list, click one to fill it in. The list is drawn by us
@@ -27,7 +28,7 @@ export function SkuPicker({ value, onChange, skus }: { value: string; onChange: 
     if (r) setBox({ left: r.left, top: r.bottom + 4, width: r.width });
   };
   const q = value.trim().toLowerCase();
-  const shown = (q ? skus.filter((s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) : skus).slice(0, 60);
+  const shown = (q ? skus.filter((s) => s.name.toLowerCase().includes(q) || s.raw.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) : skus).slice(0, 60);
 
   return (
     <>
@@ -54,9 +55,16 @@ export function SkuPicker({ value, onChange, skus }: { value: string; onChange: 
               aria-selected={s.name === value}
               // mouse-down, not click: the input's blur would close the list before a click lands
               onMouseDown={(e) => { e.preventDefault(); onChange(s.name); setBox(null); }}
-              className="flex cursor-pointer items-baseline justify-between gap-3 px-3 py-1.5 hover:bg-neutral-100"
+              className="flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 hover:bg-neutral-100"
             >
-              <span>{s.name}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <ProductThumb image={s.label.image} size={28} />
+                <span className="font-mono text-[11px] text-neutral-500">{s.label.sku}</span>
+                <span className="truncate">{s.label.name}</span>
+                {s.label.qty ? <span title="Pack quantity" className="rounded bg-neutral-100 px-1.5 text-[11px]">{s.label.qty}</span> : null}
+                {s.label.unit ? <span title="Unit" className="rounded bg-neutral-100 px-1.5 text-[11px]">{s.label.unit}</span> : null}
+                {s.label.clash ? <span className="text-[10px] font-semibold text-red-600" title={`Product Master says ${s.label.clash}`}>SKU clash</span> : null}
+              </span>
               <span className="shrink-0 text-[11px] text-neutral-500">{s.pcs_per_case > 1 ? `${s.case_unit} of ${s.pcs_per_case}` : s.case_unit}</span>
             </li>
           ))}

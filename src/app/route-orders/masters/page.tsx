@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { labelOf, productLabels } from "@/lib/products/names";
+import { ProductCell } from "@/components/products/Product";
 import { cookies } from "next/headers";
 import { Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -27,7 +29,7 @@ export default async function MastersPage({ searchParams }: { searchParams: Prom
   const tab = sp.tab === "customers" || sp.tab === "products" ? sp.tab : "fix";
   const me = await userFromToken((await cookies()).get("session")?.value);
   const canEdit = !!me && atLeast(levelFor(me, "routeorders.masters"), "edit");
-  const [parties, products, routes, firms, skus] = await Promise.all([listParties(), listProducts(), listRoutes(), unmatchedFirms(), unmatchedSkus()]);
+  const [parties, products, routes, firms, skus, labels] = await Promise.all([listParties(), listProducts(), listRoutes(), unmatchedFirms(), unmatchedSkus(), productLabels()]);
 
   const q = (sp.q ?? "").trim().toLowerCase();
   const shownParties = q ? parties.filter((p) => [p.name, p.tally_ledger, p.route, p.channel, p.group_name].some((x) => x?.toLowerCase().includes(q))) : parties;
@@ -203,13 +205,15 @@ export default async function MastersPage({ searchParams }: { searchParams: Prom
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-                  <tr>{["SKU", "Product", "Category", "Tally item", "Sales ledger", "Unit", "Pieces", "GST", "Shelf", "Kg/pc", ""].map((h, i) => <th key={i} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}</tr>
+                  <tr>{["Product", "Pack qty", "Unit", "Name on this list", "Category", "Tally item", "Sales ledger", "Tally unit", "Pieces", "GST", "Shelf", "Kg/pc", ""].map((h, i) => <th key={i} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {products.map((p) => (
                     <tr key={p.id} className="border-t border-border hover:bg-muted/40">
-                      <td className="px-3 py-2 font-mono text-xs">{p.sku_no}</td>
-                      <td className="min-w-52 px-3 py-2 font-medium">{p.name}</td>
+                      <td className="min-w-64 px-3 py-2"><ProductCell p={labelOf(labels, p.sku_no, p.name)} /></td>
+                      <td className="num whitespace-nowrap px-3 py-2">{labelOf(labels, p.sku_no, p.name).qty ?? "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2">{labelOf(labels, p.sku_no, p.name).unit ?? "—"}</td>
+                      <td className="min-w-48 px-3 py-2 text-muted-foreground">{p.name}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{p.category}</td>
                       <td className="min-w-56 px-3 py-2">{p.tally_item ?? <span className="text-destructive">Missing</span>}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{p.tally_ledger ?? "-"}</td>

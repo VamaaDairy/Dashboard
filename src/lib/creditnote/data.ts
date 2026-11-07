@@ -1,5 +1,6 @@
 import { query, one } from "@/lib/db";
 import { activeScenarioId } from "@/lib/model/load";
+import { labelOf, labelText, productLabels, type ProductLabel } from "@/lib/products/names";
 
 export type CreditStatus = "pending" | "approved" | "rejected";
 
@@ -56,12 +57,29 @@ export const getCreditNote = (id: string) =>
     ? one<CreditNote>(`select ${COLUMNS} from credit_note n where n.id = $1`, [id])
     : Promise.resolve(null);
 
-export interface SkuOption { code: string; name: string; category: string; case_unit: string; pcs_per_case: number }
+export interface SkuOption {
+  code: string;
+  /** What gets written on the note: "1042 · Gaia Maxx UHT · 110 ml" (SKU, the one product name, pack size). */
+  name: string;
+  /** The SKU list's own name (older notes were written with it). */
+  raw: string;
+  label: ProductLabel;
+  category: string; case_unit: string; pcs_per_case: number;
+}
 
 /** The SKU list (active ones, in the stock app's order) - what the item name is picked from. */
 export async function listSkuOptions(): Promise<SkuOption[]> {
-  return query<SkuOption>(
+  return withLabels(await query<Omit<SkuOption, "label" | "raw">>(
     `select code, name, category, case_unit, pcs_per_case from sku where scenario_id = $1 and is_active order by sort_order, name`,
     [await activeScenarioId()],
-  );
+  ));
+}
+
+/** SKU rows with the one product name: `name` becomes "SKU · name · pack size", the list's own kept as `raw`. */
+export async function withLabels<T extends { code: string; name: string }>(rows: T[]): Promise<Array<T & { raw: string; label: ProductLabel }>> {
+  const labels = await productLabels();
+  return rows.map((r) => {
+    const label = labelOf(labels, r.code, r.name);
+    return { ...r, raw: r.name, name: labelText(label), label };
+  });
 }

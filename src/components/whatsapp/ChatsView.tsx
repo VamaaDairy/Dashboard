@@ -8,6 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { clearNeedsHuman, sendCatalogTo, setBotEnabled } from "@/app/whatsapp/actions";
 import type { Contact, ConversationRow, Message, Order, PricedCart } from "@/lib/whatsapp/store";
+import type { ProductLabel } from "@/lib/products/names";
+import { ProductLine } from "@/components/products/Product";
 import {
   Empty, MediaThumb, OrderStatusBadge, PaymentBadge, getJson, money, phone, usePoll, when,
 } from "./shared";
@@ -17,6 +19,8 @@ interface Thread {
   messages: Message[];
   orders: Order[];
   cart: PricedCart;
+  /** each cart line's product as the dashboard names it, by retailer id (SKU) */
+  labels?: Record<string, ProductLabel>;
   windowOpen: boolean;
 }
 
@@ -113,7 +117,7 @@ function Avatar({ name }: { name: string | null }) {
 }
 
 function Conversation({ thread, onBack, refresh }: { thread: Thread; onBack: () => void; refresh: () => void }) {
-  const { contact, messages, orders, cart, windowOpen } = thread;
+  const { contact, messages, orders, cart, labels, windowOpen } = thread;
   const scroller = useRef<HTMLDivElement>(null);
   const lastId = messages.at(-1)?.id;
   const [showSide, setShowSide] = useState(false);
@@ -202,8 +206,8 @@ function Conversation({ thread, onBack, refresh }: { thread: Thread; onBack: () 
         {cart.lines.length ? (
           <div className="space-y-1 text-sm">
             {cart.lines.map((l) => (
-              <div key={l.retailer_id} className="flex justify-between gap-2">
-                <span className="truncate">{l.name} × {l.qty}</span><span className="num">{money(l.line_total, cart.currency)}</span>
+              <div key={l.retailer_id} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">{labels?.[l.retailer_id] ? <ProductLine p={labels[l.retailer_id]} count={l.qty} /> : `${l.name} × ${l.qty}`}</span><span className="num">{money(l.line_total, cart.currency)}</span>
               </div>
             ))}
             <div className="flex justify-between border-t border-border pt-1 font-semibold">

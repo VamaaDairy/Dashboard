@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProductThumb } from "@/components/products/Product";
 import { cookies } from "next/headers";
 import { Grid3x3, Search, Tags } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -92,11 +93,15 @@ export default async function PriceListPage({ searchParams }: { searchParams: Pr
                     <FragmentRow key={p.uid} category={i === 0 || shown[i - 1].category !== p.category ? p.category : null} cols={cols}>
                       <tr className="border-t border-border hover:bg-muted/30">
                         <td className="min-w-64 px-4 py-2">
+                          <div className="flex items-center gap-2"><ProductThumb image={p.image} size={32} /><div className="min-w-0">
                           <div className="font-medium text-foreground">{p.name}</div>
                           <div className="text-[11px] text-tertiary-foreground">
                             <span className="font-mono">{p.sku}</span>
+                            <span className="ml-2 rounded bg-muted px-1.5 text-muted-foreground" title="Pack quantity">{p.packQty ?? "—"}</span>
+                            <span className="ml-1 rounded bg-muted px-1.5 text-muted-foreground" title="Unit">{p.unit ?? "—"}</span>
                             {!p.inApp ? <span className="ml-2">· no MRP, not in the app</span> : !p.inShop ? <span className="ml-2">· distributors & retailers only (hidden from the shop)</span> : null}
                           </div>
+                          </div></div>
                         </td>
                         <td className="px-2 py-2 text-right">
                           <PriceCell target={{ kind: "mrp" }} productUid={p.uid} value={p.mrp} canEdit={canEdit && !list} />

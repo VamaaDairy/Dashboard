@@ -3,6 +3,8 @@ import { Boxes } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { dayLines, filterLines, listRoutes, validDate } from "@/lib/route-orders/data";
 import { DayFilters, cases, inr, kg } from "../parts";
+import { labelOf, productLabels, type ProductLabel } from "@/lib/products/names";
+import { ProductCell } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
@@ -12,15 +14,16 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
   const date = validDate(sp.date);
   const buyer = sp.buyer || "all";
   const confirmed = sp.confirmed === "1";
-  const [all, routes] = await Promise.all([dayLines(date), listRoutes()]);
+  const [all, routes, labels] = await Promise.all([dayLines(date), listRoutes(), productLabels()]);
   const lines = filterLines(all, { buyer, confirmed });
 
-  const rows = new Map<string, { name: string; category: string; pack: number; sort: number; byRoute: Map<string, number>; qty: number; kg: number; value: number }>();
+  const rows = new Map<string, { label: ProductLabel; name: string; category: string; pack: number; sort: number; byRoute: Map<string, number>; qty: number; kg: number; value: number }>();
   for (const l of lines) {
     const key = l.product ? `p${l.product.sku_no}` : `s${l.sku}`;
     let r = rows.get(key);
     if (!r) {
-      r = { name: l.product?.name ?? l.skuName, category: l.product?.category ?? "Not in master", pack: Number(l.product?.pack_size ?? 1), sort: l.product?.sort ?? 9999, byRoute: new Map(), qty: 0, kg: 0, value: 0 };
+      const label = labelOf(labels, l.sku, l.product?.name ?? l.skuName);
+      r = { label, name: label.name, category: l.product?.category ?? "Not in master", pack: Number(l.product?.pack_size ?? 1), sort: l.product?.sort ?? 9999, byRoute: new Map(), qty: 0, kg: 0, value: 0 };
       rows.set(key, r);
     }
     const rt = l.routeName ?? "No route";
@@ -43,7 +46,9 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
           <table className="w-full border-collapse text-sm">
             <thead className="bg-muted text-xs text-muted-foreground">
               <tr>
-                <th className="sticky left-0 z-10 min-w-56 bg-muted px-3 py-2 text-left font-semibold">Product</th>
+                <th className="sticky left-0 z-10 min-w-64 bg-muted px-3 py-2 text-left font-semibold">Product</th>
+                <th className="px-3 py-2 text-left font-semibold">Pack qty</th>
+                <th className="px-3 py-2 text-left font-semibold">Unit</th>
                 <th className="px-3 py-2 text-right font-semibold">Total</th>
                 <th className="px-3 py-2 text-right font-semibold">Load</th>
                 <th className="px-3 py-2 text-right font-semibold">Value</th>
@@ -53,10 +58,12 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
             <tbody>
               {categories.map((c) => (
                 <Fragment key={c}>
-                  <tr className="border-t border-border bg-muted/40"><td colSpan={heads.length + 4} className="sticky left-0 px-3 py-1.5 text-xs font-semibold">{c}</td></tr>
+                  <tr className="border-t border-border bg-muted/40"><td colSpan={heads.length + 6} className="sticky left-0 px-3 py-1.5 text-xs font-semibold">{c}</td></tr>
                   {table.filter((r) => r.category === c).map((r) => (
-                    <tr key={r.name} className="border-t border-border hover:bg-muted/40">
-                      <td className="sticky left-0 bg-background px-3 py-2 font-medium">{r.name}<div className="text-xs font-normal text-tertiary-foreground">{r.pack > 1 ? `case of ${r.pack}` : "pieces"}</div></td>
+                    <tr key={r.label.sku + r.name} className="border-t border-border hover:bg-muted/40">
+                      <td className="sticky left-0 bg-background px-3 py-2"><ProductCell p={r.label} /><div className="pl-10 text-xs text-tertiary-foreground">{r.pack > 1 ? `case of ${r.pack}` : "pieces"}</div></td>
+                      <td className="num whitespace-nowrap px-3 py-2">{r.label.qty ?? "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2">{r.label.unit ?? "—"}</td>
                       <td className="num whitespace-nowrap px-3 py-2 text-right font-semibold">{cases(r.qty, r.pack)}</td>
                       <td className="num whitespace-nowrap px-3 py-2 text-right text-muted-foreground">{kg(r.kg)}</td>
                       <td className="num whitespace-nowrap px-3 py-2 text-right">{inr(r.value)}</td>
@@ -65,7 +72,7 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
                   ))}
                 </Fragment>
               ))}
-              {table.length === 0 ? <tr><td colSpan={heads.length + 4} className="px-3 py-10 text-center text-muted-foreground">No orders for this date and filter.</td></tr> : null}
+              {table.length === 0 ? <tr><td colSpan={heads.length + 6} className="px-3 py-10 text-center text-muted-foreground">No orders for this date and filter.</td></tr> : null}
             </tbody>
           </table>
         </div>

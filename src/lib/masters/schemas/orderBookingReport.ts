@@ -1,5 +1,6 @@
 import { ClipboardList } from "lucide-react";
 import type { MasterDef } from "../types";
+import { productCols, productJoin } from "./product-cols";
 import { active, person } from "./fragments";
 
 /**
@@ -20,7 +21,7 @@ export const orderBookingReport: MasterDef = {
   icon: ClipboardList,
   from: `fp_booking_order_item i
     join fp_booking_order o on o.uid = i.booking_order_uid
-    join fp_product p on p.uid = i.product_uid
+    join fp_product p on p.uid = i.product_uid${productJoin("p.sku_code")}
     left join fp_firm ff on ff.uid = o.from_firm_uid
     left join fp_state fs on fs.state = ff.state_state
     left join fp_channel fc on fc.uid = ff.channel_uid
@@ -60,11 +61,9 @@ export const orderBookingReport: MasterDef = {
     { key: "orderType", label: "Order Type", expr: "o.order_type" },
     { key: "distName", label: "Order Booked To - Distributor Name", expr: "tf.name" },
     { key: "distCode", label: "Distributor Code", expr: "tf.firm_code", kind: "mono" },
-    { key: "skuCode", label: "SKU Code", expr: "p.sku_code", kind: "mono" },
-    { key: "sku", label: "SKU", expr: "p.sku_name" },
+    ...productCols("p.sku_code", "p.sku_name"),
     { key: "mrp", label: "MRP", expr: "p.mrp", kind: "money" },
     { key: "dp", label: "DP", expr: "p.dp", kind: "money" },
-    { key: "skuSize", label: "SKU Size", expr: "p.sku_size" },
     { key: "category", label: "Category", expr: "p.category" },
     { key: "subCategory", label: "Sub Category", expr: "p.sub_category" },
     { key: "brand", label: "Brand", expr: "trim(p.brand)" },
@@ -82,7 +81,7 @@ export const orderBookingReport: MasterDef = {
     { key: "deliveryValue", label: "Delivery Value", expr: "i.invoice_quantity * i.selling_price", kind: "money" },
     { key: "custCreated", label: "Customer Created Date", expr: "ff.created_at", kind: "date" },
   ],
-  search: ["o.order_id", "ff.name", "ff.firm_code", "st.first_name", "st.employee_code", "tf.name", "tf.firm_code", "p.sku_code", "p.sku_name"],
+  search: ["pl.name", "o.order_id", "ff.name", "ff.firm_code", "st.first_name", "st.employee_code", "tf.name", "tf.firm_code", "p.sku_code", "p.sku_name"],
   filters: [
     { key: "orderType", label: "Order type", expr: "o.order_type" },
     { key: "channel", label: "Channel", expr: "fc.channel" },
