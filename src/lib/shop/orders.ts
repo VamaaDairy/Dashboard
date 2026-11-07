@@ -265,9 +265,15 @@ export async function setRiderLocation(riderId: number, lat: number, lng: number
       where r.id = $1 returning p.lat, p.lng, p.secs`,
     [riderId, lat, lng],
   );
-  if (!prev || prev.lat == null || prev.lng == null || prev.secs == null || prev.secs > 600) return;
-  const m = haversine({ lat: prev.lat, lng: prev.lng }, { lat, lng });
-  if (m < 15 || m > 2000 || m / Math.max(prev.secs, 1) > 28) return;
+  const fresh = !!prev && prev.lat != null && prev.lng != null && prev.secs != null && prev.secs <= 600;
+  const m = fresh ? haversine({ lat: prev.lat!, lng: prev.lng! }, { lat, lng }) : 0;
+  // the track the Dashboard draws (delivery and rider tracking): every position except a GPS jump
+  if (!fresh || m / Math.max(prev!.secs!, 1) <= 28) {
+    await query(`insert into shop_rider_ping (rider_id, lat, lng) values ($1, $2, $3)`, [riderId, lat, lng]);
+    if (Math.random() < 0.01) await query(`delete from shop_rider_ping where rider_id = $1 and at < now() - interval '90 days'`, [riderId]);
+  }
+  if (!fresh) return;
+  if (m < 15 || m > 2000 || m / Math.max(prev!.secs!, 1) > 28) return;
   await query(
     `insert into shop_rider_km (rider_id, day, metres) values ($1, (now() at time zone 'Asia/Kolkata')::date, $2)
      on conflict (rider_id, day) do update set metres = shop_rider_km.metres + excluded.metres`,

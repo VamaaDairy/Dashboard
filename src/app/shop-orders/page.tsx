@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Store, UserX, Repeat } from "lucide-react";
+import { Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Route, Store, UserX, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusSelect } from "@/components/shop/StatusSelect";
 import { AssignSelect } from "@/components/shop/AssignSelect";
@@ -94,6 +94,11 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
                   <td className="px-3 py-2">
                     {canEdit ? <AssignSelect orderId={o.id} riderId={o.rider_id} riders={riders} /> : o.rider?.name ?? "-"}
                     {o.lat === null ? <div className="mt-1 text-xs text-amber-600">No map pin</div> : null}
+                    {o.rider_id && o.picked_up_at ? (
+                      <Link href={`/shop-orders/track/${o.id}`} className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                        <Route className="h-3.5 w-3.5" /> {o.status === "out_for_delivery" ? "Track live" : "Route"}
+                      </Link>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2">{canEdit ? <StatusSelect id={o.id} status={o.status} /> : STATUS_LABEL[o.status] ?? o.status}</td>
                 </tr>
