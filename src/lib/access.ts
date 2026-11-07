@@ -60,6 +60,7 @@ export const RESOURCES: Resource[] = [
   { key: "productmaster.retail", label: "Retail app products", group: "Product Master", path: "/product-master/retail" },
   { key: "productmaster.distributor", label: "Distributor app products", group: "Product Master", path: "/product-master/distributor" },
   { key: "productnames", label: "Product names check (SKU clashes)", group: "Product Master", path: "/product-names" },
+  { key: "customers", label: "Customer Master (distributors, retailers, D2C, profiles)", group: "Customer Master", path: "/customers" },
   // the Gaia Dairy app's business: each its own permission
   { key: "d2c.customers", label: "Customer Master (app customers)", group: "D2C business", path: "/d2c/customers" },
   { key: "d2c.sales", label: "Sales dashboard", group: "D2C business", path: "/d2c/sales" },
