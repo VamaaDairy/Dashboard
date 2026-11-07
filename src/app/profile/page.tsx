@@ -35,6 +35,15 @@ export default async function ProfilePage() {
             <dd className="text-foreground">{me.name}</dd>
             <dt className="text-muted-foreground">Sign-in user name</dt>
             <dd className="text-foreground">{me.email}</dd>
+            <dt className="text-muted-foreground">Access</dt>
+            <dd className="text-foreground">
+              {me.role === "owner" ? "Owner - everything" : (
+                <>
+                  {me.department ? `From the ${me.department.name} department` : "No department"}
+                  {Object.keys(me.personal).length ? ` + ${Object.keys(me.personal).length} page${Object.keys(me.personal).length === 1 ? "" : "s"} given to you` : ""}
+                </>
+              )}
+            </dd>
           </dl>
           <RecoveryEmailForm initial={row?.recovery_email ?? ""} />
         </div>

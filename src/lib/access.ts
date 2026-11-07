@@ -138,6 +138,15 @@ export function levelsFor(user: { role: string; access: AccessMap }): AccessMap 
 }
 
 /** Keeps only known resources with a real level; drops "none". Untrusted input goes through this. */
+const RANK_OF: Record<Level, number> = { none: 0, view: 1, edit: 2 };
+
+/** Two access maps together, the higher level winning per resource (a department's plus a person's own). */
+export function mergeAccess(a: AccessMap, b: AccessMap): AccessMap {
+  const out: AccessMap = { ...a };
+  for (const [k, v] of Object.entries(b)) if (RANK_OF[v] > RANK_OF[out[k] ?? "none"]) out[k] = v;
+  return out;
+}
+
 export function cleanAccess(raw: unknown): AccessMap {
   const out: AccessMap = {};
   if (!raw || typeof raw !== "object") return out;

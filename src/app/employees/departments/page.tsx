@@ -18,9 +18,9 @@ export default async function DepartmentsPage() {
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="mx-auto w-full max-w-4xl space-y-4">
         <PageHeader icon={Building2} title="Employee Master · Departments"
-          subtitle="Every employee belongs to one department, and each department to Salesforce, Plant or Office. Switching one off keeps its people but hides it from new choices." />
+          subtitle="Every employee belongs to one department, and each department to Salesforce, Plant or Office. A department also sets what its people can open on the dashboard. Switching one off keeps its people but hides it from new choices." />
         <EmployeeTabs on="departments" counts={counts} />
-        <DepartmentEditor departments={departments} canEdit={canEdit} />
+        <DepartmentEditor departments={departments} canEdit={canEdit} canSetAccess={me?.role === "owner"} />
       </div>
     </div>
   );

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { GROUPS, RESOURCES, type AccessMap, type Level } from "@/lib/access";
+import type { AccessMap } from "@/lib/access";
+import { AccessEditor } from "@/components/access/AccessEditor";
 import { saveUser } from "./actions";
 
 export interface UserRecord {
@@ -10,19 +11,25 @@ export interface UserRecord {
   email: string;
   name: string;
   role: string;
-  department: string;
+  /** set on the login; null = the linked employee's department (employeeDepartmentId), if any */
+  departmentId: number | null;
+  employeeDepartmentId: number | null;
+  /** the employee this login is (Employee Master) */
+  employee: string | null;
   mobile: string;
   isActive: boolean;
   access: AccessMap;
 }
 
-const BLANK: UserRecord = { id: "", email: "", name: "", role: "viewer", department: "", mobile: "", isActive: true, access: {} };
+export interface DepartmentOption { id: number; name: string; active: boolean; access: AccessMap }
+
+const BLANK: UserRecord = { id: "", email: "", name: "", role: "viewer", departmentId: null, employeeDepartmentId: null, employee: null, mobile: "", isActive: true, access: {} };
 
 const field =
   "w-full rounded-lg border border-border bg-input/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30";
 
-export function UsersManager({ users }: { users: UserRecord[] }) {
-  const departments = [...new Set(users.map((u) => u.department).filter(Boolean))].sort();
+export function UsersManager({ users, departments }: { users: UserRecord[]; departments: DepartmentOption[] }) {
+  const deptOf = (u: UserRecord) => departments.find((d) => d.id === (u.departmentId ?? u.employeeDepartmentId)) ?? null;
   const router = useRouter();
   const [editing, setEditing] = useState<UserRecord | null>(null);
   const [password, setPassword] = useState("");
@@ -36,18 +43,6 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
   };
   const isNew = editing !== null && !editing.id;
 
-  const setLevel = (key: string, level: Level) =>
-    setEditing((u) => {
-      if (!u) return u;
-      const access = { ...u.access };
-      if (level === "none") delete access[key];
-      else access[key] = level;
-      return { ...u, access };
-    });
-
-  const setGroup = (group: string, level: Level) =>
-    RESOURCES.filter((r) => r.group === group).forEach((r) => setLevel(r.key, level));
-
   const submit = () => {
     if (!editing) return;
     setError("");
@@ -57,7 +52,7 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
         name: editing.name,
         email: editing.email,
         role: editing.role,
-        department: editing.department,
+        departmentId: editing.departmentId,
         mobile: editing.mobile,
         isActive: editing.isActive,
         access: editing.access,
@@ -112,17 +107,15 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
               />
             </label>
             <label className="block text-xs font-medium text-muted-foreground">
-              Department
-              <input
+              Department (their access comes from it)
+              <select
                 className={`${field} mt-1.5`}
-                list="departments"
-                value={editing.department}
-                placeholder="e.g. Production, Accounts, Dispatch"
-                onChange={(e) => setEditing({ ...editing, department: e.target.value })}
-              />
-              <datalist id="departments">
-                {departments.map((d) => <option key={d} value={d} />)}
-              </datalist>
+                value={editing.departmentId ?? ""}
+                onChange={(e) => setEditing({ ...editing, departmentId: e.target.value ? Number(e.target.value) : null })}
+              >
+                <option value="">{editing.employeeDepartmentId ? `As their employee record (${departments.find((d) => d.id === editing.employeeDepartmentId)?.name ?? "-"})` : "No department"}</option>
+                {departments.filter((d) => d.active || d.id === editing.departmentId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
             </label>
             <label className="block text-xs font-medium text-muted-foreground">
               Mobile number (forgot-password code is texted here)
@@ -172,46 +165,12 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
           {editing.role === "owner" ? (
             <p className="text-sm text-muted-foreground">Owners can open and change everything.</p>
           ) : (
-            <div className="space-y-4">
-              <p className="text-xs font-medium text-muted-foreground">
-                What they can open. &quot;View&quot; opens the page read-only, &quot;Edit&quot; lets them change it.
-              </p>
-              {GROUPS.map((g) => (
-                <div key={g} className="rounded-lg border border-border">
-                  <div className="flex items-center justify-between border-b border-border bg-secondary px-3 py-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-tertiary-foreground">{g}</span>
-                    <span className="flex gap-2 text-[11px]">
-                      {(["none", "view", "edit"] as Level[]).map((l) => (
-                        <button
-                          key={l}
-                          type="button"
-                          onClick={() => setGroup(g, l)}
-                          className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                        >
-                          all {l === "none" ? "no access" : l}
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                  <div className="divide-y divide-border/70">
-                    {RESOURCES.filter((r) => r.group === g).map((r) => (
-                      <div key={r.key} className="flex items-center justify-between px-3 py-1.5 text-sm">
-                        <span className="text-foreground">{r.label}</span>
-                        <select
-                          className="rounded-md border border-border bg-input/30 px-2 py-1 text-xs"
-                          value={editing.access[r.key] ?? "none"}
-                          onChange={(e) => setLevel(r.key, e.target.value as Level)}
-                        >
-                          <option value="none">No access</option>
-                          <option value="view">View</option>
-                          <option value="edit">Edit</option>
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <AccessEditor
+              value={editing.access}
+              onChange={(access) => setEditing({ ...editing, access })}
+              inherited={deptOf(editing)?.access}
+              inheritedFrom={deptOf(editing)?.name}
+            />
           )}
 
           <div className="flex gap-2">
@@ -239,6 +198,7 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
             <th className="px-4 py-2 text-left font-bold">Name</th>
             <th className="px-3 py-2 text-left font-bold">Email</th>
             <th className="px-3 py-2 text-left font-bold">Department</th>
+            <th className="px-3 py-2 text-left font-bold">Employee</th>
             <th className="px-3 py-2 text-left font-bold">Mobile</th>
             <th className="px-3 py-2 text-left font-bold">Role</th>
             <th className="px-3 py-2 text-left font-bold">Status</th>
@@ -250,7 +210,11 @@ export function UsersManager({ users }: { users: UserRecord[] }) {
             <tr key={u.id} className="border-b border-border/70 hover:bg-muted">
               <td className="px-4 py-2 font-medium text-foreground">{u.name}</td>
               <td className="px-3 py-2 text-muted-foreground">{u.email}</td>
-              <td className="px-3 py-2">{u.department || <span className="text-tertiary-foreground">—</span>}</td>
+              <td className="px-3 py-2">
+                {deptOf(u)?.name ?? <span className="text-tertiary-foreground">—</span>}
+                {Object.keys(u.access).length ? <span className="ml-1 text-[11px] text-muted-foreground">+ {Object.keys(u.access).length} extra</span> : null}
+              </td>
+              <td className="px-3 py-2">{u.employee ?? <span className="text-tertiary-foreground">Not linked</span>}</td>
               <td className="px-3 py-2">{u.mobile || <span className="text-tertiary-foreground">—</span>}</td>
               <td className="px-3 py-2 capitalize">{u.role}</td>
               <td className="px-3 py-2">{u.isActive ? "Active" : <span className="text-destructive">Deactivated</span>}</td>

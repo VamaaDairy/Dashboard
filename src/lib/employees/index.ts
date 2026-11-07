@@ -1,5 +1,6 @@
 import "server-only";
 import { one, query, tx } from "@/lib/db";
+import { cleanAccess, type AccessMap } from "@/lib/access";
 
 /**
  * Employee Master (migration 094): every employee - the staff list, fp_staff, which the Employee app and the
@@ -121,13 +122,33 @@ export async function employeeProfile(uid: string): Promise<EmployeeProfile | nu
 
 // ---------------------------------------------------------------- departments
 
-export interface Department { id: number; name: string; wing: Wing | null; active: boolean; people: number }
+export interface Department {
+  id: number; name: string; wing: Wing | null; active: boolean;
+  /** employees in it, and dashboard logins whose access comes from it */
+  people: number; logins: number;
+  /** the dashboard access its people get (migration 095) */
+  access: AccessMap;
+}
 
-export const listDepartments = () =>
-  query<Department>(
-    `select dep.id, dep.name, dep.wing, dep.active, (select count(*)::int from emp_master m where m.department_id = dep.id) as people
+export async function listDepartments(): Promise<Department[]> {
+  const rows = await query<Omit<Department, "access"> & { access: unknown }>(
+    `select dep.id, dep.name, dep.wing, dep.active, dep.access,
+            (select count(*)::int from emp_master m where m.department_id = dep.id) as people,
+            (select count(*)::int from app_user u left join emp_master em on em.app_user_id = u.id
+              where coalesce(u.department_id, em.department_id) = dep.id) as logins
        from department dep order by dep.active desc, dep.sort, dep.name`,
   );
+  return rows.map((r) => ({ ...r, access: cleanAccess(r.access) }));
+}
+
+/** Sets what a department's people may open on the dashboard. */
+export async function saveDepartmentAccess(id: number, access: AccessMap, who: string): Promise<Result> {
+  const clean = cleanAccess(access);
+  const r = await query(`update department set access = $2::jsonb where id = $1 returning id`, [id, JSON.stringify(clean)]);
+  if (!r.length) return { ok: false, error: "Unknown department." };
+  await audit(who, String(id), "department access changed", clean);
+  return { ok: true };
+}
 
 /** Dashboard logins not yet linked to an employee (to link one). */
 export const unlinkedUsers = () =>

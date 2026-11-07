@@ -18,8 +18,8 @@ export interface UserInput {
   name: string;
   email: string;
   role: string;
-  /** typed in by the owner, e.g. "Production", "Accounts" */
-  department: string;
+  /** the department their access comes from; null = their employee record's, if any */
+  departmentId: number | null;
   /** 10-digit mobile: where the forgot-password code is texted */
   mobile: string;
   isActive: boolean;
@@ -42,9 +42,11 @@ export async function saveUser(input: UserInput): Promise<UserResult> {
   const email = input.email.trim().toLowerCase();
   const role = input.role as Role;
   const password = input.password?.trim() ?? "";
-  const department = input.department.trim().replace(/\s+/g, " ") || null;
+  const departmentId = input.departmentId && Number.isInteger(input.departmentId) ? input.departmentId : null;
+  // the department's name is kept in the old text column too, for anything still reading it
+  const department = departmentId ? (await query<{ name: string }>(`select name from department where id = $1`, [departmentId]))[0]?.name ?? null : null;
+  if (departmentId && !department) return fail("Unknown department.");
   const mobile = input.mobile.replace(/\D/g, "").slice(-10) || null;
-  if (department && department.length > 80) return fail("Department is too long.");
   if (mobile && !/^[6-9]\d{9}$/.test(mobile)) return fail("Enter a valid 10-digit mobile number.");
   if (!name) return fail("Name is required.");
   if (!/^\S+@\S+\.\S+$/.test(email)) return fail("Enter a valid email - it is the user name they sign in with.");
@@ -56,9 +58,9 @@ export async function saveUser(input: UserInput): Promise<UserResult> {
     if (!input.id) {
       if (!password) return fail("Set a password for the new user.");
       await query(
-        `insert into app_user (email, name, role, password_hash, is_active, access, department, mobile)
-         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
-        [email, name, role, await hashPassword(password), input.isActive, access, department, mobile],
+        `insert into app_user (email, name, role, password_hash, is_active, access, department, department_id, mobile)
+         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $9, $8)`,
+        [email, name, role, await hashPassword(password), input.isActive, access, department, mobile, departmentId],
       );
     } else {
       // an owner can't lock themselves out by accident
@@ -67,9 +69,9 @@ export async function saveUser(input: UserInput): Promise<UserResult> {
       }
       await query(
         `update app_user set email = $2, name = $3, role = $4, is_active = $5, access = $6::jsonb,
-                            department = $7, mobile = $8
+                            department = $7, mobile = $8, department_id = $9
           where id = $1`,
-        [input.id, email, name, role, input.isActive, access, department, mobile],
+        [input.id, email, name, role, input.isActive, access, department, mobile, departmentId],
       );
       if (password) {
         await query(`update app_user set password_hash = $2 where id = $1`, [input.id, await hashPassword(password)]);

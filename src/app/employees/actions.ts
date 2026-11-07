@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { isWing, linkDashboardUser, placeEmployees, saveDepartment, type Result, type Wing } from "@/lib/employees";
+import { isWing, linkDashboardUser, placeEmployees, saveDepartment, saveDepartmentAccess, type Result, type Wing } from "@/lib/employees";
+import type { AccessMap } from "@/lib/access";
 
 async function editor() {
   const me = await userFromToken((await cookies()).get("session")?.value);
@@ -40,5 +41,15 @@ export async function saveDepartmentAction(input: { id?: number; name: string; w
   if (!me) return denied;
   const r = await saveDepartment({ id: input.id, name: input.name, wing: isWing(input.wing) ? input.wing : null, active: input.active }, me.email);
   revalidatePath("/employees", "layout");
+  return r;
+}
+
+/** What a department's people may open - only an owner, like giving access to a person. */
+export async function saveDepartmentAccessAction(id: number, access: AccessMap): Promise<Result> {
+  const me = await userFromToken((await cookies()).get("session")?.value);
+  if (!me || me.role !== "owner") return { ok: false, error: "Only an owner can change what a department may open." };
+  const r = await saveDepartmentAccess(id, access, me.email);
+  revalidatePath("/employees/departments");
+  revalidatePath("/users");
   return r;
 }
