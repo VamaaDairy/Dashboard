@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { ProductCell } from "@/components/products/Product";
 import { useRouter } from "next/navigation";
 import { Copy, Package, Plus, Search, Settings2, Trash2 } from "lucide-react";
 import { saveSku, saveSkuDay, saveSkuPacking, type MaterialLine } from "@/app/daily/sku-actions";
@@ -195,8 +196,9 @@ export function SkuPackingDay({
         <div className="overflow-x-auto">
           <table className="w-full whitespace-nowrap text-[13px]">
             <THead>
-              <Th align="left">Code</Th>
-              <Th align="left">SKU</Th>
+              <Th align="left">Product</Th>
+              <Th align="left">Pack qty</Th>
+              <Th align="left">Unit</Th>
               <Th align="left">Case</Th>
               <Th>Cases</Th>
               <Th>Loose pcs</Th>
@@ -218,8 +220,9 @@ export function SkuPackingDay({
                     const single = s.pcs_per_case === 1;
                     return (
                       <tr key={s.sku_id} className={`border-b border-border/70 hover:bg-muted/40 ${pcs > 0 ? "" : "text-muted-foreground"}`}>
-                        <td className="num px-3 py-1.5 text-[12px]">{s.code}</td>
-                        <td className="max-w-80 truncate px-3 py-1.5 font-semibold text-foreground" title={s.name}>{s.name}</td>
+                        <td className="max-w-80 px-3 py-1.5 text-foreground" title={s.name}><ProductCell p={s.label} size={28} /></td>
+                        <td className="num px-3 py-1.5 text-[12px]">{s.label.qty ?? "—"}</td>
+                        <td className="px-3 py-1.5 text-[12px]">{s.label.unit ?? "—"}</td>
                         <td className="px-3 py-1.5 text-[12px]">
                           {single ? s.case_unit : `${s.case_unit} · ${s.pcs_per_case} pcs`}
                         </td>
@@ -266,11 +269,11 @@ export function SkuPackingDay({
                   })}
                 </GroupRows>
               ))}
-              {groups.length === 0 ? <Empty colSpan={11}>No SKU matches.</Empty> : null}
+              {groups.length === 0 ? <Empty colSpan={12}>No SKU matches.</Empty> : null}
             </tbody>
             <tfoot>
               <tr className="bg-muted/50 font-semibold">
-                <td className="px-3 py-2" colSpan={6}>{totals.packed} SKUs packed · each counted in its own unit above</td>
+                <td className="px-3 py-2" colSpan={7}>{totals.packed} SKUs packed · each counted in its own unit above</td>
                 <td className="num px-3 py-2 text-right" colSpan={3}>{formatNumber(totals.kg, 0)} kg + {formatNumber(totals.litres, 0)} L of product</td>
                 <td className="num px-3 py-2 text-right">{formatNumber(totals.material, 0)}</td>
                 <td />
@@ -385,7 +388,7 @@ function GroupRows({ category, rows, children }: { category: string; rows: SkuDa
   return (
     <>
       <tr className="bg-muted/40">
-        <td colSpan={11} className="px-3 pt-3 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        <td colSpan={12} className="px-3 pt-3 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
           {category} <span className="font-normal normal-case tracking-normal">· {rows.length} SKU{rows.length > 1 ? "s" : ""}</span>
         </td>
       </tr>

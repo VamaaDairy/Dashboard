@@ -15,6 +15,8 @@ import { rupees } from "@/lib/shop/pricing";
 import { d2cAccount } from "@/lib/app-orders";
 import { paymentsOf } from "@/lib/payments/easebuzz";
 import { D2cStatus, Field, dateOnly, when } from "../../parts";
+import { labelOf, productLabels } from "@/lib/products/names";
+import { PackQty, PackUnit, ProductCell } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +25,12 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const o = await getOrderById(Number(id));
   if (!o) notFound();
-  const [account, riders, me, payments] = await Promise.all([
+  const [account, riders, me, payments, labels] = await Promise.all([
     d2cAccount(o.id),
     query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`),
     userFromToken((await cookies()).get("session")?.value),
     paymentsOf(o.id),
+    productLabels(),
   ]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
   const map = o.lat !== null && o.lng !== null ? `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}` : null;
@@ -57,7 +60,9 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                 <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
                   <tr>
                     <th className="px-4 py-2 font-semibold">Product</th>
-                    <th className="px-4 py-2 text-right font-semibold">Qty</th>
+                    <th className="px-4 py-2 font-semibold">Pack qty</th>
+                    <th className="px-4 py-2 font-semibold">Unit</th>
+                    <th className="px-4 py-2 text-right font-semibold">Ordered</th>
                     <th className="px-4 py-2 text-right font-semibold">Price</th>
                     <th className="px-4 py-2 text-right font-semibold">Amount</th>
                   </tr>
@@ -66,12 +71,10 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                   {o.items.map((i) => (
                     <tr key={i.sku_code} className="border-t border-border">
                       <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-3">
-                          {/* eslint-disable-next-line @next/next/no-img-element -- product photos come from our own API */}
-                          {i.image_url ? <img src={i.image_url} alt="" className="size-10 rounded-md border border-border bg-white object-contain" /> : <div className="size-10 rounded-md border border-border" />}
-                          <div><div className="font-medium">{i.name}</div><div className="font-mono text-[11px] text-muted-foreground">{i.sku_code}</div></div>
-                        </div>
+                        <ProductCell p={labelOf(labels, i.sku_code, i.name, i.image_url)} size={40} />
                       </td>
+                      <td className="num px-4 py-2.5"><PackQty p={labelOf(labels, i.sku_code, i.name)} /></td>
+                      <td className="px-4 py-2.5"><PackUnit p={labelOf(labels, i.sku_code, i.name)} /></td>
                       <td className="num px-4 py-2.5 text-right">{i.qty}</td>
                       <td className="num px-4 py-2.5 text-right">{rupees(i.unit_price)}</td>
                       <td className="num px-4 py-2.5 text-right font-medium">{rupees(i.line_total)}</td>

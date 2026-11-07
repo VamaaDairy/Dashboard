@@ -1,5 +1,6 @@
 import { TrendingUp } from "lucide-react";
 import type { MasterDef } from "../types";
+import { productCols, productJoin } from "./product-cols";
 
 /**
  * Secondary Sales Report and Primary Sales Report (Recibo routes
@@ -14,7 +15,7 @@ import type { MasterDef } from "../types";
  */
 const FROM = `fp_transaction_item i
     join fp_transaction t on t.uid = i.transaction_uid
-    join fp_product p on p.uid = i.product_uid
+    join fp_product p on p.uid = i.product_uid${productJoin("p.sku_code")}
     left join fp_firm tf on tf.uid = t.to_firm_uid
     left join fp_firm ff on ff.uid = t.from_firm_uid
     left join fp_channel tc on tc.uid = tf.channel_uid
@@ -27,9 +28,7 @@ const COLS: MasterDef["cols"] = [
   { key: "salesDate", label: "Sales Date", expr: "t.voucher_time", kind: "mono" },
   { key: "toFirm", label: "To Firm", expr: "tf.name" },
   { key: "fromFirm", label: "From Firm", expr: "ff.name" },
-  { key: "skuName", label: "SKU Name", expr: "p.sku_name" },
-  { key: "skuCode", label: "SKU Code", expr: "p.sku_code", kind: "mono" },
-  { key: "skuSize", label: "SKU Size", expr: "p.sku_size" },
+  ...productCols("p.sku_code", "p.sku_name"),
   { key: "mrp", label: "MRP", expr: "p.mrp", kind: "money" },
   { key: "dp", label: "DP", expr: "p.dp", kind: "money" },
   { key: "category", label: "Category", expr: "p.category" },
@@ -75,7 +74,7 @@ const report = (slug: string, title: string, subtitle: string, baseWhere: string
   dateRange: { expr: "coalesce(t.transaction_time, t.created_at)", days: 30 },
   emptyNote: "No sales were invoiced in this period.",
   cols: COLS,
-  search: ["t.voucher_number", "tf.name", "tf.firm_code", "ff.name", "p.sku_code", "p.sku_name"],
+  search: ["pl.name", "t.voucher_number", "tf.name", "tf.firm_code", "ff.name", "p.sku_code", "p.sku_name"],
   order: "coalesce(t.transaction_time, t.created_at) desc, t.voucher_number, i.created_at",
 });
 

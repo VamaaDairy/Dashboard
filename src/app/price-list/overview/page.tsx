@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProductThumb } from "@/components/products/Product";
 import { ArrowLeft, Grid3x3, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
@@ -113,8 +114,11 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                   <tr key={p.uid} className="hover:bg-muted/40">
                     <td className={cn(stickyLeft, "min-w-60 border-t border-r border-border px-3 py-2")}>
                       {i === 0 || rows[i - 1].category !== p.category ? <div className="pb-0.5 text-[10px] font-semibold tracking-wide text-tertiary-foreground uppercase">{p.category}</div> : null}
+                      <div className="flex items-center gap-2"><ProductThumb image={p.image} size={32} /><div className="min-w-0">
                       <div className="font-medium">{p.name}</div>
-                      <div className="text-[11px] text-tertiary-foreground"><span className="font-mono">{p.sku}</span>{!p.inApp ? <span className="ml-1.5">· not in app</span> : !p.inShop ? <span className="ml-1.5">· trade only</span> : null}</div>
+                      <div className="text-[11px] text-tertiary-foreground"><span className="font-mono">{p.sku}</span>
+                        <span className="ml-1.5 rounded bg-muted px-1.5 text-muted-foreground" title="Pack quantity">{p.packQty ?? "—"}</span>
+                        <span className="ml-1 rounded bg-muted px-1.5 text-muted-foreground" title="Unit">{p.unit ?? "—"}</span>{!p.inApp ? <span className="ml-1.5">· not in app</span> : !p.inShop ? <span className="ml-1.5">· trade only</span> : null}</div></div></div>
                     </td>
                     {check ? (
                       <td className="num border-t border-r border-border px-3 py-2 text-right whitespace-nowrap">

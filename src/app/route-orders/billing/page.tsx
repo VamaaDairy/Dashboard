@@ -12,16 +12,21 @@ import type { VoucherLine } from "@/lib/route-orders/calc";
 import { cancelBillAction, issueBillsAction } from "../actions";
 import { ConfirmButton } from "../confirm-button";
 import { Notice, inr2 } from "../parts";
+import { labelOf, productLabels, type ProductLabel } from "@/lib/products/names";
+import { ProductLine } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
 const qtyText = (n: number) => String(Number(Number(n).toFixed(4)));
 
-function Lines({ lines }: { lines: VoucherLine[] }) {
+function Lines({ lines, labels }: { lines: VoucherLine[]; labels: Map<number, ProductLabel> }) {
   return (
     <table className="w-full text-xs">
       <thead className="text-left text-muted-foreground">
         <tr>
+          <th className="px-2 py-1 font-medium">Product</th>
+          <th className="px-2 py-1 font-medium">Pack qty</th>
+          <th className="px-2 py-1 font-medium">Unit</th>
           <th className="px-2 py-1 font-medium">Tally item</th>
           <th className="px-2 py-1 font-medium">Sales ledger</th>
           <th className="px-2 py-1 text-right font-medium">Qty</th>
@@ -34,6 +39,9 @@ function Lines({ lines }: { lines: VoucherLine[] }) {
       <tbody>
         {lines.map((l, i) => (
           <tr key={i} className="border-t border-border">
+            <td className="px-2 py-1"><ProductLine p={labelOf(labels, l.sku, l.name)} /></td>
+            <td className="num px-2 py-1">{labelOf(labels, l.sku, l.name).qty ?? "—"}</td>
+            <td className="px-2 py-1">{labelOf(labels, l.sku, l.name).unit ?? "—"}</td>
             <td className="px-2 py-1">{l.item}</td>
             <td className="px-2 py-1 text-muted-foreground">{l.ledger}</td>
             <td className="num whitespace-nowrap px-2 py-1 text-right">{qtyText(l.qty)} {l.unit}</td>
@@ -53,7 +61,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const date = validDate(sp.date);
   const me = await userFromToken((await cookies()).get("session")?.value);
   const canEdit = !!me && atLeast(levelFor(me, "routeorders.billing"), "edit");
-  const [day, bills, next] = await Promise.all([billingDay(date), billsOf(date), nextVoucherNo(date)]);
+  const [day, bills, next, labels] = await Promise.all([billingDay(date), billsOf(date), nextVoucherNo(date), productLabels()]);
   const live = bills.filter((b) => b.status === "issued");
   const readyTotal = day.ready.reduce((s, b) => s + b.total, 0);
 
@@ -113,7 +121,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                         <span className="num w-28 text-right font-medium">{inr2(b.total)}</span>
                       </summary>
                       <div className="space-y-2 border-t border-border bg-muted/20 px-4 py-3">
-                        <Lines lines={b.lines} />
+                        <Lines lines={b.lines} labels={labels} />
                         <p className="text-xs text-muted-foreground">Taxable {inr2(b.taxable)} · GST {inr2(b.cgst + b.sgst + b.igst)} · Round-off {inr2(b.roundoff)}</p>
                         {b.warnings.map((w) => <p key={w} className="text-xs text-amber-700">{w}</p>)}
                       </div>
@@ -156,7 +164,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                       <span className="num w-28 text-right font-medium">{inr2(Number(b.total))}</span>
                     </summary>
                     <div className="space-y-2 border-t border-border bg-muted/20 px-4 py-3">
-                      <Lines lines={b.data.lines} />
+                      <Lines lines={b.data.lines} labels={labels} />
                       <p className="text-xs text-muted-foreground">Ledger {b.ledger} · Taxable {inr2(Number(b.taxable))} · GST {inr2(Number(b.tax))} · Round-off {inr2(Number(b.roundoff))} · Made by {b.created_by}</p>
                       {b.data.warnings.map((w) => <p key={w} className="text-xs text-amber-700">{w}</p>)}
                       {canEdit && b.status === "issued" ? (

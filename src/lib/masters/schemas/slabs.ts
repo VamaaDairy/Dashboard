@@ -1,5 +1,6 @@
 import { Percent } from "lucide-react";
 import type { MasterDef } from "../types";
+import { productCols, productJoin } from "./product-cols";
 import { REF_PRODUCTS, REF_SLABS } from "../refs";
 import { active } from "./fragments";
 
@@ -9,11 +10,10 @@ export const slabs: MasterDef = {
   title: "Slab Pricing",
   subtitle: "Special price lists (slabs) by product, as assigned to customers.",
   icon: Percent,
-  from: `fp_slab_rate sr join fp_slab sl on sl.uid = sr.slab_uid join fp_product p on p.uid = sr.product_uid`,
+  from: `fp_slab_rate sr join fp_slab sl on sl.uid = sr.slab_uid join fp_product p on p.uid = sr.product_uid${productJoin("p.sku_code")}`,
   cols: [
     { key: "slab", label: "Slab", expr: "sl.name" },
-    { key: "sku", label: "SKU", expr: "p.sku_code", kind: "mono" },
-    { key: "product", label: "Product", expr: "p.sku_name" },
+    ...productCols("p.sku_code", "p.sku_name"),
     { key: "mrp", label: "MRP", expr: "p.mrp", kind: "money" },
     { key: "dp", label: "Dealer price", expr: "sr.dp", kind: "money" },
     { key: "sp", label: "Selling price", expr: "sr.sp", kind: "money" },
@@ -21,7 +21,7 @@ export const slabs: MasterDef = {
     { key: "from", label: "Effective from", expr: "sr.from_date", kind: "date" },
     { key: "status", label: "Status", expr: active("sr"), kind: "status" },
   ],
-  search: ["sl.name", "p.sku_code", "p.sku_name"],
+  search: ["pl.name", "sl.name", "p.sku_code", "p.sku_name"],
   filters: [
     { key: "slab", label: "Slab", expr: "sl.name" },
     { key: "status", label: "Status", expr: active("sr") },

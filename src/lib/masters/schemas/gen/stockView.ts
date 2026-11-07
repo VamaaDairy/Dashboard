@@ -1,5 +1,6 @@
 import { Boxes } from "lucide-react";
 import type { MasterDef } from "../../types";
+import { productCols, productJoin } from "../product-cols";
 
 /**
  * Stock View (Recibo route `stockView`).
@@ -17,7 +18,7 @@ export const stockView: MasterDef = {
     left join fp_stock_request j1 on j1.uid = m.stock_request_uid
     left join fp_firm j2 on j2.uid = j1.from_firm_uid
     left join fp_firm j3 on j3.uid = j1.to_firm_uid
-    left join fp_product j4 on j4.uid = m.product_uid`,
+    left join fp_product j4 on j4.uid = m.product_uid${productJoin("j4.sku_code")}`,
   dateRange: { expr: "m.created_at", days: 30 },
   cols: [
     { key: "no", label: "No", expr: "row_number() over (order by m.created_at desc)", kind: "num" },
@@ -30,15 +31,13 @@ export const stockView: MasterDef = {
     { key: "fromFirm", label: "From Firm", expr: "j2.name" },
     { key: "toFirm", label: "To Firm", expr: "j3.name" },
     { key: "syncRemarks", label: "Sync Remarks", expr: "j1.sync_remarks" },
-    { key: "skuCode", label: "SKU Code", expr: "j4.sku_code", kind: "mono" },
+    ...productCols("j4.sku_code", "j4.sku_name"),
     { key: "qty2", label: "Qty.", expr: "m.quantity", kind: "num" },
     { key: "mrp", label: "MRP", expr: "m.mrp", kind: "money" },
     { key: "sp", label: "SP", expr: "m.selling_price", kind: "num" },
     { key: "totalCost", label: "Total Cost", expr: "m.total_cost", kind: "money" },
-    { key: "skuName", label: "SKU Name", expr: "j4.sku_name", kind: "mono" },
-    { key: "productName", label: "Product Name", expr: "j4.model_name" },
     { key: "unit", label: "Unit", expr: "nullif(m.unit::text, 'null')" },
   ],
-  search: ["j4.sku_code", "j4.sku_name", "j1.requisition_number"],
+  search: ["pl.name", "j4.sku_code", "j4.sku_name", "j1.requisition_number"],
   order: "m.created_at desc",
 };

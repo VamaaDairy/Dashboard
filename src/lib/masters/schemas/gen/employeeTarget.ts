@@ -1,5 +1,6 @@
 import { Target } from "lucide-react";
 import type { MasterDef } from "../../types";
+import { productCols, productJoin } from "../product-cols";
 
 /**
  * Employee Target (Recibo route `employeeTarget`).
@@ -17,7 +18,7 @@ export const employeeTarget: MasterDef = {
     left join fp_staff j1 on j1.uid = m.employee_uid
     left join fp_firm j2 on j2.uid = m.firm_uid
     left join fp_channel j3 on j3.uid = m.channel_uid
-    left join fp_designation j4 on j4.uid = j1.designation_uid`,
+    left join fp_designation j4 on j4.uid = j1.designation_uid${productJoin("m.sku_code")}`,
   cols: [
     { key: "no", label: "No", expr: "row_number() over (order by m.start_date desc, m.created_at desc)", kind: "num" },
     { key: "employee", label: "Employee", expr: "j1.first_name" },
@@ -25,8 +26,7 @@ export const employeeTarget: MasterDef = {
     { key: "employeeDivision", label: "Employee Division", expr: "nullif(j1.division::text, 'null')" },
     { key: "customer", label: "Customer", expr: "j2.name" },
     { key: "customerCode", label: "Customer Code", expr: "j2.firm_code", kind: "mono" },
-    { key: "skuName", label: "SKU Name", expr: "m.sku_name", kind: "mono" },
-    { key: "skuCode", label: "SKU Code", expr: "m.sku_code", kind: "mono" },
+    ...productCols("m.sku_code", "m.sku_name"),
     { key: "customField", label: "Custom Field", expr: "nullif(m.custom_field::text, 'null')" },
     { key: "routes", label: "Routes", expr: "nullif(m.routes::text, 'null')" },
     { key: "brand", label: "Brand", expr: "m.brand" },
@@ -48,7 +48,7 @@ export const employeeTarget: MasterDef = {
     { key: "channel", label: "Channel", expr: "j3.channel" },
     { key: "chain", label: "Chain", expr: "m.chain_chain" },
   ],
-  search: ["j1.first_name", "j1.employee_code", "j2.name", "m.sku_code"],
+  search: ["pl.name", "j1.first_name", "j1.employee_code", "j2.name", "m.sku_code"],
   filters: [
     { key: "designation", label: "Designation", expr: "j4.designation" },
     { key: "targettype", label: "Target type", expr: "m.target_type" },

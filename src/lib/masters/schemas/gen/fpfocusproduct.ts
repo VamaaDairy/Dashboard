@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 import type { MasterDef } from "../../types";
+import { productCols, productJoin } from "../product-cols";
 
 /**
  * Focus Products (Recibo route `fpfocusproduct`).
@@ -14,12 +15,11 @@ export const fpfocusproduct: MasterDef = {
   subtitle: "Products the field force is asked to push, by region, state and channel.",
   icon: Star,
   from: `fp_focus_product m
-    left join fp_product j1 on j1.uid = m.product_uid
+    left join fp_product j1 on j1.uid = m.product_uid${productJoin("j1.sku_code")}
     left join fp_channel j2 on j2.uid = m.channel_uid`,
   cols: [
     { key: "no", label: "No", expr: "row_number() over (order by m.created_at desc)", kind: "num" },
-    { key: "skuCode", label: "Sku Code", expr: "j1.sku_code", kind: "mono" },
-    { key: "skuName", label: "Sku Name", expr: "j1.sku_name", kind: "mono" },
+    ...productCols("j1.sku_code", "j1.sku_name"),
     { key: "region", label: "Region", expr: "nullif(m.region::text, 'null')" },
     { key: "state", label: "State", expr: "nullif(m.state::text, 'null')" },
     { key: "division", label: "Division", expr: "nullif(m.division::text, 'null')" },
@@ -38,7 +38,7 @@ export const fpfocusproduct: MasterDef = {
     { key: "customerTypes", label: "Customer Types", expr: "nullif(m.customer_type::text, 'null')" },
     { key: "createdDate", label: "Created Date", expr: "m.created_at", kind: "date" },
   ],
-  search: ["j1.sku_code", "j1.sku_name"],
+  search: ["pl.name", "j1.sku_code", "j1.sku_name"],
   filters: [
     { key: "region", label: "Region", expr: "m.region" },
     { key: "channel", label: "Channel", expr: "j2.channel" },

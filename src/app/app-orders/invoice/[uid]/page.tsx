@@ -61,7 +61,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ uid: s
           <table className="mt-3 w-full border-collapse">
             <thead className="bg-neutral-100">
               <tr>
-                <th className={th}>#</th><th className={th}>Product</th><th className={`${th} text-right`}>Qty</th>
+                <th className={th}>#</th><th className={th}>Product</th><th className={th}>Pack qty</th><th className={th}>Unit</th><th className={`${th} text-right`}>Qty</th>
                 <th className={`${th} text-right`}>MRP</th><th className={`${th} text-right`}>Rate</th><th className={`${th} text-right`}>Amount</th>
               </tr>
             </thead>
@@ -69,7 +69,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ uid: s
               {v.lines.map((l, i) => (
                 <tr key={l.sku}>
                   <td className={td}>{i + 1}</td>
-                  <td className={td}>{l.name}<div className="font-mono text-[10.5px] text-neutral-500">{l.sku}</div></td>
+                  <td className={td}><div className="font-mono text-[10.5px] text-neutral-500">{l.sku}</div>{l.product ?? l.name}</td>
+                  <td className={td}>{l.product ? l.packQty ?? "—" : ""}</td>
+                  <td className={td}>{l.product ? l.unit ?? "—" : ""}</td>
                   <td className={num}>{l.qty}</td>
                   <td className={num}>{money(l.mrp)}</td>
                   <td className={num}>{money(l.rate)}</td>
@@ -77,7 +79,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ uid: s
                 </tr>
               ))}
               <tr className="font-semibold">
-                <td className={td} colSpan={2}>Total</td>
+                <td className={td} colSpan={4}>Total</td>
                 <td className={num}>{v.totals.qty}</td>
                 <td className={td} colSpan={2} />
                 <td className={num}>₹{money(v.totals.total)}</td>

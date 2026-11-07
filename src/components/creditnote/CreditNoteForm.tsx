@@ -134,7 +134,7 @@ export function CreditNoteForm({ note, today, skus }: { note?: CreditNote; today
                   <Input type="date" value={r.ubd} onChange={(e) => set(r.key, { ubd: e.target.value })} />
                 </label>
                 {(() => {
-                  const sku = skus.find((k) => k.name === r.material_name);
+                  const sku = skus.find((k) => k.name === r.material_name) ?? skus.find((k) => k.raw === r.material_name);
                   const ppc = sku ? sku.pcs_per_case : 1;
                   const unit = sku ? sku.case_unit : r.return_unit;
                   return (

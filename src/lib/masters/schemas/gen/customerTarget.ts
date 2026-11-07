@@ -1,5 +1,6 @@
 import { Target } from "lucide-react";
 import type { MasterDef } from "../../types";
+import { productCols, productJoin } from "../product-cols";
 
 /**
  * Customer Target (Recibo route `customerTarget`).
@@ -17,12 +18,12 @@ export const customerTarget: MasterDef = {
   subtitle: "Sales targets set for customers, with what has been achieved.",
   icon: Target,
   from: `fp_customer_target m
-    left join fp_firm j1 on j1.uid = m.firm_uid`,
+    left join fp_firm j1 on j1.uid = m.firm_uid${productJoin("m.sku_code")}`,
   cols: [
     { key: "no", label: "No", expr: "row_number() over (order by m.start_date desc, m.created_at desc)", kind: "num" },
     { key: "customer", label: "Customer", expr: "j1.name" },
     { key: "customerCode", label: "Customer Code", expr: "j1.firm_code", kind: "mono" },
-    { key: "skuCode", label: "SKU Code", expr: "m.sku_code", kind: "mono" },
+    ...productCols("m.sku_code"),
     { key: "customField", label: "Custom Field", expr: "nullif(m.custom_field::text, 'null')" },
     { key: "brand", label: "Brand", expr: "m.brand" },
     { key: "superBrand", label: "Super Brand", expr: "nullif(m.super_brands::text, 'null')" },
@@ -42,7 +43,7 @@ export const customerTarget: MasterDef = {
     { key: "endDate", label: "End Date", expr: "m.end_date" },
     { key: "state", label: "State", expr: "m.state_state" },
   ],
-  search: ["j1.name", "j1.firm_code", "m.sku_code"],
+  search: ["pl.name", "j1.name", "j1.firm_code", "m.sku_code"],
   filters: [
     { key: "targettype", label: "Target type", expr: "m.target_type" },
     { key: "status", label: "Status", expr: "m.status" },

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProductCell } from "@/components/products/Product";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FileText, Mail, MapPin, Phone, Smartphone } from "lucide-react";
@@ -129,7 +130,9 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                   <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
                     <tr>
                       <th className="px-4 py-2 font-semibold">Product</th>
-                      <th className="px-4 py-2 text-right font-semibold">Qty</th>
+                      <th className="px-4 py-2 font-semibold">Pack qty</th>
+                      <th className="px-4 py-2 font-semibold">Unit</th>
+                      <th className="px-4 py-2 text-right font-semibold">Ordered</th>
                       <th className="px-4 py-2 text-right font-semibold">Rate</th>
                       <th className="px-4 py-2 text-right font-semibold">MRP</th>
                       <th className="px-4 py-2 text-right font-semibold">Amount</th>
@@ -139,12 +142,10 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                     {o.lines.map((l) => (
                       <tr key={l.sku} className="border-t border-border">
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-3">
-                            {/* eslint-disable-next-line @next/next/no-img-element -- product photos come from our own API */}
-                            {l.image ? <img src={l.image} alt="" className="size-10 rounded-md border border-border bg-white object-contain" /> : <div className="size-10 rounded-md border border-border" />}
-                            <div><div className="font-medium">{l.name}</div><div className="font-mono text-[11px] text-muted-foreground">{l.sku}</div></div>
-                          </div>
+                          <ProductCell p={{ sku: l.sku, skuNo: null, name: l.name, qty: l.packQty, unit: l.unit, image: l.image, inMaster: true }} size={40} />
                         </td>
+                        <td className="num px-4 py-2.5">{l.packQty ?? "—"}</td>
+                        <td className="px-4 py-2.5">{l.unit ?? "—"}</td>
                         <td className="num px-4 py-2.5 text-right">{qty(l.qty)}</td>
                         <td className="num px-4 py-2.5 text-right">{rupees(l.rate)}</td>
                         <td className="num px-4 py-2.5 text-right text-muted-foreground">{rupees(l.mrp)}</td>
@@ -153,9 +154,9 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                     ))}
                   </tbody>
                   <tfoot className="border-t border-border text-[13px]">
-                    <tr><td colSpan={4} className="px-4 pt-3 text-right text-muted-foreground">Value at MRP</td><td className="num px-4 pt-3 text-right">{rupees(mrpValue)}</td></tr>
-                    <tr><td colSpan={4} className="px-4 py-1 text-right text-muted-foreground">{t.one} margin</td><td className="num px-4 py-1 text-right">{rupees(margin)}</td></tr>
-                    <tr className="font-semibold"><td colSpan={4} className="px-4 pb-3 text-right">Order value</td><td className="num px-4 pb-3 text-right">{rupees(o.total)}</td></tr>
+                    <tr><td colSpan={6} className="px-4 pt-3 text-right text-muted-foreground">Value at MRP</td><td className="num px-4 pt-3 text-right">{rupees(mrpValue)}</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-1 text-right text-muted-foreground">{t.one} margin</td><td className="num px-4 py-1 text-right">{rupees(margin)}</td></tr>
+                    <tr className="font-semibold"><td colSpan={6} className="px-4 pb-3 text-right">Order value</td><td className="num px-4 pb-3 text-right">{rupees(o.total)}</td></tr>
                   </tfoot>
                 </table>
               </div>

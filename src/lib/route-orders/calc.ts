@@ -58,6 +58,8 @@ export interface BillInputLine {
 }
 
 export interface VoucherLine {
+  /** the order line's SKU code, to show the Product Master's one name beside the Tally item */
+  sku: string;
   name: string;
   item: string;
   ledger: string;
@@ -132,7 +134,7 @@ const lineOf = (l: BillInputLine, p: BillProduct): VoucherLine => {
   const qty = l.qty / pack;
   const rate = r2((l.rate * pack) / (1 + gst / 100));
   return {
-    name: p.name, item: p.tally_item!, ledger: p.tally_ledger!, unit: p.tally_unit!, gst, qty, rate,
+    sku: l.sku, name: p.name, item: p.tally_item!, ledger: p.tally_ledger!, unit: p.tally_unit!, gst, qty, rate,
     amount: r2(qty * rate), pieces: l.qty, stockId: p.stock_id, shelfDays: Number(p.shelf_days), batch: null, expiry: null,
   };
 };

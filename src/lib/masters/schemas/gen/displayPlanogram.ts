@@ -1,5 +1,6 @@
 import { LayoutGrid } from "lucide-react";
 import type { MasterDef } from "../../types";
+import { productCols, productJoin } from "../product-cols";
 
 /**
  * Display Planogram (Recibo route `displayPlanogram`).
@@ -21,12 +22,11 @@ export const displayPlanogram: MasterDef = {
   subtitle: "Planned shelf stock per product, channel and customer type.",
   icon: LayoutGrid,
   from: `fp_display_planogram m
-    left join fp_product j1 on j1.uid = m.product_uid
+    left join fp_product j1 on j1.uid = m.product_uid${productJoin("m.sku_code")}
     left join fp_channel j2 on j2.uid = m.channel_uid`,
   cols: [
     { key: "no", label: "No", expr: "row_number() over (order by m.created_at desc)", kind: "num" },
-    { key: "skuCode", label: "SKU Code", expr: "m.sku_code", kind: "mono" },
-    { key: "skuName", label: "SKU Name", expr: "j1.sku_name", kind: "mono" },
+    ...productCols("m.sku_code", "j1.sku_name"),
     { key: "brand", label: "Brand", expr: "j1.brand" },
     { key: "category", label: "Category", expr: "j1.category" },
     { key: "subCategory", label: "Sub Category", expr: "j1.sub_category" },
@@ -48,7 +48,7 @@ export const displayPlanogram: MasterDef = {
     { key: "displayStockQty", label: "Display Stock Qty", expr: "m.display_stock_qty", kind: "num" },
     { key: "displayFacingQty", label: "Display Facing Qty", expr: "m.display_facing_qty", kind: "num" },
   ],
-  search: ["m.sku_code", "j1.sku_name"],
+  search: ["pl.name", "m.sku_code", "j1.sku_name"],
   filters: [
     { key: "channel", label: "Channel", expr: "j2.channel" },
   ],

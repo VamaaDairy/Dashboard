@@ -6,6 +6,7 @@ import { PeriodBar } from "@/components/dash/Dash";
 import { periodFrom } from "@/lib/dash/period";
 import { cell, REPORTS, reportOf } from "@/lib/d2c/reports";
 import { cn } from "@/lib/utils";
+import { ProductThumb } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,9 @@ export default async function D2cReportPage({ params, searchParams }: {
                 <tr key={i} className="border-t border-border hover:bg-muted/40">
                   {def.cols.map((c) => (
                     <td key={c.key} className={cn("whitespace-nowrap px-3 py-2", right(c.kind) && "num text-right", c.kind === "mono" && "font-mono text-xs")}>
-                      {def.key === "customers" && c.key === "name" && r.id ? (
+                      {c.kind === "image" ? (
+                        <ProductThumb image={(r[c.key] as string | null) ?? null} size={32} />
+                      ) : def.key === "customers" && c.key === "name" && r.id ? (
                         <Link href={`/d2c/customers/${r.id}`} className="font-medium text-primary hover:underline">{cell(c.kind, r[c.key])}</Link>
                       ) : (
                         cell(c.kind, r[c.key])

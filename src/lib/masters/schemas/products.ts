@@ -2,6 +2,7 @@ import { Package } from "lucide-react";
 import type { MasterDef } from "../types";
 import { REF_TAX, SUGGEST_BRAND, SUGGEST_CATEGORY, SUGGEST_SUB_CATEGORY, SUGGEST_UNIT } from "../refs";
 import { active } from "./fragments";
+import { productCols, productJoin } from "./product-cols";
 
 /** Route: /orders/fpproducts */
 export const products: MasterDef = {
@@ -9,19 +10,15 @@ export const products: MasterDef = {
   title: "Product Master",
   subtitle: "All SKUs with photo, category, pack, MRP and dealer price. Active products are the ones the Gaia app shows.",
   icon: Package,
-  from: `fp_product p left join fp_tax_configuration t on t.uid = p.tax_configuration_uid`,
+  from: `fp_product p left join fp_tax_configuration t on t.uid = p.tax_configuration_uid${productJoin("p.sku_code")}`,
   cols: [
-    {
-      key: "photo", label: "Photo", kind: "image",
-      expr: `(select case when i.data is not null then '/api/shop/product-image/' || i.uid || '?v=' || extract(epoch from i.updated_at)::bigint else i.image_url end
-              from fp_product_image i where i.product_uid = p.uid and i.archived_at is null order by i.imagesno nulls last limit 1)`,
-    },
-    { key: "sku", label: "SKU", expr: "p.sku_code", kind: "mono" },
-    { key: "name", label: "Product", expr: "p.sku_name" },
+    // photo, SKU, the one product name (as the D2C app shows it), pack qty and unit - like every other report
+    ...productCols("p.sku_code"),
+    { key: "masterName", label: "Name in master", expr: "p.sku_name" },
     { key: "category", label: "Category", expr: "p.category" },
     { key: "sub", label: "Sub-category", expr: "p.sub_category" },
     { key: "brand", label: "Brand", expr: "trim(p.brand)" },
-    { key: "unit", label: "Unit", expr: "p.primary_unit #>> '{}'" },
+    { key: "salesUnit", label: "Sales unit", expr: "p.primary_unit #>> '{}'" },
     { key: "pack", label: "Pack conversion", expr: "p.secondary_units::text", kind: "mono" },
     { key: "mrp", label: "MRP", expr: "p.mrp", kind: "money" },
     { key: "dp", label: "Dealer price", expr: "p.dp", kind: "money" },
@@ -30,7 +27,7 @@ export const products: MasterDef = {
     { key: "focus", label: "Focus", expr: "case when p.focus_product = 1 then 'Yes' else 'No' end" },
     { key: "status", label: "Status", expr: active("p"), kind: "status" },
   ],
-  search: ["p.sku_code", "p.sku_name", "p.category", "p.sub_category"],
+  search: ["p.sku_code", "pl.name", "p.sku_name", "p.category", "p.sub_category"],
   filters: [
     { key: "category", label: "Category", expr: "p.category" },
     { key: "sub", label: "Sub-category", expr: "p.sub_category" },

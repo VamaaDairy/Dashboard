@@ -1,5 +1,6 @@
 import { Percent } from "lucide-react";
 import type { MasterDef } from "../types";
+import { productCols, productJoin } from "./product-cols";
 import { REF_CHANNELS, REF_PRODUCTS, REF_STATES } from "../refs";
 
 /** Route: /orders/fpchannelrates */
@@ -8,11 +9,10 @@ export const channelRates: MasterDef = {
   title: "Channel Margins",
   subtitle: "Selling price by channel and product, with the dates it applies and who last changed it.",
   icon: Percent,
-  from: `fp_channel_rate r join fp_channel c on c.uid = r.channel_uid join fp_product p on p.uid = r.product_uid`,
+  from: `fp_channel_rate r join fp_channel c on c.uid = r.channel_uid join fp_product p on p.uid = r.product_uid${productJoin("p.sku_code")}`,
   cols: [
     { key: "channel", label: "Channel", expr: "c.channel" },
-    { key: "sku", label: "SKU", expr: "p.sku_code", kind: "mono" },
-    { key: "product", label: "Product", expr: "p.sku_name" },
+    ...productCols("p.sku_code", "p.sku_name"),
     { key: "mrp", label: "MRP", expr: "p.mrp", kind: "money" },
     { key: "dp", label: "Dealer price", expr: "r.dealer_price", kind: "money" },
     { key: "margin", label: "Margin", expr: "r.margin", kind: "num" },
@@ -23,7 +23,7 @@ export const channelRates: MasterDef = {
     { key: "by", label: "Last updated by", expr: "r.updated_by #>> '{current,name}'" },
     { key: "at", label: "Updated at", expr: "r.updated_by #>> '{current,at}'", kind: "mono" },
   ],
-  search: ["c.channel", "p.sku_code", "p.sku_name"],
+  search: ["pl.name", "c.channel", "p.sku_code", "p.sku_name"],
   filters: [{ key: "channel", label: "Channel", expr: "c.channel" }],
   order: "c.channel, p.sku_name",
 

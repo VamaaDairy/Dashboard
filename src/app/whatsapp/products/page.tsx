@@ -4,12 +4,14 @@ import { PublishButton, SyncButton } from "@/components/whatsapp/SyncButton";
 import { localCatalog, publicBaseUrl } from "@/lib/whatsapp/publish";
 import { configStatus } from "@/lib/whatsapp/config";
 import { catalogSyncedAt, inStock, listProducts, money } from "@/lib/whatsapp/store";
+import { labelOf, productLabels } from "@/lib/products/names";
+import { QtyUnit } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
 /** The products the assistant sells - a copy of the WhatsApp (Meta) catalog - and whether everything is wired up. */
 export default async function ProductsPage() {
-  const [products, syncedAt, local] = await Promise.all([listProducts(true), catalogSyncedAt(), localCatalog()]);
+  const [products, syncedAt, local, labels] = await Promise.all([listProducts(true), catalogSyncedAt(), localCatalog(), productLabels()]);
   const base = publicBaseUrl();
   const cfg = configStatus();
 
@@ -88,7 +90,18 @@ export default async function ProductsPage() {
                   <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
                 ) : <div className="flex aspect-square items-center justify-center bg-muted"><ImageIcon className="h-6 w-6 text-muted-foreground" /></div>}
                 <div className="space-y-0.5 p-3">
-                  <div className="line-clamp-2 text-sm font-medium">{p.name}</div>
+                  {(() => {
+                    // the dashboard's one name for this SKU; the catalog name is what WhatsApp customers see
+                    const l = labelOf(labels, p.retailer_id, p.name);
+                    return (
+                      <>
+                        <div className="line-clamp-2 text-sm font-medium">{l.name}</div>
+                        <QtyUnit p={l} />
+                        {l.clash ? <div className="text-[10px] font-semibold text-red-600">SKU clash: master says {l.clash}</div> : null}
+                        {l.name !== p.name ? <div className="line-clamp-1 text-[11px] text-muted-foreground" title="Name in the WhatsApp catalog">Catalog: {p.name}</div> : null}
+                      </>
+                    );
+                  })()}
                   <div className="text-sm font-semibold">{p.price_text ?? money(p.price, p.currency)}</div>
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <span>{p.retailer_id}</span>

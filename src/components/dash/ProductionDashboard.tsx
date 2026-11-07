@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { ProductLabel } from "@/lib/products/names";
+import { ProductCell, QtyUnit } from "@/components/products/Product";
 import Link from "next/link";
 import { ArrowRight, ChevronRight } from "lucide-react";
 import { GAIA, MatrixHeatmap, StackedBars, shortDate } from "@/components/farmers/charts";
@@ -203,9 +205,9 @@ const inUnit = (cases: number, loose: number, unit: string, perCase: number) => 
 
 /** What every SKU produced, each in its own unit - and day by day. */
 function SkuOutput({ costing, dates }: { costing: Costing; dates: string[] }) {
-  const agg = new Map<string, { code: string; name: string; category: string; unit: string; perCase: number; cases: number; loose: number; pcs: number; qty: number; qtyUnit: string; days: Set<string>; cells: Record<string, number> }>();
+  const agg = new Map<string, { label: ProductLabel; code: string; name: string; category: string; unit: string; perCase: number; cases: number; loose: number; pcs: number; qty: number; qtyUnit: string; days: Set<string>; cells: Record<string, number> }>();
   for (const s of costing.skus) {
-    const a = agg.get(s.sku_id) ?? { code: s.code, name: s.name, category: s.category, unit: s.case_unit, perCase: s.pcs_per_case, cases: 0, loose: 0, pcs: 0, qty: 0, qtyUnit: s.bulk_unit ?? "", days: new Set<string>(), cells: {} };
+    const a = agg.get(s.sku_id) ?? { label: s.label, code: s.code, name: s.name, category: s.category, unit: s.case_unit, perCase: s.pcs_per_case, cases: 0, loose: 0, pcs: 0, qty: 0, qtyUnit: s.bulk_unit ?? "", days: new Set<string>(), cells: {} };
     a.cases += s.cases; a.loose += s.loose_pcs; a.pcs += s.pcs; a.qty += s.bulk_qty; a.days.add(s.day);
     a.cells[s.day] = (a.cells[s.day] ?? 0) + (s.pcs_per_case > 1 ? s.cases : s.cases + s.loose_pcs);
     agg.set(s.sku_id, a);
@@ -220,7 +222,7 @@ function SkuOutput({ costing, dates }: { costing: Costing; dates: string[] }) {
       <Panel title="What each SKU produced" description="Every SKU counted in its own unit - crates, boxes, pieces or kg - with the pieces inside and the product it holds.">
         <div className="overflow-x-auto">
           <table className="w-full whitespace-nowrap text-[13px]">
-            <THead><Th align="left">Code</Th><Th align="left">SKU</Th><Th align="left">Counted in</Th><Th>Packed</Th><Th>A day</Th><Th>Pieces</Th><Th>Product</Th><Th>Days</Th></THead>
+            <THead><Th align="left">Product</Th><Th align="left">Pack qty · Unit</Th><Th align="left">Counted in</Th><Th>Packed</Th><Th>A day</Th><Th>Pieces</Th><Th>Product</Th><Th>Days</Th></THead>
             <tbody>
               {rows.map(([id, a], i) => {
                 const n = norm(a);
@@ -232,8 +234,8 @@ function SkuOutput({ costing, dates }: { costing: Costing; dates: string[] }) {
                     </tr>
                   ) : null,
                   <tr key={id} className="border-b border-border/70 hover:bg-muted/60">
-                    <td className="num px-3 py-1.5 text-[12px]">{a.code}</td>
-                    <td className="max-w-72 truncate px-3 py-1.5 font-semibold text-foreground" title={a.name}>{a.name}</td>
+                    <td className="max-w-72 px-3 py-1.5 text-foreground" title={a.name}><ProductCell p={a.label} size={28} /></td>
+                    <td className="px-3 py-1.5 text-[12px]"><QtyUnit p={a.label} /></td>
                     <td className="px-3 py-1.5 text-[12px] text-muted-foreground">{a.perCase > 1 ? `${a.unit} of ${a.perCase}` : a.unit === "KG" ? "kg" : "piece"}</td>
                     <td className={`${td} font-bold text-foreground`}>{inUnit(n.cases, n.loose, a.unit, a.perCase)}</td>
                     {(() => {
@@ -291,10 +293,10 @@ function SkuCostTable({ costing }: { costing: Costing }) {
   const [basis, setBasis] = useState<"pc" | "case" | "unit">("pc");
   const [category, setCategory] = useState("All");
 
-  type Agg = { code: string; name: string; category: string; unit: string; caseUnit: string; perCase: number; pcs: number; qty: number; bulk: number; milk: number; ing: number; shared: number; mat: Record<string, number>; sharedHead: Record<string, number>; del: number; total: number };
+  type Agg = { label: ProductLabel; code: string; name: string; category: string; unit: string; caseUnit: string; perCase: number; pcs: number; qty: number; bulk: number; milk: number; ing: number; shared: number; mat: Record<string, number>; sharedHead: Record<string, number>; del: number; total: number };
   const agg = new Map<string, Agg>();
   for (const s of costing.skus) {
-    const a = agg.get(s.sku_id) ?? { code: s.code, name: s.name, category: s.category, unit: s.bulk_unit ?? "", caseUnit: s.case_unit, perCase: s.pcs_per_case, pcs: 0, qty: 0, bulk: 0, milk: 0, ing: 0, shared: 0, mat: {}, sharedHead: {}, del: 0, total: 0 };
+    const a = agg.get(s.sku_id) ?? { label: s.label, code: s.code, name: s.name, category: s.category, unit: s.bulk_unit ?? "", caseUnit: s.case_unit, perCase: s.pcs_per_case, pcs: 0, qty: 0, bulk: 0, milk: 0, ing: 0, shared: 0, mat: {}, sharedHead: {}, del: 0, total: 0 };
     a.pcs += s.pcs; a.qty += s.bulk_qty; a.bulk += s.bulk_cost; a.milk += s.milk_cost; a.shared += s.shared_cost;
     a.ing += Object.values(s.ingredient_by_item).reduce((t, v) => t + v, 0);
     addTo(a.mat, s.material_by_item); addTo(a.sharedHead, s.shared_by_head); a.del += s.delivery_cost; a.total += s.total;
@@ -358,8 +360,8 @@ function SkuCostTable({ costing }: { costing: Costing }) {
               <th colSpan={3} />
             </tr>
             <tr className="border-b border-border bg-secondary text-[10px] font-bold uppercase tracking-wide text-tertiary-foreground">
-              <th className="px-2 py-2 text-left">Code</th>
-              <th className="px-2 py-2 text-left">SKU</th>
+              <th className="px-2 py-2 text-left">Product</th>
+              <th className="px-2 py-2 text-left">Pack qty · Unit</th>
               <th className="px-2 py-2 text-left">Unit</th>
               <th className="px-2 py-2 text-right" style={{ background: tint(COST.milk.color, 0.1) }}>Bulk product</th>
               <th className="px-2 py-2 text-right" style={{ background: tint(GAIA.orange, 0.1) }}>Shared costs</th>
@@ -373,8 +375,8 @@ function SkuCostTable({ costing }: { costing: Costing }) {
           <tbody>
             {rows.map(([id, a]) => (
               <tr key={id} className="border-b border-border/70 hover:bg-muted/60">
-                <td className="num px-2 py-1.5">{a.code}</td>
-                <td className="max-w-56 truncate px-2 py-1.5 font-semibold text-foreground" title={a.name}>{a.name}</td>
+                <td className="max-w-56 px-2 py-1.5 text-foreground" title={a.name}><ProductCell p={a.label} size={28} /></td>
+                <td className="px-2 py-1.5"><QtyUnit p={a.label} /></td>
                 <td className="px-2 py-1.5 text-muted-foreground">{a.perCase > 1 ? `${a.caseUnit} of ${a.perCase}` : caseLabel(a)}</td>
                 <td className="num px-2 py-1.5 text-right" style={{ background: tint(COST.milk.color, 0.05) }}
                   title={`Inside the bulk product ${basisLabel}: milk ${per(a.milk, a) || 0} · ingredients ${per(a.ing, a) || 0}`}>

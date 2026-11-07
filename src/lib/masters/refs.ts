@@ -16,7 +16,10 @@ export const REF_PARENT_FIRMS = `
   where c.level <= 3 order by f.active desc, f.name`;
 export const REF_BEATS = `select uid::text as value, beat_name || coalesce(' [' || beat_code || ']', '') as label from fp_beat order by status desc, beat_name`;
 export const REF_TAX = `select uid::text as value, tax_code || ' - ' || category_name as label from fp_tax_configuration order by tax_code`;
-export const REF_PRODUCTS = `select uid::text as value, sku_name || ' (' || sku_code || ')' as label from fp_product order by active desc, sku_name`;
+// SKU · the one product name · pack size (product_label, kept up to date by every product report)
+export const REF_PRODUCTS = `select p.uid::text as value,
+  p.sku_code || ' · ' || coalesce(pl.name, p.sku_name) || coalesce(' · ' || nullif(concat_ws(' ', pl.qty, pl.unit), ''), '') as label
+  from fp_product p left join product_label pl on pl.product_uid = p.uid order by p.active desc, coalesce(pl.name, p.sku_name)`;
 export const REF_SLABS = `select uid::text as value, name as label from fp_slab order by name`;
 
 export const SUGGEST_CATEGORY = `select category as value from fp_category order by 1`;
