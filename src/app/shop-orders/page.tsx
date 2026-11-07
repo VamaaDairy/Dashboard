@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Route, Store, UserX, Repeat } from "lucide-react";
+import { Bell, Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Route, Search, Store, UserX, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusSelect } from "@/components/shop/StatusSelect";
 import { AssignSelect } from "@/components/shop/AssignSelect";
@@ -15,12 +15,20 @@ export const dynamic = "force-dynamic";
 const when = (d: Date) =>
   new Date(d).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
-export default async function ShopOrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; kind?: string }> }) {
-  const { status, kind: k } = await searchParams;
+/**
+ * D2C orders: every home-delivery order from the Gaia app and the online shop (one table, shop_order).
+ * This is the only D2C orders list; /app-orders/d2c redirects here, and each order opens its detail page.
+ */
+export default async function ShopOrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; kind?: string; q?: string }> }) {
+  const { status, kind: k, q: rawQ } = await searchParams;
   const kind = k === "regular" || k === "subscription" ? k : undefined;
-  const href = (st: string, kd: string) => { const q = new URLSearchParams(); if (st) q.set("status", st); if (kd) q.set("kind", kd); return q.size ? `/shop-orders?${q}` : "/shop-orders"; };
+  const q = rawQ?.trim() || undefined;
+  const href = (st: string, kd: string) => {
+    const p = new URLSearchParams(); if (st) p.set("status", st); if (kd) p.set("kind", kd); if (q) p.set("q", q);
+    return p.size ? `/shop-orders?${p}` : "/shop-orders";
+  };
   const filter = status && status in STATUS_LABEL ? status : undefined;
-  const [orders, riders, me] = await Promise.all([listOrders(filter, kind), query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`), userFromToken((await cookies()).get("session")?.value)]);
+  const [orders, riders, me] = await Promise.all([listOrders(filter, kind, q), query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`), userFromToken((await cookies()).get("session")?.value)]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
 
   return (
@@ -28,8 +36,8 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
       <div className="w-full space-y-4">
         <PageHeader
           icon={Store}
-          title="Shop orders"
-          subtitle="Orders placed on the Gaia online shop."
+          title="D2C orders"
+          subtitle="Every home-delivery order from the Gaia app and the online shop."
           actions={
             <div className="flex gap-2">
             <Link href="/shop-orders/riders" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
@@ -47,6 +55,9 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
             <Link href="/shop-orders/live" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
               <MapPin className="h-4 w-4" /> Live map
             </Link>
+            <Link href="/shop-orders/notifications" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
+              <Bell className="h-4 w-4" /> Notifications
+            </Link>
             <Link href="/shop-orders/deletion-requests" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
               <UserX className="h-4 w-4" /> Deletion requests
             </Link>
@@ -56,6 +67,17 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
             </div>
           }
         />
+        <form action="/shop-orders" className="flex max-w-md items-center gap-2">
+          {filter ? <input type="hidden" name="status" value={filter} /> : null}
+          {kind ? <input type="hidden" name="kind" value={kind} /> : null}
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input name="q" defaultValue={q ?? ""} placeholder="Search order no, name, phone, address"
+              className="h-8 w-full rounded-lg border border-input bg-transparent pl-8 pr-3 text-sm focus:border-primary focus:outline-none" />
+          </div>
+          <button type="submit" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Search</button>
+          {q ? <Link href={href(filter ?? "", kind ?? "")} className="text-sm text-muted-foreground hover:underline">Clear</Link> : null}
+        </form>
         <div className="flex flex-wrap gap-1.5 text-sm">
           {[["", "All orders"], ["regular", "Regular"], ["subscription", "Subscription"]].map(([v, l]) => (
             <Link key={v} href={href(filter ?? "", v)}
@@ -85,7 +107,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id} className="border-t border-border align-top hover:bg-muted/40">
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{o.order_no}{o.subscription_day ? <div className="mt-0.5 inline-block rounded bg-blue-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-blue-700">SUBSCRIPTION</div> : null}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs"><Link href={`/app-orders/d2c/${o.id}`} className="font-semibold text-primary hover:underline">{o.order_no}</Link>{o.subscription_day ? <div className="mt-0.5 w-fit rounded bg-blue-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-blue-700">SUBSCRIPTION</div> : null}</td>
                   <td className="whitespace-nowrap px-3 py-2">{when(o.created_at)}</td>
                   <td className="px-3 py-2"><div className="font-medium">{o.name}</div><div className="font-mono text-xs text-muted-foreground">{o.phone}</div></td>
                   <td className="min-w-56 px-3 py-2 text-muted-foreground">{o.address}{o.pincode ? ` - ${o.pincode}` : ""}{o.notes ? <div className="text-xs italic">Note: {o.notes}</div> : null}</td>
@@ -104,7 +126,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
                 </tr>
               ))}
               {orders.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">No orders yet.</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">{q || filter || kind ? "No orders match." : "No orders yet."}</td></tr>
               ) : null}
             </tbody>
           </table>

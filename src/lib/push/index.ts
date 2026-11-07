@@ -31,15 +31,20 @@ const LIVE: Record<PushRole, string> = {
            where d.role = 'rider' and ($1::int is null or d.owner_id = $1)`,
   distributor: `select d.token from push_device d
                   join dist_login l on l.id = d.owner_id and l.active and encode(sha256(convert_to(l.token, 'UTF8')), 'hex') = d.session_hash
-                 where d.role = 'distributor' and ($1::int is null or d.owner_id = $1)`,
+                 where d.role = 'distributor' and ($1::int is null or d.owner_id = $1) and ($2::text is null or l.kind = $2)`,
 };
 
-/** Pushes to every live phone of one account, or - with a null owner - of every account of that role. Never throws. */
-export async function pushToRole(role: PushRole, ownerId: number | null, m: PushMessage): Promise<{ sent: number; failed: number }> {
+/**
+ * Pushes to every live phone of one account, or - with a null owner - of every account of that role. Never throws.
+ * For the distributor role, `loginKind` narrows it to distributor or retailer sign-ins (both use that app).
+ */
+export async function pushToRole(
+  role: PushRole, ownerId: number | null, m: PushMessage, loginKind?: "distributor" | "retailer",
+): Promise<{ sent: number; failed: number }> {
   const out = { sent: 0, failed: 0 };
   if (!pushConfigured()) return out;
   try {
-    const rows = await query<{ token: string }>(LIVE[role], [ownerId]);
+    const rows = await query<{ token: string }>(LIVE[role], role === "distributor" ? [ownerId, loginKind ?? null] : [ownerId]);
     await Promise.all(
       [...new Set(rows.map((r) => r.token))].map(async (token) => {
         const r = await sendPush({ token }, m);

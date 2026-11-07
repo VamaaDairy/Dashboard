@@ -71,6 +71,7 @@ const distAppOrders: NavItem = {
   children: [
     { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },
     { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
+    { href: "/app-orders/notifications", key: "apporders", label: "Notifications" },
   ],
 };
 const primary = orders("Primary", Truck, ["portalOrder", "fpsalesview", "stockView", "fpmybookingorders"]);
@@ -262,7 +263,7 @@ const WORKING: NavSection[] = [
         label: "Orders",
         items: [
           {
-            href: "/shop-orders", key: "shop", label: "Shop orders", icon: Store,
+            href: "/shop-orders", key: "shop", label: "D2C orders", icon: Store,
             children: [
               { href: "/shop-orders", key: "shop", label: "Orders", exact: true },
               { href: "/shop-orders/subscriptions", key: "shop", label: "Subscriptions" },
@@ -270,7 +271,6 @@ const WORKING: NavSection[] = [
               { href: "/shop-orders/notifications", key: "shop", label: "Notifications" },
             ],
           },
-          { href: "/app-orders/d2c", key: "apporders", label: "App orders", icon: Smartphone },
           dash.d2cSales,
         ],
       },

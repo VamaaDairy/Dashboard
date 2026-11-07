@@ -102,11 +102,19 @@ const under = (path: string, prefix: string) =>
 export type Match = { kind: "open" } | { kind: "owner" } | { kind: "resource"; key: string };
 
 /** Which resource a request path belongs to. Paths that match nothing are owner-only. */
+/**
+ * Paths guarded by another resource's key, so they don't show up as separate rows in the access editor.
+ * D2C order details stay at /app-orders/d2c/<id> but belong to the D2C orders list (/shop-orders, "shop").
+ */
+const PATH_ALIASES: Array<{ key: string; path: string }> = [
+  { key: "shop", path: "/app-orders/d2c" },
+];
+
 export function matchPath(pathname: string): Match {
   if (OPEN.some((p) => under(pathname, p))) return { kind: "open" };
   if (OWNER_ONLY.some((p) => under(pathname, p))) return { kind: "owner" };
-  let best: Resource | null = null;
-  for (const r of RESOURCES) {
+  let best: { key: string; path: string } | null = null;
+  for (const r of [...RESOURCES, ...PATH_ALIASES]) {
     if (under(pathname, r.path) && (!best || r.path.length > best.path.length)) best = r;
   }
   return best ? { kind: "resource", key: best.key } : { kind: "owner" };
