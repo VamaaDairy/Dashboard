@@ -47,7 +47,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
               <span className="text-[12px]">Placed {when(o.created_at)}</span>
             </span>
           }
-          actions={<Link href="/app-orders/d2c" className={buttonVariants({ variant: "outline" })}><ArrowLeft className="size-4" /> D2C orders</Link>}
+          actions={<Link href="/shop-orders" className={buttonVariants({ variant: "outline" })}><ArrowLeft className="size-4" /> D2C orders</Link>}
         />
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">

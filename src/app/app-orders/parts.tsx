@@ -7,7 +7,7 @@ import { STATUS_LABEL } from "@/lib/shop/pricing";
 /** Pieces shared by the App orders pages. */
 
 export const KINDS = [
-  { key: "d2c", href: "/app-orders/d2c", label: "D2C", long: "D2C - home delivery" },
+  { key: "d2c", href: "/shop-orders", label: "D2C", long: "D2C - home delivery" },
   { key: "retailers", href: "/app-orders/retailers", label: "Retailers", long: "Retailers" },
   { key: "distributors", href: "/app-orders/distributors", label: "Distributors", long: "Distributors" },
 ] as const;

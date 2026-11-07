@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** No combined view: each kind has its own page in the sidebar. */
+/** No combined view: D2C orders are on /shop-orders; distributors and retailers each have a page. */
 export default function AppOrdersPage() {
-  redirect("/app-orders/d2c");
+  redirect("/app-orders/distributors");
 }
