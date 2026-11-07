@@ -1,8 +1,8 @@
 /**
  * The sidebar, split into sections (Plant, Logistics, D2C, WhatsApp, Distributor & Retail, Pricing,
  * Accounts, HR, MIS, Admin). Only one section shows at a time; the switcher at the top of the sidebar
- * changes it. A page can sit in more than one section (Labour in Plant and HR; every dashboard in its
- * own section and in MIS); the sidebar then stays in whichever section you are already in.
+ * changes it. A page can sit in more than one section (Labour in Plant and HR; every dashboard under
+ * the page it belongs to and again in MIS); the sidebar then stays in whichever section you are already in.
  *
  * Orders pages that are still empty placeholders never show in a working section: they are
  * listed under "Not in use" (owner only), together with any built Orders page that no section
@@ -129,31 +129,29 @@ const dash = {
   cn: { href: "/cn/dashboard", key: "cn.dashboard", label: "Complaints & CN", icon: ClipboardCheck } as NavItem,
 };
 
+/** A dashboard as a sub-page right under the data-entry page it belongs to. */
+const dashLeaf = (d: NavItem, label = "Dashboard"): NavLeaf => ({ href: d.href, key: d.key, label });
+
 /* ---------- the sections ---------- */
 const WORKING: NavSection[] = [
   {
     id: "plant", label: "Plant & Production", icon: Factory,
     groups: [
+      { label: "Overview", items: [{ href: "/", key: "today", label: "Today", icon: Home, exact: true }] },
       {
-        label: "Every day",
+        label: "Milk procurement",
         items: [
-          { href: "/", key: "today", label: "Today", icon: Home, exact: true },
-          milkIn,
+          { ...milkIn, children: [...milkIn.children!, dashLeaf(dash.milkIn)] },
           { href: "/farmers", key: "farmers", label: "Farmers", icon: Contact },
-          { href: "/tanks", key: "tanks", label: "Tanks", icon: Cylinder },
+          {
+            href: "/tanks", key: "tanks", label: "Tanks", icon: Cylinder,
+            children: [{ href: "/tanks", key: "tanks", label: "Daily", exact: true }, dashLeaf(dash.tanks)],
+          },
         ],
       },
       {
-        label: "Production",
+        label: "Store",
         items: [
-          {
-            href: "/daily", key: "production", label: "Production", icon: CalendarDays,
-            children: [
-              { href: "/daily", key: "production", label: "Daily batches", exact: true },
-              { href: "/daily/sku", key: "production.sku", label: "SKU packing" },
-              { href: "/daily/products", key: "production.products", label: "Products & ingredients" },
-            ],
-          },
           {
             href: "/store", key: "store", label: "Store", icon: Warehouse,
             children: [
@@ -167,14 +165,52 @@ const WORKING: NavSection[] = [
         ],
       },
       {
-        label: "Plant costs",
+        label: "Production",
+        items: [
+          {
+            href: "/daily", key: "production", label: "Production", icon: CalendarDays,
+            children: [
+              { href: "/daily", key: "production", label: "Daily batches", exact: true },
+              { href: "/daily/products", key: "production.products", label: "Products & ingredients" },
+              dashLeaf(dash.production),
+            ],
+          },
+        ],
+      },
+      {
+        label: "Packaging",
+        items: [
+          {
+            href: "/daily/sku", key: "production.sku", label: "Packaging", icon: Boxes,
+            children: [
+              { href: "/daily/sku", key: "production.sku", label: "SKU packing" },
+              { href: "/c/packaging", key: "masters", label: "Packing material" },
+              dashLeaf(dash.byProduct, "Dashboard (per SKU)"),
+            ],
+          },
+        ],
+      },
+      {
+        label: "Fuel",
+        items: [
+          {
+            href: "/fuel/production", key: "fuel", label: "Fuel", icon: Fuel,
+            children: [
+              { href: "/fuel/production", key: "fuel.production", label: "Production in plant" },
+              { href: "/fuel/milk-to-plant", key: "fuel.milk", label: "Milk to plant" },
+              { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery outside plant" },
+              dashLeaf(dash.fuel),
+            ],
+          },
+        ],
+      },
+      {
+        label: "Others",
         items: [
           labour,
           { href: "/electricity", key: "electricity", label: "Electricity", icon: Zap },
-          { href: "/fuel/production", key: "fuel.production", label: "Fuel in plant", icon: Fuel },
         ],
       },
-      { label: "Dashboards", items: [dash.milkIn, dash.tanks, dash.production, dash.byProduct, dash.fuel] },
       { label: "Rates & masters", items: [], classes: true },
     ],
   },
@@ -182,10 +218,23 @@ const WORKING: NavSection[] = [
     id: "logistics", label: "Logistics", icon: Truck,
     groups: [
       {
-        label: "Milk to plant",
+        label: "Transport & fuel",
         items: [
-          { href: "/transport/milk-to-plant", key: "transport.milk", label: "Transport", icon: Truck },
-          { href: "/fuel/milk-to-plant", key: "fuel.milk", label: "Fuel", icon: Fuel },
+          {
+            href: "/transport/milk-to-plant", key: "transport", label: "Transport", icon: Truck,
+            children: [
+              { href: "/transport/milk-to-plant", key: "transport.milk", label: "Milk to plant" },
+              { href: "/transport/delivery", key: "transport.delivery", label: "Delivery outside plant" },
+            ],
+          },
+          {
+            href: "/fuel/milk-to-plant", key: "fuel", label: "Fuel", icon: Fuel,
+            children: [
+              { href: "/fuel/milk-to-plant", key: "fuel.milk", label: "Milk to plant" },
+              { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery outside plant" },
+              dashLeaf(dash.fuel),
+            ],
+          },
         ],
       },
       {
@@ -200,13 +249,10 @@ const WORKING: NavSection[] = [
               { href: "/route-orders/masters", key: "routeorders.masters", label: "Customers & products" },
             ],
           },
-          { href: "/transport/delivery", key: "transport.delivery", label: "Delivery transport", icon: Truck },
-          { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery fuel", icon: Fuel },
           pod,
         ],
       },
       { label: "Van sales", items: items(orders("Van & dispatch", MapPin, ["delivery", "loadSheet", "stockTransferView", "vanMaster"])) },
-      { label: "Dashboards", items: [dash.fuel] },
     ],
   },
   {
@@ -225,6 +271,7 @@ const WORKING: NavSection[] = [
             ],
           },
           { href: "/app-orders/d2c", key: "apporders", label: "App orders", icon: Smartphone },
+          dash.d2cSales,
         ],
       },
       {
@@ -258,7 +305,6 @@ const WORKING: NavSection[] = [
           },
         ],
       },
-      { label: "Dashboards", items: [dash.d2cSales] },
     ],
   },
   {
@@ -283,7 +329,7 @@ const WORKING: NavSection[] = [
   {
     id: "distributor", label: "Distributor & Retail", icon: Network,
     groups: [
-      { label: "Orders", items: items(distAppOrders, primary, secondary) },
+      { label: "Orders", items: items(distAppOrders, primary, secondary, dash.distSales) },
       {
         label: "Customers & products",
         items: items(
@@ -303,11 +349,12 @@ const WORKING: NavSection[] = [
         label: "Field sales",
         items: items(
           salesTeam,
+          dash.kpi,
           orders("Field Force Management", MapPinned, ["beat", "cityCategory", "displayAudit"]),
+          dash.fieldActivity,
           orders("Promoters", Users, ["firmPromoter", "firmPromoterReport", "serviceManagementView"]),
         ),
       },
-      { label: "Dashboards", items: items(dash.distSales, dash.fieldActivity, dash.kpi) },
     ],
   },
   {
@@ -325,8 +372,15 @@ const WORKING: NavSection[] = [
   {
     id: "accounts", label: "Accounts", icon: Wallet,
     groups: [
-      { label: "Accounts", items: [outstandings, pod, creditNotes, cnManagement] },
-      { label: "Dashboards", items: [dash.creditNotes, dash.cn] },
+      {
+        label: "Accounts",
+        items: [
+          outstandings,
+          pod,
+          { ...creditNotes, children: [{ href: "/credit-note", key: "creditnote", label: "All credit notes", exact: true }, dashLeaf(dash.creditNotes)] },
+          { ...cnManagement, children: [...cnManagement.children!, dashLeaf(dash.cn)] },
+        ],
+      },
     ],
   },
   {
