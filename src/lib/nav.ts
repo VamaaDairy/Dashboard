@@ -417,14 +417,13 @@ const WORKING: NavSection[] = [
       {
         label: "Employee Master",
         items: items(
-          {
-            href: "/employee-app", key: "emp", label: "Employees", icon: Users,
-            children: [
-              { href: "/employee-app", key: "emp", label: "Overview", exact: true },
-              { href: "/employee-app/accounts", key: "emp.accounts", label: "Accounts & sites" },
-            ],
-          },
-          salesTeam,
+          { href: "/employees/salesforce", key: "employees", label: "Salesforce", icon: MapPinned },
+          { href: "/employees/plant", key: "employees", label: "Plant", icon: Factory },
+          { href: "/employees/office", key: "employees", label: "Office", icon: Briefcase },
+          { href: "/employees/unset", key: "employees", label: "Not placed yet", icon: Users },
+          { href: "/employees/departments", key: "employees", label: "Departments", icon: Network },
+          salesTeam && { ...salesTeam, label: "Field staff setup (all fields)" },
+          { href: "/employee-app/accounts", key: "emp.accounts", label: "Employee app accounts", icon: Smartphone },
           { href: "/users", key: "", label: "Dashboard users", icon: UserPlus, ownerOnly: true },
         ),
       },
