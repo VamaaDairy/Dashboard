@@ -1,5 +1,5 @@
 /**
- * The sidebar, split into sections (Plant, Logistics, D2C, Distributor & Retail, MIS, Admin).
+ * The sidebar, split into sections (Plant, Logistics, D2C, WhatsApp, Distributor & Retail, MIS, Admin).
  * Only one section shows at a time; the switcher at the top of the sidebar changes it.
  *
  * Orders pages that are still empty placeholders never show in a working section: they are
@@ -10,7 +10,7 @@
 import {
   Archive, BarChart3, Beaker, Bike, Boxes, CalendarDays, ClipboardCheck, Contact, Cylinder, Database, Droplets, Factory,
   FileClock, Fuel, Gift, Home, MapPin, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
-  ReceiptText, Route, Scale, Settings2, ShoppingBag, Smartphone, Store, Tags, Target, Truck, UserPlus, Users, Warehouse, Zap,
+  ReceiptText, Route, Scale, Settings2, ShoppingBag, Smartphone, Star, Store, Tags, Target, Truck, UserPlus, Users, Warehouse, Zap,
 } from "lucide-react";
 import ordersSidebar from "@/lib/orders/sidebar.json";
 import unbuilt from "@/lib/nav-unbuilt.json";
@@ -156,14 +156,6 @@ const WORKING: NavSection[] = [
             ],
           },
           { href: "/app-orders/d2c", key: "apporders", label: "App orders", icon: Smartphone },
-          {
-            href: "/whatsapp/chats", key: "whatsapp", label: "WhatsApp shop", icon: MessageCircle,
-            children: [
-              { href: "/whatsapp/chats", key: "whatsapp", label: "Chats" },
-              { href: "/whatsapp/orders", key: "whatsapp", label: "Orders" },
-              { href: "/whatsapp/reviews", key: "whatsapp", label: "Reviews" },
-            ],
-          },
         ],
       },
       {
@@ -192,10 +184,28 @@ const WORKING: NavSection[] = [
             href: "/product-master/d2c", key: "productmaster.d2c", label: "Catalogue", icon: PackageSearch,
             children: [
               { href: "/product-master/d2c", key: "productmaster.d2c", label: "App products" },
-              { href: "/whatsapp/products", key: "whatsapp", label: "WhatsApp catalog & setup" },
               { href: "/shop-orders/banners", key: "shop", label: "Banners" },
             ],
           },
+        ],
+      },
+    ],
+  },
+  {
+    id: "whatsapp", label: "WhatsApp", icon: MessageCircle,
+    groups: [
+      {
+        label: "WhatsApp shop",
+        items: [
+          { href: "/whatsapp/chats", key: "whatsapp", label: "Chats", icon: MessageCircle },
+          { href: "/whatsapp/orders", key: "whatsapp", label: "Orders", icon: ShoppingBag },
+          { href: "/whatsapp/reviews", key: "whatsapp", label: "Reviews", icon: Star },
+        ],
+      },
+      {
+        label: "Setup",
+        items: [
+          { href: "/whatsapp/products", key: "whatsapp", label: "Catalog & setup", icon: PackageSearch },
         ],
       },
     ],
