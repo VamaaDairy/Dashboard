@@ -222,12 +222,19 @@ function ProductRow({ channel, line: l, categories, first, last, canEdit, canMov
         {/* eslint-disable-next-line @next/next/no-img-element -- product photos come from our own photo route */}
         {l.image ? <img src={l.image} alt="" className="size-full object-contain" /> : null}
       </div>
-      {/* as the app shows it: the name, the size under it */}
+      {/* SKU, the one name, pack qty and unit apart - the same in every app and report */}
       <button type="button" onClick={onEdit} disabled={!canEdit} className={cn("min-w-0 flex-1 text-left", off && "opacity-50")}>
+        <div className="font-mono text-[11px] text-tertiary-foreground">{l.sku}</div>
         <div className="truncate font-medium text-foreground">{l.name}</div>
-        <div className="truncate text-[12px] text-muted-foreground">{l.size ?? <span className="italic">no size</span>}</div>
+        <div className="mt-0.5 flex items-center gap-1 text-[11px]">
+          {l.qty || l.unit ? (
+            <>
+              <span title="Pack quantity" className="num rounded bg-muted px-1.5 text-muted-foreground">{l.qty ?? "—"}</span>
+              <span title="Unit" className="rounded bg-muted px-1.5 text-muted-foreground">{l.unit ?? "—"}</span>
+            </>
+          ) : <span className="italic text-muted-foreground">no size</span>}
+        </div>
         <div className="truncate text-[11px] text-tertiary-foreground">
-          <span className="font-mono">{l.sku}</span>
           {!l.active ? <span> · switched off in the company Product Master</span> : !l.visible ? <span> · hidden in the app</span> : null}
         </div>
       </button>
@@ -341,12 +348,12 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
 
   const save = () =>
     run(async () => {
-      const r = await updateProductAction(channel, l.uid, {
+      const r = await updateProductAction(channel, l.uid, channel === "d2c" ? {
         // what equals the Product Master's own value is not stored, so a later Product Master change still flows through
         name: name.trim() === l.masterName.trim() ? null : name,
         size,
         category,
-      });
+      } : { category });
       if (!r.ok || description.trim() === (l.description ?? "").trim()) return r;
       return descriptionAction(channel, l.uid, description);
     }, onClose);
@@ -358,18 +365,21 @@ function EditDialog({ channel, line: l, categories, onClose }: { channel: AppCha
         <DialogHeader>
           <DialogTitle>Edit product</DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{l.sku}</span> · Product Master name: {l.masterName}. Name, size and category apply to this list only; photos, description and MRP to every app.
+            <span className="font-mono">{l.sku}</span> · Product Master name: {l.masterName}.{" "}
+            {channel === "d2c"
+              ? "Name and size here are the SKU's one name everywhere: every app, report and bill. Category applies to this list only; photos, description and MRP to every app."
+              : "Name and size come from the D2C list, so the SKU has one name everywhere. Category applies to this list only; photos, description and MRP to every app."}
           </DialogDescription>
         </DialogHeader>
         <div className="mt-3 grid gap-3">
           <label className="grid gap-1 text-[13px] font-medium">
-            Name in the app (without the quantity)
-            <input value={name} onChange={(e) => setName(e.target.value)} className={input} />
+            Name (without the quantity){channel !== "d2c" ? <span className="font-normal text-tertiary-foreground">set on the D2C list</span> : null}
+            <input value={name} onChange={(e) => setName(e.target.value)} readOnly={channel !== "d2c"} className={cn(input, channel !== "d2c" && "bg-muted text-muted-foreground")} />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="grid gap-1 text-[13px] font-medium">
-              Size (shown under the name)
-              <input value={size} onChange={(e) => setSize(e.target.value)} placeholder="500 ml, 1 Ltr, 200 g" className={input} />
+              Size: pack qty and unit
+              <input value={size} onChange={(e) => setSize(e.target.value)} readOnly={channel !== "d2c"} placeholder="500 ml, 1 Ltr, 200 g" className={cn(input, channel !== "d2c" && "bg-muted text-muted-foreground")} />
             </label>
             <label className="grid gap-1 text-[13px] font-medium">
               Category

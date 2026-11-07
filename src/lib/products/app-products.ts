@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { one, query, tx } from "@/lib/db";
 import { PUBLIC_URL, photoUrlOf, type ShopProduct } from "@/lib/shop/catalog";
 import { displayName, shopCategory } from "@/lib/shop/pricing";
+import { qtyUnit } from "@/lib/products/qty-unit";
 
 /**
  * Product Master for the apps: one product list per app channel (migration 068). D2C is the Gaia shop app,
@@ -13,8 +14,8 @@ export type AppChannel = "d2c" | "retail" | "distributor";
 
 export const APP_CHANNELS: Array<{ key: AppChannel; label: string; app: string }> = [
   { key: "d2c", label: "D2C", app: "Gaia app (customers)" },
-  { key: "retail", label: "Retail", app: "Gaia Partners app (retailers)" },
-  { key: "distributor", label: "Distributors", app: "Gaia Partners app (distributors & sales officers)" },
+  { key: "retail", label: "Retailer", app: "Gaia Partners app (retailers)" },
+  { key: "distributor", label: "Wholesale (Distributors)", app: "Gaia Partners app (distributors & sales officers)" },
 ];
 
 export const isAppChannel = (c: string): c is AppChannel => APP_CHANNELS.some((x) => x.key === c);
@@ -84,11 +85,17 @@ interface Row {
 export interface AppProduct {
   uid: string;
   sku: string;
-  /** What the app shows: the name without the quantity, the quantity, the category. */
+  /**
+   * What the app shows: the name without the quantity, the quantity, the category. Name and size are the same
+   * in every app - the D2C list's - so a SKU never has two names; only the category and order are per list.
+   */
   name: string;
   size: string | null;
+  /** The size split for tables: pack quantity and unit ("500" + "ml"). */
+  qty: string | null;
+  unit: string | null;
   category: string;
-  /** What this list has set itself (null = taken from the Product Master). */
+  /** What the D2C list has set (name, size) and this list (category); null = taken from the Product Master. */
   own: { name: string | null; size: string | null; category: string | null };
   masterName: string;
   visible: boolean;
@@ -108,13 +115,16 @@ const photo = () => photoUrlOf("i");
 async function rows(channel: AppChannel, where = "true", params: unknown[] = []): Promise<Row[]> {
   return query<Row>(
     `select p.uid, p.sku_code as sku, p.sku_name as "masterName", coalesce(nullif(trim(p.category), ''), 'Other') as "masterCategory",
-            nullif(trim(p.sku_size), '') as "masterSize", nullif(trim(a.name), '') as "ownName", nullif(trim(a.size), '') as "ownSize",
+            nullif(trim(p.sku_size), '') as "masterSize",
+            -- one name and size for a SKU in every app: the D2C list's (see src/lib/products/names.ts)
+            nullif(trim(d.name), '') as "ownName", nullif(trim(d.size), '') as "ownSize",
             nullif(trim(a.category), '') as "ownCategory", a.visible, a.sort, p.mrp::float as mrp, si.price::float as "shopPrice",
             nullif(trim(p.description), '') as description, coalesce(p.active, 0) = 1 and p.mrp > 0 as active,
             (select ${photo()} from fp_product_image i where i.product_uid = p.uid and i.archived_at is null order by i.imagesno nulls last limit 1) as image,
             coalesce((select array_agg(${photo()} order by i.imagesno nulls last) from fp_product_image i where i.product_uid = p.uid and i.archived_at is null), '{}') as images
      from app_product a
      join fp_product p on p.uid = a.product_uid
+     left join app_product d on d.channel = 'd2c' and d.product_uid = p.uid
      left join shop_item si on si.sku_code = p.sku_code
      where a.channel = $1 and ${where}`,
     [channel, ...params],
@@ -123,11 +133,13 @@ async function rows(channel: AppChannel, where = "true", params: unknown[] = [])
 
 const shape = (r: Row): AppProduct => {
   const split = splitSize(displayName(r.masterName));
+  const size = r.ownSize ?? r.masterSize ?? split.size;
   return {
     uid: r.uid,
     sku: r.sku,
     name: r.ownName ?? split.name,
-    size: r.ownSize ?? r.masterSize ?? split.size,
+    size,
+    ...qtyUnit(size),
     category: r.ownCategory ?? shopCategory(r.masterCategory),
     own: { name: r.ownName, size: r.ownSize, category: r.ownCategory },
     masterName: r.masterName,
@@ -353,8 +365,9 @@ export async function updateProduct(
   );
   if (!before) return { ok: false, error: "That product is not on this list." };
   const text = (v: string | null | undefined, max: number) => (v === undefined ? undefined : (v ?? "").trim().replace(/\s+/g, " ").slice(0, max) || null);
-  const name = text(patch.name, 80);
-  const size = text(patch.size, 30);
+  // a SKU has one name and size in every app: only the D2C list sets them; the others keep their category and order
+  const name = channel === "d2c" ? text(patch.name, 80) : undefined;
+  const size = channel === "d2c" ? text(patch.size, 30) : undefined;
   const category = patch.category === undefined ? undefined : patch.category === null ? null : cleanCategory(patch.category).slice(0, 40) || null;
   if (category && category.length < 2) return { ok: false, error: "A category name is 2 to 40 letters." };
 

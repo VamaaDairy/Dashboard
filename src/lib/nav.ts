@@ -1,6 +1,6 @@
 /**
  * The sidebar, split into sections (Plant, Logistics, D2C, WhatsApp, Distributor & Retail, Pricing,
- * Accounts, HR, MIS, Admin). Only one section shows at a time; the switcher at the top of the sidebar
+ * Accounts, HR, Masters, MIS, Admin). Only one section shows at a time; the switcher at the top of the sidebar
  * changes it. A page can sit in more than one section (Labour in Plant and HR; every dashboard under
  * the page it belongs to and again in MIS); the sidebar then stays in whichever section you are already in.
  *
@@ -86,8 +86,8 @@ const appProductPrices: NavItem = {
   href: "/product-master/d2c", key: "productmaster", label: "App product prices", icon: PackageSearch,
   children: [
     { href: "/product-master/d2c", key: "productmaster.d2c", label: "D2C app" },
-    { href: "/product-master/retail", key: "productmaster.retail", label: "Retail app" },
-    { href: "/product-master/distributor", key: "productmaster.distributor", label: "Distributor app" },
+    { href: "/product-master/retail", key: "productmaster.retail", label: "Retailer app" },
+    { href: "/product-master/distributor", key: "productmaster.distributor", label: "Wholesale app" },
   ],
 };
 const marginsSlabs = orders("Margins & slabs", IndianRupee, ["fpchannelrates", "priceSlabs"]);
@@ -408,6 +408,49 @@ const WORKING: NavSection[] = [
         ],
       },
       { label: "Field sales team", items: items(salesTeam) },
+    ],
+  },
+  {
+    // the masters in one place; the same pages also sit in the sections that use them
+    id: "masters", label: "Masters", icon: Database,
+    groups: [
+      {
+        label: "Employee Master",
+        items: items(
+          {
+            href: "/employee-app", key: "emp", label: "Employees", icon: Users,
+            children: [
+              { href: "/employee-app", key: "emp", label: "Overview", exact: true },
+              { href: "/employee-app/accounts", key: "emp.accounts", label: "Accounts & sites" },
+            ],
+          },
+          salesTeam,
+          { href: "/users", key: "", label: "Dashboard users", icon: UserPlus, ownerOnly: true },
+        ),
+      },
+      {
+        label: "Customer Master",
+        items: items(
+          distCustomers,
+          { href: "/d2c/customers", key: "d2c.customers", label: "D2C customers", icon: Contact },
+          { href: "/route-orders/masters", key: "routeorders.masters", label: "Route customers & products", icon: Route },
+        ),
+      },
+      {
+        label: "Product Master",
+        items: items(
+          {
+            href: "/product-master/d2c", key: "productmaster", label: "App product lists", icon: PackageSearch,
+            children: [
+              { href: "/product-master/d2c", key: "productmaster.d2c", label: "D2C" },
+              { href: "/product-master/retail", key: "productmaster.retail", label: "Retailer" },
+              { href: "/product-master/distributor", key: "productmaster.distributor", label: "Wholesale (Distributors)" },
+            ],
+          },
+          orders("All products", Package, [["fpproducts", "Product Master (all SKUs)"], "categoryMaster", "taxMaster"]),
+          { href: "/product-names", key: "productnames", label: "Product names check", icon: ClipboardCheck },
+        ),
+      },
     ],
   },
   {
