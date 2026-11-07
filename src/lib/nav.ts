@@ -130,13 +130,6 @@ const WORKING: NavSection[] = [
           { href: "/transport/delivery", key: "transport.delivery", label: "Delivery transport", icon: Truck },
           { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery fuel", icon: Fuel },
           { href: "/pod", key: "grn", label: "POD", icon: PackageCheck },
-          {
-            href: "/shop-orders/riders", key: "shop", label: "Riders", icon: Bike,
-            children: [
-              { href: "/shop-orders/riders", key: "shop", label: "Riders" },
-              { href: "/shop-orders/live", key: "shop", label: "Live map" },
-            ],
-          },
         ),
       },
       {
@@ -169,6 +162,18 @@ const WORKING: NavSection[] = [
               { href: "/whatsapp/chats", key: "whatsapp", label: "Chats" },
               { href: "/whatsapp/orders", key: "whatsapp", label: "Orders" },
               { href: "/whatsapp/reviews", key: "whatsapp", label: "Reviews" },
+            ],
+          },
+        ],
+      },
+      {
+        label: "Delivery",
+        items: [
+          {
+            href: "/shop-orders/riders", key: "shop", label: "Riders", icon: Bike,
+            children: [
+              { href: "/shop-orders/riders", key: "shop", label: "Riders" },
+              { href: "/shop-orders/live", key: "shop", label: "Live map" },
             ],
           },
         ],
