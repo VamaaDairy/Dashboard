@@ -1,6 +1,8 @@
 /**
- * The sidebar, split into sections (Plant, Logistics, D2C, WhatsApp, Distributor & Retail, MIS, Admin).
- * Only one section shows at a time; the switcher at the top of the sidebar changes it.
+ * The sidebar, split into sections (Plant, Logistics, D2C, WhatsApp, Distributor & Retail, Pricing,
+ * Accounts, HR, MIS, Admin). Only one section shows at a time; the switcher at the top of the sidebar
+ * changes it. A page can sit in more than one section (Labour in Plant and HR; every dashboard in its
+ * own section and in MIS); the sidebar then stays in whichever section you are already in.
  *
  * Orders pages that are still empty placeholders never show in a working section: they are
  * listed under "Not in use" (owner only), together with any built Orders page that no section
@@ -9,8 +11,8 @@
  */
 import {
   Archive, BarChart3, Beaker, Bike, Boxes, CalendarDays, ClipboardCheck, Contact, Cylinder, Database, Droplets, Factory,
-  FileClock, Fuel, Gift, Home, MapPin, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
-  ReceiptText, Route, Scale, Settings2, ShoppingBag, Smartphone, Star, Store, Tags, Target, Truck, UserPlus, Users, Warehouse, Zap,
+  Briefcase, FileClock, Fuel, Gift, HardHat, Home, IndianRupee, MapPin, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
+  ReceiptText, Route, Scale, Settings2, ShoppingBag, Smartphone, Star, Store, Tags, Target, Truck, UserPlus, Users, Wallet, Warehouse, Zap,
 } from "lucide-react";
 import ordersSidebar from "@/lib/orders/sidebar.json";
 import unbuilt from "@/lib/nav-unbuilt.json";
@@ -51,6 +53,82 @@ const orders = (label: string, icon: React.ElementType, slugs: Array<string | [s
 };
 const items = (...list: Array<NavItem | null>) => list.filter((i): i is NavItem => !!i);
 
+/* ---------- building blocks; some appear in more than one section ---------- */
+// Plant
+const milkIn: NavItem = {
+  href: "/procurement/vamaa", key: "procurement", label: "Milk in", icon: Droplets,
+  children: [
+    { href: "/procurement/vamaa", key: "procurement.collections", label: "Collections" },
+    { href: "/procurement/rate-chart", key: "procurement.rates", label: "Rate chart" },
+  ],
+};
+const labour: NavItem = { href: "/labour", key: "labour", label: "Labour", icon: HardHat };
+// Logistics
+const pod: NavItem = { href: "/pod", key: "grn", label: "POD", icon: PackageCheck };
+// Distributor & Retail
+const distAppOrders: NavItem = {
+  href: "/app-orders/distributors", key: "apporders", label: "App orders", icon: Smartphone,
+  children: [
+    { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },
+    { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
+  ],
+};
+const primary = orders("Primary", Truck, ["portalOrder", "fpsalesview", "stockView", "fpmybookingorders"]);
+const secondary = orders("Secondary", ShoppingBag, ["fpcustbookingorders", "fpsecondarysalesview", "fpsalesreturnview", "collections", "task"]);
+const distCustomers = orders("Customers", Contact, ["distribution", "customerTarget", "customerTypeMaster", "customerRouteMapping"]);
+const distProducts = orders("Product Management", Package, ["fpproducts", "fpfocusproduct", "fpproductinventory", "displayPlanogram", "greenCallTargets"]);
+const salesTeam = orders("Sales team", Users, ["staffs", "employeecustomermaster", "employeefaceregistration", "attendance", "leave", "employeeTarget", "catalogue", "lms"]);
+const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
+// Pricing
+const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Price list", icon: Tags };
+const appProductPrices: NavItem = {
+  href: "/product-master/d2c", key: "productmaster", label: "App product prices", icon: PackageSearch,
+  children: [
+    { href: "/product-master/d2c", key: "productmaster.d2c", label: "D2C app" },
+    { href: "/product-master/retail", key: "productmaster.retail", label: "Retail app" },
+    { href: "/product-master/distributor", key: "productmaster.distributor", label: "Distributor app" },
+  ],
+};
+const marginsSlabs = orders("Margins & slabs", IndianRupee, ["fpchannelrates", "priceSlabs"]);
+const schemes = orders("Schemes", Gift, ["schemes", "schemesQPS"]);
+// Accounts
+const outstandings: NavItem = {
+  href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale,
+  children: [
+    { href: "/outstandings", key: "outstandings", label: "Outstandings", exact: true },
+    { href: "/outstandings/statements", key: "outstandings", label: "Statements" },
+  ],
+};
+const creditNotes: NavItem = { href: "/credit-note", key: "creditnote", label: "Credit notes", icon: ReceiptText };
+const cnManagement: NavItem = {
+  href: "/cn", key: "cn", label: "CN Management", icon: ClipboardCheck,
+  children: [
+    { href: "/cn", key: "cn", label: "All complaints", exact: true },
+    { href: "/cn/approvals", key: "cn.approve", label: "Approvals" },
+    { href: "/cn/finance", key: "cn.finance", label: "Finance posting" },
+  ],
+};
+// Dashboards: each sits in its own section and again in MIS
+const dash = {
+  milkIn: { href: "/procurement/dashboard", key: "procurement.dashboard", label: "Milk in", icon: Droplets } as NavItem,
+  tanks: { href: "/tanks/dashboard", key: "tanks.dashboard", label: "Tanks", icon: Cylinder } as NavItem,
+  production: { href: "/daily/dashboard", key: "production.dashboard", label: "Production", icon: CalendarDays } as NavItem,
+  byProduct: { href: "/reports", key: "reports", label: "Production by product", icon: Factory } as NavItem,
+  fuel: { href: "/fuel/dashboard", key: "fuel.dashboard", label: "Fuel", icon: Fuel } as NavItem,
+  d2cSales: {
+    href: "/d2c/sales", key: "d2c", label: "D2C sales", icon: ShoppingBag,
+    children: [
+      { href: "/d2c/sales", key: "d2c.sales", label: "Sales dashboard" },
+      { href: "/d2c/reports", key: "d2c.reports", label: "Sales reports" },
+    ],
+  } as NavItem,
+  distSales: orders("Distributor sales", BarChart3, ["primarySalesReport", "secondarySalesReport", ["orderBookingReport", "Secondary order booking"]]),
+  fieldActivity: orders("Field activity", MapPinned, ["activity", "customerActivity", "customerLocation"]),
+  kpi: orders("KPI", Target, ["kpiTargets"]),
+  creditNotes: { href: "/credit-note/dashboard", key: "creditnote.dashboard", label: "Credit notes", icon: ReceiptText } as NavItem,
+  cn: { href: "/cn/dashboard", key: "cn.dashboard", label: "Complaints & CN", icon: ClipboardCheck } as NavItem,
+};
+
 /* ---------- the sections ---------- */
 const WORKING: NavSection[] = [
   {
@@ -60,13 +138,7 @@ const WORKING: NavSection[] = [
         label: "Every day",
         items: [
           { href: "/", key: "today", label: "Today", icon: Home, exact: true },
-          {
-            href: "/procurement/vamaa", key: "procurement", label: "Milk in", icon: Droplets,
-            children: [
-              { href: "/procurement/vamaa", key: "procurement.collections", label: "Collections" },
-              { href: "/procurement/rate-chart", key: "procurement.rates", label: "Rate chart" },
-            ],
-          },
+          milkIn,
           { href: "/farmers", key: "farmers", label: "Farmers", icon: Contact },
           { href: "/tanks", key: "tanks", label: "Tanks", icon: Cylinder },
         ],
@@ -97,11 +169,12 @@ const WORKING: NavSection[] = [
       {
         label: "Plant costs",
         items: [
-          { href: "/labour", key: "labour", label: "Labour", icon: Users },
+          labour,
           { href: "/electricity", key: "electricity", label: "Electricity", icon: Zap },
           { href: "/fuel/production", key: "fuel.production", label: "Fuel in plant", icon: Fuel },
         ],
       },
+      { label: "Dashboards", items: [dash.milkIn, dash.tanks, dash.production, dash.byProduct, dash.fuel] },
       { label: "Rates & masters", items: [], classes: true },
     ],
   },
@@ -117,7 +190,7 @@ const WORKING: NavSection[] = [
       },
       {
         label: "Delivery",
-        items: items(
+        items: [
           {
             href: "/route-orders", key: "routeorders", label: "Route orders", icon: Route,
             children: [
@@ -129,15 +202,11 @@ const WORKING: NavSection[] = [
           },
           { href: "/transport/delivery", key: "transport.delivery", label: "Delivery transport", icon: Truck },
           { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery fuel", icon: Fuel },
-          { href: "/pod", key: "grn", label: "POD", icon: PackageCheck },
-        ),
+          pod,
+        ],
       },
-      {
-        label: "Van sales",
-        items: items(
-          orders("Van & dispatch", MapPin, ["delivery", "loadSheet", "stockTransferView", "vanMaster"]),
-        ),
-      },
+      { label: "Van sales", items: items(orders("Van & dispatch", MapPin, ["delivery", "loadSheet", "stockTransferView", "vanMaster"])) },
+      { label: "Dashboards", items: [dash.fuel] },
     ],
   },
   {
@@ -189,6 +258,7 @@ const WORKING: NavSection[] = [
           },
         ],
       },
+      { label: "Dashboards", items: [dash.d2cSales] },
     ],
   },
   {
@@ -213,104 +283,57 @@ const WORKING: NavSection[] = [
   {
     id: "distributor", label: "Distributor & Retail", icon: Network,
     groups: [
+      { label: "Orders", items: items(distAppOrders, primary, secondary) },
       {
-        label: "Orders",
+        label: "Customers & products",
         items: items(
+          distCustomers,
           {
-            href: "/app-orders/distributors", key: "apporders", label: "App orders", icon: Smartphone,
+            href: "/product-master/distributor", key: "productmaster", label: "App products", icon: PackageSearch,
             children: [
-              { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },
-              { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
+              { href: "/product-master/distributor", key: "productmaster.distributor", label: "Distributor app" },
+              { href: "/product-master/retail", key: "productmaster.retail", label: "Retail app" },
             ],
           },
-          orders("Primary", Truck, ["portalOrder", "fpsalesview", "stockView", "fpmybookingorders"]),
-          orders("Secondary", ShoppingBag, ["fpcustbookingorders", "fpsecondarysalesview", "fpsalesreturnview", "collections", "task"]),
-        ),
-      },
-      {
-        label: "Customers & pricing",
-        items: items(
-          orders("Customers", Contact, ["distribution", "customerTarget", "customerTypeMaster", "customerRouteMapping"]),
-          {
-            href: "/product-master/distributor", key: "productmaster", label: "Products & prices", icon: Tags,
-            children: [
-              { href: "/product-master/distributor", key: "productmaster.distributor", label: "Distributor app products" },
-              { href: "/product-master/retail", key: "productmaster.retail", label: "Retail app products" },
-              { href: "/price-list", key: "pricelist", label: "Price list" },
-            ],
-          },
-          orders("Product Management", Package, ["fpproducts", "fpchannelrates", "priceSlabs", "fpfocusproduct", "fpproductinventory", "displayPlanogram", "greenCallTargets"]),
-          orders("Schemes", Gift, ["schemes", "schemesQPS"]),
+          distProducts,
+          schemes,
         ),
       },
       {
         label: "Field sales",
         items: items(
-          orders("Sales team", Users, ["staffs", "employeecustomermaster", "employeefaceregistration", "attendance", "leave", "employeeTarget", "catalogue", "lms"]),
+          salesTeam,
           orders("Field Force Management", MapPinned, ["beat", "cityCategory", "displayAudit"]),
           orders("Promoters", Users, ["firmPromoter", "firmPromoterReport", "serviceManagementView"]),
         ),
       },
+      { label: "Dashboards", items: items(dash.distSales, dash.fieldActivity, dash.kpi) },
+    ],
+  },
+  {
+    id: "pricing", label: "Pricing", icon: Tags,
+    groups: [
+      { label: "Customer prices", items: [priceList] },
+      { label: "App products", items: [appProductPrices] },
+      { label: "Distributor & retail", items: items(marginsSlabs, schemes) },
       {
-        label: "Credit & collections",
-        items: [
-          { href: "/credit-note", key: "creditnote", label: "Credit notes", icon: ReceiptText },
-          {
-            href: "/cn", key: "cn", label: "CN Management", icon: ClipboardCheck,
-            children: [
-              { href: "/cn", key: "cn", label: "All complaints", exact: true },
-              { href: "/cn/approvals", key: "cn.approve", label: "Approvals" },
-              { href: "/cn/finance", key: "cn.finance", label: "Finance posting" },
-            ],
-          },
-          {
-            href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale,
-            children: [
-              { href: "/outstandings", key: "outstandings", label: "Outstandings", exact: true },
-              { href: "/outstandings/statements", key: "outstandings", label: "Statements" },
-            ],
-          },
-        ],
+        label: "Milk purchase",
+        items: [{ href: "/procurement/rate-chart", key: "procurement.rates", label: "Milk rate chart", icon: Droplets }],
       },
     ],
   },
   {
-    id: "mis", label: "MIS", icon: BarChart3,
+    id: "accounts", label: "Accounts", icon: Wallet,
     groups: [
-      {
-        label: "Plant",
-        items: [
-          { href: "/procurement/dashboard", key: "procurement.dashboard", label: "Milk in", icon: Droplets },
-          { href: "/tanks/dashboard", key: "tanks.dashboard", label: "Tanks", icon: Cylinder },
-          { href: "/daily/dashboard", key: "production.dashboard", label: "Production", icon: CalendarDays },
-          { href: "/reports", key: "reports", label: "Production by product", icon: Factory },
-          { href: "/fuel/dashboard", key: "fuel.dashboard", label: "Fuel", icon: Fuel },
-        ],
-      },
-      {
-        label: "Sales",
-        items: items(
-          {
-            href: "/d2c/sales", key: "d2c", label: "D2C sales", icon: ShoppingBag,
-            children: [
-              { href: "/d2c/sales", key: "d2c.sales", label: "Sales dashboard" },
-              { href: "/d2c/reports", key: "d2c.reports", label: "Sales reports" },
-            ],
-          },
-          orders("Distributor sales", BarChart3, ["primarySalesReport", "secondarySalesReport", ["orderBookingReport", "Secondary order booking"]]),
-          orders("Field activity", MapPinned, ["activity", "customerActivity", "customerLocation"]),
-          { href: "/credit-note/dashboard", key: "creditnote.dashboard", label: "Credit notes", icon: ReceiptText },
-          { href: "/cn/dashboard", key: "cn.dashboard", label: "Complaints & CN", icon: ClipboardCheck },
-        ),
-      },
-      { label: "Targets", items: items(orders("KPI", Target, ["kpiTargets"])) },
+      { label: "Accounts", items: [outstandings, pod, creditNotes, cnManagement] },
+      { label: "Dashboards", items: [dash.creditNotes, dash.cn] },
     ],
   },
   {
-    id: "admin", label: "Admin", icon: Settings2,
+    id: "hr", label: "HR", icon: Briefcase,
     groups: [
       {
-        label: "People",
+        label: "Employees",
         items: [
           {
             href: "/employee-app", key: "emp", label: "Employee app", icon: Users,
@@ -326,12 +349,30 @@ const WORKING: NavSection[] = [
               { href: "/employee-app/accounts", key: "emp.accounts", label: "Accounts & sites" },
             ],
           },
+          labour,
         ],
       },
+      { label: "Field sales team", items: items(salesTeam) },
+    ],
+  },
+  {
+    id: "mis", label: "MIS", icon: BarChart3,
+    groups: [
+      { label: "Plant", items: [dash.milkIn, dash.tanks, dash.production, dash.byProduct, dash.fuel] },
+      { label: "Sales", items: items(dash.d2cSales, dash.distSales, dash.fieldActivity, dash.kpi) },
+      { label: "Accounts", items: [dash.creditNotes, dash.cn] },
+      { label: "Distributor & retail orders", items: items(distAppOrders, primary, secondary) },
+      { label: "Distributor & retail masters", items: items(distCustomers, distProducts, salesMasters) },
+      { label: "Distributor & retail prices", items: items(appProductPrices, marginsSlabs, schemes, priceList) },
+    ],
+  },
+  {
+    id: "admin", label: "Admin", icon: Settings2,
+    groups: [
       {
         label: "Sales masters",
         items: items(
-          orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]),
+          salesMasters,
           orders("Integration status", Network, ["firmsStatus", "productsStatus", "productInventoryStatus", "stockTransferStatus", "billsStatus", "transactionStatus", "preSaleSRSync", "vansalestockreq", "bookorderstatus", "intgBookingOrderStatus"]),
         ),
       },
@@ -378,15 +419,21 @@ const UNUSED: NavSection = {
 
 export const SECTIONS: NavSection[] = [...WORKING, UNUSED];
 
-/** The section a path belongs to (the first one that links to it), else null. */
-export function sectionFor(pathname: string, classesHref = "/c/"): string | null {
+/**
+ * The section a path belongs to, else null. A page linked from several sections stays in
+ * `current` when that is one of them; otherwise the first section with the closest link wins.
+ */
+export function sectionFor(pathname: string, current?: string | null, classesHref = "/c/"): string | null {
   if (pathname.startsWith(classesHref)) return "plant";
-  let best: { id: string; len: number } | null = null;
+  const hits = new Map<string, number>();
   for (const s of SECTIONS) for (const g of s.groups) for (const i of g.items) {
     for (const h of [i.href, ...(i.children ?? []).map((c) => c.href)]) {
       const hit = h === "/" ? pathname === "/" : pathname === h || pathname.startsWith(h + "/");
-      if (hit && (!best || h.length > best.len)) best = { id: s.id, len: h.length };
+      if (hit && h.length > (hits.get(s.id) ?? -1)) hits.set(s.id, h.length);
     }
   }
-  return best?.id ?? null;
+  if (!hits.size) return null;
+  const longest = Math.max(...hits.values());
+  if (current && hits.get(current) === longest) return current;
+  return [...hits].find(([, len]) => len === longest)![0];
 }

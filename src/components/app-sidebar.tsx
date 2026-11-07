@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -33,12 +33,19 @@ export function AppSidebar({
   const [recalcing, setRecalcing] = useState(false);
 
   // Which section is showing. The page you are on picks it; otherwise the last one you chose.
+  // A page that sits in several sections (dashboards, Labour, ...) keeps the section you are in.
   const [section, setSection] = useState<string>(() => sectionFor(pathname) ?? "plant");
   const [picking, setPicking] = useState(false);
+  const sectionRef = useRef<string | null>(null);
+  useEffect(() => { sectionRef.current = section; }, [section]);
   useEffect(() => {
-    const here = sectionFor(pathname);
+    let current = sectionRef.current;
+    if (current === null) {
+      // first load: the section chosen last time, if this page is in it
+      try { current = localStorage.getItem("sidebar-section"); } catch { /* storage unavailable */ }
+    }
+    const here = sectionFor(pathname, current);
     if (here) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- follow the page you've navigated to
       setSection(here);
       try { localStorage.setItem("sidebar-section", here); } catch { /* ignore */ }
     } else {
