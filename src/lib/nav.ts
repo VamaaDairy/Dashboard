@@ -1,8 +1,8 @@
 /**
  * The sidebar, split into sections (Plant, Logistics, D2C, WhatsApp, Distributor & Retail, Pricing,
- * Accounts, HR, Masters, MIS, Admin). Only one section shows at a time; the switcher at the top of the sidebar
- * changes it. A page can sit in more than one section (Labour in Plant and HR; every dashboard under
- * the page it belongs to and again in MIS); the sidebar then stays in whichever section you are already in.
+ * Accounts, HR, Masters, MIS, Admin). All sections show one under the other, each opening and closing on its own,
+ * with a search box above them. A page can sit in more than one section (Labour in Plant and HR; every dashboard under
+ * the page it belongs to and again in MIS); the section that opens by itself is then the one you used last.
  *
  * Orders pages that are still empty placeholders never show in a working section: they are
  * listed under "Not in use" (owner only), together with any built Orders page that no section
