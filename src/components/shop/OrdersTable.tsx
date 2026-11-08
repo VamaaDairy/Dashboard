@@ -94,14 +94,14 @@ export function OrdersTable({ rows, riders, canEdit, footer }: {
     router.refresh();
   });
 
-  const th = "sticky top-0 z-10 whitespace-nowrap border-b border-foreground/10 bg-card px-3 py-2.5 text-left text-[12px] font-medium text-foreground/75";
-  const td = "border-b border-foreground/[0.07] px-3 py-2.5 align-middle";
+  const th = "whitespace-nowrap border-y border-foreground/10 bg-foreground/[0.025] px-3 py-2 text-left text-[12px] font-medium text-foreground/75";
+  const td = "border-b border-foreground/[0.06] px-3 py-3 align-middle";
   const visible = 2 + COLS.filter(([c]) => show(c)).length;
 
   return (
     <>
       {sel.size ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-foreground/10 bg-primary/[0.06] px-4 py-2 text-[13px]">
+        <div className="flex flex-wrap items-center gap-2 bg-primary/[0.06] px-4 py-2 text-[13px]">
           <span className="font-semibold text-foreground">{sel.size} selected</span>
           {canEdit ? (
             <>
@@ -138,7 +138,7 @@ export function OrdersTable({ rows, riders, canEdit, footer }: {
           <button type="button" onClick={() => setSel(new Set())} className="ml-auto text-foreground/75 hover:text-foreground">Clear</button>
         </div>
       ) : note ? (
-        <div className="flex items-center justify-between border-b border-foreground/10 bg-foreground/[0.03] px-4 py-2 text-[13px] text-foreground">
+        <div className="flex items-center justify-between bg-foreground/[0.03] px-4 py-2 text-[13px] text-foreground">
           <span>{note}</span>
           <button type="button" onClick={() => setNote(null)} className="text-foreground/75 hover:text-foreground">Dismiss</button>
         </div>
@@ -187,7 +187,7 @@ export function OrdersTable({ rows, riders, canEdit, footer }: {
                   <td className={td}><input type="checkbox" checked={sel.has(o.id)} onChange={() => tick(o.id)} aria-label={`Select ${o.orderNo}`} className="accent-[var(--primary)]" /></td>
                   <td className={cn(td, "whitespace-nowrap")}>
                     <Link href={`/app-orders/d2c/${o.id}`} className="font-semibold text-primary hover:underline">{o.orderNo}</Link>
-                    <div className="mt-0.5"><span className={cn("rounded px-1.5 py-px text-[11px] font-medium", o.subscription ? "bg-primary/[0.09] text-primary" : "bg-foreground/[0.06] text-foreground/80")}>{o.type}</span></div>
+                    <div className={cn("mt-0.5 text-[12px]", o.subscription ? "font-medium text-primary" : "text-foreground/75")}>{o.type}</div>
                   </td>
                   {show("placed") ? (
                     <td className={cn(td, "whitespace-nowrap")}>
@@ -216,14 +216,14 @@ export function OrdersTable({ rows, riders, canEdit, footer }: {
                     <td className={td}>
                       <div className="flex" title={o.items.map((i) => `${i.qty} × ${i.name}`).join("\n")}>
                         {o.items.slice(0, 3).map((i, k) => (
-                          <span key={k} className={cn("relative size-7 overflow-hidden rounded-md border-2 border-card bg-foreground/[0.06]", k > 0 && "-ml-2")}>
+                          <span key={k} className={cn("relative size-7 overflow-hidden rounded-md bg-foreground/[0.06] ring-2 ring-card", k > 0 && "-ml-1.5")}>
                             {i.image ? (
                               // eslint-disable-next-line @next/next/no-img-element -- product photos from our own route
                               <img src={i.image} alt="" className="size-full object-cover" loading="lazy" />
                             ) : <span className="flex size-full items-center justify-center text-[9px] font-semibold text-foreground/70">{initials(i.name) || <Package className="size-3" />}</span>}
                           </span>
                         ))}
-                        {o.items.length > 3 ? <span className="-ml-2 flex size-7 items-center justify-center rounded-md border-2 border-card bg-foreground/[0.08] text-[10px] font-semibold text-foreground">+{o.items.length - 3}</span> : null}
+                        {o.items.length > 3 ? <span className="-ml-1.5 flex size-7 items-center justify-center rounded-md bg-foreground/[0.08] text-[10px] font-semibold text-foreground ring-2 ring-card">+{o.items.length - 3}</span> : null}
                       </div>
                       <div className="mt-0.5 whitespace-nowrap text-[12px] text-foreground/75">{o.items.length} item{o.items.length === 1 ? "" : "s"} · {o.qty} pcs</div>
                     </td>
@@ -239,7 +239,7 @@ export function OrdersTable({ rows, riders, canEdit, footer }: {
                   {show("status") ? (
                     <td className={cn(td, "whitespace-nowrap")}>
                       <span className="inline-flex items-center gap-1.5 text-foreground"><span className={cn("size-2 rounded-full", STATUS_DOT[o.status] ?? "bg-foreground/40")} />{o.statusLabel}</span>
-                      {o.tracking.late ? <span className="ml-1.5 rounded bg-destructive/10 px-1.5 py-0.5 text-[11px] font-semibold text-destructive" title="Waiting longer than it should">+{o.tracking.late} min</span> : null}
+                      {o.tracking.late ? <span className="ml-1.5 text-[12px] font-semibold text-destructive" title="Waiting longer than it should">+{o.tracking.late} min</span> : null}
                     </td>
                   ) : null}
                   {show("tracking") ? (
@@ -268,7 +268,7 @@ export function OrdersTable({ rows, riders, canEdit, footer }: {
           </table>
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-foreground/10 px-4 py-2.5 text-[13px] text-foreground/75">{footer}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[13px] text-foreground/75">{footer}</div>
     </>
   );
 }
