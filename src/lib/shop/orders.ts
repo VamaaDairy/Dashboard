@@ -99,6 +99,7 @@ export interface ShopOrder {
   status: string;
   created_at: Date;
   updated_at?: Date;
+  customer_id?: number | null;
   /** Set when the order was made from a subscription (the delivery day, YYYY-MM-DD). */
   subscription_day: string | null;
   lat: number | null;

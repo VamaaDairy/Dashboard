@@ -219,3 +219,24 @@ export async function slipOrders(ids: number[]) {
   const rows = await query<ShopOrder>(`${WITH_ITEMS} where o.id = any($1::int[])`, [ids]);
   return ids.map((id) => rows.find((r) => r.id === id)).filter((r): r is ShopOrder => !!r);
 }
+
+/** Every subscription order of a customer (by account, else by phone), newest delivery day first. */
+export async function subscriptionOrders(customerId: number | null, phone: string): Promise<BoardRow[]> {
+  return query<BoardRow>(
+    `select w.*, (select count(*)::int from shop_order x where x.phone = w.phone and (x.status <> 'cancelled' or x.id = w.id) and x.created_at <= w.created_at) as nth
+       from (${WITH_ITEMS} where o.subscription_day is not null and (($1::int is not null and o.customer_id = $1) or ($1::int is null and o.phone = $2))
+             order by o.subscription_day desc, o.created_at desc limit 500) w
+      order by w.subscription_day desc, w.created_at desc`,
+    [customerId, phone],
+  );
+}
+
+/** Orders for an invoice over a period (YYYY-MM-DD, both included): subscription ones only when `subscription`. */
+export async function invoiceOrders(customerId: number | null, phone: string, from: string, to: string, subscription: boolean): Promise<ShopOrder[]> {
+  return query<ShopOrder>(
+    `${WITH_ITEMS} where (($1::int is not null and o.customer_id = $1) or ($1::int is null and o.phone = $2))
+       and ${DAY} between $3::date and $4::date ${subscription ? "and o.subscription_day is not null" : ""}
+     order by ${DAY}, o.created_at`,
+    [customerId, phone, from, to],
+  );
+}

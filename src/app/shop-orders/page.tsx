@@ -6,15 +6,13 @@ import { OrdersTable, type OrderRow } from "@/components/shop/OrdersTable";
 import { query } from "@/lib/db";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { DATE_RANGES, PAGE_SIZE, boardFilter, orderBoard, recentPincodes, today, trackingOf, type BoardParams } from "@/lib/shop/order-board";
-import { STATUS_LABEL } from "@/lib/shop/pricing";
-import { labelOf, productLabels } from "@/lib/products/names";
+import { DATE_RANGES, PAGE_SIZE, boardFilter, orderBoard, recentPincodes, today, type BoardParams } from "@/lib/shop/order-board";
+import { toOrderRow } from "@/lib/shop/order-rows";
+import { productLabels } from "@/lib/products/names";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-const placed = (d: Date) => new Date(d).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-const dayOnly = (d: string | Date) => new Date(d).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const TABS: Array<[string, string]> = [["", "All"], ["placed", "New"], ["confirmed", "Confirmed"], ["out_for_delivery", "Out for delivery"], ["delivered", "Delivered"], ["cancelled", "Cancelled"], ["awaiting_payment", "Awaiting payment"]];
 const MORE: Array<[string, string]> = [
@@ -40,39 +38,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
   const now = new Date();
 
-  const rows: OrderRow[] = board.rows.map((o) => {
-    const tr = trackingOf(o, now);
-    return {
-      id: o.id,
-      orderNo: o.order_no,
-      placed: placed(o.created_at),
-      type: o.subscription_day ? `Subscription · ${dayOnly(o.subscription_day)}` : "Regular",
-      subscription: !!o.subscription_day,
-      name: o.name,
-      phone: o.phone,
-      nth: o.nth,
-      address: o.address,
-      pincode: o.pincode,
-      noPin: o.lat === null,
-      note: o.notes,
-      items: o.items.map((i) => { const l = labelOf(labels, i.sku_code, i.name, i.image_url); return { name: l.name, image: l.image, qty: i.qty }; }),
-      qty: o.items.reduce((a, i) => a + i.qty, 0),
-      subtotal: Number(o.subtotal),
-      deliveryFee: Number(o.delivery_fee),
-      total: Number(o.total),
-      payMethod: o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : "Online",
-      paid: o.payment_status === "paid"
-        ? { label: o.payment_method === "cod" ? "Collected" : "Paid", tone: "good" }
-        : o.payment_status === "refunded" ? { label: "Refunded", tone: "bad" }
-        : o.status === "cancelled" ? { label: "Not paid", tone: "bad" }
-        : { label: o.payment_method === "cod" ? "To collect" : "Pending", tone: "wait" },
-      status: o.status,
-      statusLabel: o.status === "placed" ? "New" : STATUS_LABEL[o.status] ?? o.status,
-      tracking: { ...tr, route: !!o.picked_up_at },
-      rider: o.rider?.name ?? null,
-      stop: o.delivery_seq ? `stop ${o.delivery_seq}` : null,
-    };
-  });
+  const rows: OrderRow[] = board.rows.map((o) => toOrderRow(o, labels, now));
 
   const link = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
