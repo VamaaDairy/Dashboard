@@ -7,18 +7,21 @@ import type { Target } from "@/lib/price-list";
 import { addCustomerAction, createListAction, findCustomersAction, removeCustomerAction, savePriceAction, updateListAction } from "./actions";
 
 const money = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
+const money2 = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**
  * A price you can click to change: Enter or leaving the box saves, Esc cancels. On a party list an empty
  * box takes the product off the list (the customer then pays the fallback shown in grey).
  */
-export function PriceCell({ target, productUid, value, fallback, canEdit, clearable }: {
+export function PriceCell({ target, productUid, value, fallback, canEdit, clearable, size = "sm" }: {
   target: Target;
   productUid: string;
   value: number | null;
   fallback?: number | null;
   canEdit: boolean;
   clearable?: boolean;
+  /** "lg" for the headline prices on a SKU's detail */
+  size?: "sm" | "lg";
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -62,7 +65,9 @@ export function PriceCell({ target, productUid, value, fallback, canEdit, cleara
           if (e.key === "Enter") save();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="num h-8 w-24 rounded-md border border-foreground bg-background px-2 text-right text-sm outline-none"
+        className={size === "lg"
+          ? "tabular-nums h-10 w-32 rounded-md border border-foreground bg-background px-2 text-xl font-semibold outline-none"
+          : "tabular-nums h-8 w-24 rounded-md border border-foreground bg-background px-2 text-right text-sm outline-none"}
         placeholder={clearable ? "empty = off" : ""}
       />
     );
@@ -73,14 +78,14 @@ export function PriceCell({ target, productUid, value, fallback, canEdit, cleara
       disabled={!canEdit || pending}
       title={error ?? (canEdit ? "Click to change" : undefined)}
       onClick={() => { setText(shown === null ? "" : String(shown)); setEditing(true); }}
-      className={`num inline-flex h-8 min-w-24 items-center justify-end rounded-md px-2 text-sm ${canEdit ? "hover:bg-muted hover:ring-1 hover:ring-border" : ""} ${error ? "text-destructive ring-1 ring-destructive" : ""} ${pending ? "opacity-50" : ""}`}
+      className={`tabular-nums inline-flex items-center rounded-md ${size === "lg" ? "-mx-1.5 h-10 px-1.5 text-[22px] tracking-tight" : "h-8 min-w-24 justify-end px-2 text-sm"} ${canEdit ? "hover:bg-muted hover:ring-1 hover:ring-foreground/15" : ""} ${error ? "text-destructive ring-1 ring-destructive" : ""} ${pending ? "opacity-50" : ""}`}
     >
       {shown !== null ? (
-        <span className="font-semibold">{money(shown)}</span>
+        <span className="font-semibold">{size === "lg" ? money2(shown) : money(shown)}</span>
       ) : fallback ? (
-        <span className="text-tertiary-foreground" title="No price on this list - the customer pays this">{money(fallback)}</span>
+        <span className="text-foreground/75" title="No price on this list - the customer pays this">{money(fallback)}</span>
       ) : (
-        <span className="text-tertiary-foreground">-</span>
+        <span className="text-foreground/75">-</span>
       )}
     </button>
   );
@@ -114,7 +119,7 @@ export function CustomerPicker({ listUid }: { listUid: string }) {
   return (
     <div className="space-y-2">
       <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-foreground/75" />
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setMsg(null); if (e.target.value.trim().length < 2) setHits([]); }}
@@ -123,24 +128,24 @@ export function CustomerPicker({ listUid }: { listUid: string }) {
         />
       </div>
       {hits.length > 0 ? (
-        <ul className="max-h-64 divide-y divide-border overflow-y-auto rounded-lg border border-border text-[13px]">
+        <ul className="max-h-64 divide-y divide-border overflow-y-auto rounded-lg border border-foreground/15 text-[13px]">
           {hits.map((h) => (
             <li key={h.uid} className="flex items-center justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
                 <div className="truncate font-medium">{h.name}</div>
-                <div className="truncate text-[11px] text-tertiary-foreground">
+                <div className="truncate text-[11px] text-foreground/75">
                   <span className="font-mono">{h.code}</span> · {[h.channel, h.city].filter(Boolean).join(", ")}{h.active ? "" : " · inactive"}
                   {h.list ? ` · on ${h.list}` : ""}
                 </div>
               </div>
-              <button type="button" disabled={pending} onClick={() => add(h.uid)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2 text-xs font-semibold hover:bg-muted">
+              <button type="button" disabled={pending} onClick={() => add(h.uid)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-foreground/15 px-2 text-xs font-semibold hover:bg-muted">
                 <Plus className="size-3.5" /> Add
               </button>
             </li>
           ))}
         </ul>
       ) : null}
-      {msg ? <p className="text-[12px] text-tertiary-foreground">{msg}</p> : null}
+      {msg ? <p className="text-[12px] text-foreground/75">{msg}</p> : null}
     </div>
   );
 }
@@ -157,7 +162,7 @@ export function RemoveCustomer({ listUid, firmUid, name }: { listUid: string; fi
         if (!window.confirm(`Take ${name} off this list? They will pay their channel price.`)) return;
         start(async () => { await removeCustomerAction(listUid, firmUid); router.refresh(); });
       }}
-      className="rounded p-1 text-tertiary-foreground hover:bg-muted hover:text-foreground"
+      className="rounded p-1 text-foreground/75 hover:bg-muted hover:text-foreground"
     >
       <X className="size-3.5" />
     </button>
@@ -174,18 +179,18 @@ export function NewList({ groups }: { groups: string[] }) {
   const [pending, start] = useTransition();
   if (!open)
     return (
-      <button type="button" onClick={() => setOpen(true)} className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-sm font-medium hover:bg-muted">
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-foreground/15 text-sm font-medium hover:bg-muted">
         <Plus className="size-4" /> New price list
       </button>
     );
   return (
     <form
-      className="space-y-2 rounded-lg border border-border p-3"
+      className="space-y-2 rounded-lg border border-foreground/15 p-3"
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
           const r = await createListAction(name, grp);
-          if (r.ok) { setOpen(false); setName(""); router.push(`/price-list?list=${r.uid}`); } else setError(r.error);
+          if (r.ok) { setOpen(false); setName(""); router.push(`/price-list/lists?list=${r.uid}`); } else setError(r.error);
         });
       }}
     >
@@ -195,7 +200,7 @@ export function NewList({ groups }: { groups: string[] }) {
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className="h-8 flex-1 rounded-md bg-foreground text-sm font-semibold text-background disabled:opacity-50">Create</button>
-        <button type="button" onClick={() => setOpen(false)} className="h-8 rounded-md border border-border px-3 text-sm">Cancel</button>
+        <button type="button" onClick={() => setOpen(false)} className="h-8 rounded-md border border-foreground/15 px-3 text-sm">Cancel</button>
       </div>
     </form>
   );
@@ -209,10 +214,10 @@ export function ListSettings({ uid, name, grp }: { uid: string; name: string; gr
     start(async () => {
       const r = await updateListAction(uid, patch);
       if (!r.ok && r.error) window.alert(r.error);
-      else if (patch.active === false) router.push("/price-list");
+      else if (patch.active === false) router.push("/price-list/lists");
       else router.refresh();
     });
-  const btn = "h-8 rounded-md border border-border px-3 text-sm hover:bg-muted disabled:opacity-50";
+  const btn = "h-8 rounded-md border border-foreground/15 px-3 text-sm hover:bg-muted disabled:opacity-50";
   return (
     <div className="flex flex-wrap gap-2">
       <button type="button" disabled={pending} className={btn} onClick={() => { const n = window.prompt("Price list name", name); if (n && n !== name) run({ name: n }); }}>Rename</button>
@@ -222,7 +227,7 @@ export function ListSettings({ uid, name, grp }: { uid: string; name: string; gr
   );
 }
 
-/** Jump between the standard prices and the party lists (grouped), or pick a customer to check. */
+/** Jump between the party lists (grouped). */
 export function ListPicker({ lists, current, q }: { lists: Array<{ uid: string; name: string; grp: string | null; customers: number }>; current?: string; q?: string }) {
   const router = useRouter();
   const groups = new Map<string, typeof lists>();
@@ -234,12 +239,12 @@ export function ListPicker({ lists, current, q }: { lists: Array<{ uid: string; 
         const p = new URLSearchParams();
         if (e.target.value) p.set("list", e.target.value);
         if (q) p.set("q", q);
-        router.push(p.size ? `/price-list?${p}` : "/price-list");
+        router.push(p.size ? `/price-list/lists?${p}` : "/price-list/lists");
       }}
       aria-label="Price list"
       className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm font-medium md:w-80"
     >
-      <option value="">Standard prices (MRP, Retailer, Distributor)</option>
+      <option value="">All price lists</option>
       {[...groups].map(([g, ls]) => (
         <optgroup key={g} label={g}>
           {ls.map((l) => (
@@ -251,8 +256,8 @@ export function ListPicker({ lists, current, q }: { lists: Array<{ uid: string; 
   );
 }
 
-/** Customer search that opens the price check for the one picked. */
-export function CustomerCheckPicker({ current }: { current?: string }) {
+/** Customer search that opens the price sheet of the one picked. */
+export function CustomerCheckPicker({ current, className }: { current?: string; className?: string }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Awaited<ReturnType<typeof findCustomersAction>>>([]);
@@ -262,8 +267,8 @@ export function CustomerCheckPicker({ current }: { current?: string }) {
     return () => clearTimeout(t);
   }, [q]);
   return (
-    <div className="relative w-full md:w-96">
-      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+    <div className={className ?? "relative w-full md:w-96"}>
+      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-foreground/75" />
       <input
         value={q}
         onChange={(e) => { setQ(e.target.value); if (e.target.value.trim().length < 2) setHits([]); }}
@@ -271,16 +276,16 @@ export function CustomerCheckPicker({ current }: { current?: string }) {
         className="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-foreground"
       />
       {hits.length > 0 ? (
-        <ul className="absolute z-20 mt-1 max-h-72 w-full divide-y divide-border overflow-y-auto rounded-lg border border-border bg-popover text-[13px] shadow-lg">
+        <ul className="absolute z-20 mt-1 max-h-72 w-full divide-y divide-border overflow-y-auto rounded-lg border border-foreground/15 bg-popover text-[13px] shadow-lg">
           {hits.map((h) => (
             <li key={h.uid}>
               <button
                 type="button"
-                onClick={() => { setQ(""); setHits([]); router.push(`/price-list/overview?customer=${h.uid}`); }}
+                onClick={() => { setQ(""); setHits([]); router.push(`/price-list/customers?c=${h.uid}`); }}
                 className="block w-full px-3 py-2 text-left hover:bg-muted"
               >
                 <div className="truncate font-medium">{h.name}</div>
-                <div className="truncate text-[11px] text-tertiary-foreground">
+                <div className="truncate text-[11px] text-foreground/75">
                   <span className="font-mono">{h.code}</span> · {[h.channel, h.city].filter(Boolean).join(", ")}{h.active ? "" : " · inactive"}{h.list ? ` · ${h.list}` : ""}
                 </div>
               </button>
@@ -288,6 +293,40 @@ export function CustomerCheckPicker({ current }: { current?: string }) {
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+/** The price list a customer is on: pick another to move them (a customer is on one list at a time), or none. */
+export function CustomerListSelect({ firmUid, current, lists }: {
+  firmUid: string; current: string | null; lists: Array<{ uid: string; name: string; grp: string | null }>;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const groups = new Map<string, typeof lists>();
+  for (const l of lists) groups.set(l.grp ?? "Other", [...(groups.get(l.grp ?? "Other") ?? []), l]);
+  const change = (to: string) => start(async () => {
+    const r: { ok: boolean; error?: string } = to ? await addCustomerAction(to, firmUid) : current ? await removeCustomerAction(current, firmUid) : { ok: true };
+    if (r.ok) { setError(null); router.refresh(); } else setError(r.error ?? "Could not change the list.");
+  });
+  return (
+    <div className="space-y-1">
+      <select
+        value={current ?? ""}
+        disabled={pending}
+        onChange={(e) => change(e.target.value)}
+        aria-label="Price list"
+        className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm font-medium disabled:opacity-50 sm:w-72"
+      >
+        <option value="">No list - channel prices</option>
+        {[...groups].map(([g, ls]) => (
+          <optgroup key={g} label={g}>
+            {ls.map((l) => <option key={l.uid} value={l.uid}>{l.name}</option>)}
+          </optgroup>
+        ))}
+      </select>
+      {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
     </div>
   );
 }

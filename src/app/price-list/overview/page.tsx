@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { ProductThumb } from "@/components/products/Product";
-import { ArrowLeft, Grid3x3, X } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { buttonVariants } from "@/components/ui/button";
+import { X } from "lucide-react";
+import { packCosts, packFor } from "@/lib/pricing";
 import { allListPrices, channelRates, channels, customerCheck, priceLists, standardPrices } from "@/lib/price-list";
 import { cn } from "@/lib/utils";
 import { CustomerCheckPicker } from "../editors";
@@ -19,13 +18,14 @@ const SOURCE: Record<string, string> = { list: "own list", channel: "channel pri
  */
 export default async function PriceOverviewPage({ searchParams }: { searchParams: Promise<{ customer?: string; group?: string; q?: string }> }) {
   const { customer, group, q } = await searchParams;
-  const [products, chans, rates, lists, listPrices, check] = await Promise.all([
+  const [products, chans, rates, lists, listPrices, check, costs] = await Promise.all([
     standardPrices(),
     channels(),
     channelRates(),
     priceLists(),
     allListPrices(),
     customer ? customerCheck(customer) : Promise.resolve(null),
+    packCosts(),
   ]);
 
   const groups = [...new Set(lists.map((l) => l.grp ?? "Other"))];
@@ -39,20 +39,13 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
     for (const [k, v] of Object.entries(next)) if (v) p.set(k, v);
     return p.size ? `/price-list/overview?${p}` : "/price-list/overview";
   };
-  const head = "sticky top-0 z-10 bg-muted px-3 py-2 text-right text-[11px] font-semibold whitespace-nowrap text-muted-foreground";
+  const head = "sticky top-0 z-10 bg-card px-3 py-2 text-right text-[12px] font-medium whitespace-nowrap text-foreground/75";
   const stickyLeft = "sticky left-0 z-[5] bg-card";
 
   return (
-    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
+    <div className="pt-4">
       <div className="w-full space-y-4">
-        <PageHeader
-          icon={Grid3x3}
-          title="Price overview"
-          subtitle="All prices on one screen: every product against every channel and party price list. Read only - change prices on the Price list page."
-          actions={<Link href="/price-list" className={buttonVariants({ variant: "outline" })}><ArrowLeft className="size-4" /> Price list</Link>}
-        />
-
-        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 lg:flex-row lg:items-center">
+        <div className="flex flex-col gap-3 rounded-xl border border-foreground/10 bg-card p-3 lg:flex-row lg:items-center">
           <CustomerCheckPicker current={check?.uid} />
           <form action="/price-list/overview" className="lg:w-72">
             {customer ? <input type="hidden" name="customer" value={customer} /> : null}
@@ -61,7 +54,7 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
           </form>
           <div className="flex flex-wrap gap-1.5 text-[13px] lg:ml-auto">
             {[["", "All lists"], ...groups.map((g) => [g, g]), ["none", "Channels only"]].map(([v, l]) => (
-              <Link key={v} href={link({ group: v || undefined })} className={cn("rounded-full border px-2.5 py-1", (group ?? "") === v ? "border-foreground bg-foreground text-background" : "border-border hover:bg-muted")}>
+              <Link key={v} href={link({ group: v || undefined })} className={cn("rounded-lg border px-2.5 py-1", (group ?? "") === v ? "border-foreground bg-foreground text-background" : "border-foreground/15 text-foreground hover:bg-foreground/[0.04]")}>
                 {l}
               </Link>
             ))}
@@ -69,37 +62,38 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
         </div>
 
         {check ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-[13px]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-foreground/10 bg-card px-4 py-3 text-[13px]">
             <div>
-              <span className="font-semibold">{check.name}</span> <span className="font-mono text-tertiary-foreground">{check.code}</span>
-              <span className="text-tertiary-foreground"> · {[check.channel, check.city].filter(Boolean).join(", ")}</span>
-              <span className="text-tertiary-foreground"> · price list: </span><span className="font-medium">{check.list ?? "none (channel prices)"}</span>
+              <Link href={`/price-list/customers?c=${check.uid}`} className="font-semibold hover:underline">{check.name}</Link> <span className="font-mono text-foreground/75">{check.code}</span>
+              <span className="text-foreground/75"> · {[check.channel, check.city].filter(Boolean).join(", ")}</span>
+              <span className="text-foreground/75"> · price list: </span><span className="font-medium">{check.list ?? "none (channel prices)"}</span>
             </div>
-            <Link href={link({ customer: undefined })} className="inline-flex items-center gap-1 text-tertiary-foreground hover:text-foreground"><X className="size-3.5" /> Close</Link>
+            <Link href={link({ customer: undefined })} className="inline-flex items-center gap-1 text-foreground/75 hover:text-foreground"><X className="size-3.5" /> Close</Link>
           </div>
         ) : null}
 
-        <div className="max-h-[75vh] overflow-auto rounded-lg border border-border">
+        <div className="max-h-[calc(100vh-17rem)] overflow-auto rounded-xl bg-card border border-foreground/10">
           <table className="w-full border-separate border-spacing-0 text-[13px]">
             <thead>
               {/* group headings */}
               <tr>
-                <th rowSpan={2} className={cn(head, "left-0 z-20 min-w-60 border-r border-border text-left")}>Product</th>
-                {check ? <th rowSpan={2} className={cn(head, "border-r border-border text-foreground")}>{check.name.length > 18 ? `${check.name.slice(0, 18)}…` : check.name}<div className="font-normal">pays in app</div></th> : null}
-                <th colSpan={1 + chans.length} className={cn(head, "border-r border-b border-border text-center")}>MRP & channels</th>
+                <th rowSpan={2} className={cn(head, "left-0 z-20 min-w-60 border-r border-foreground/10 text-left")}>Product</th>
+                {check ? <th rowSpan={2} className={cn(head, "border-r border-foreground/10 text-foreground")}>{check.name.length > 18 ? `${check.name.slice(0, 18)}…` : check.name}<div className="font-normal">pays in app</div></th> : null}
+                <th rowSpan={2} className={cn(head, "border-r border-foreground/10")}>Packaging</th>
+                <th colSpan={1 + chans.length} className={cn(head, "border-r border-b border-foreground/10 text-center")}>MRP & channels</th>
                 {[...byGroup].map(([g, ls]) => (
-                  <th key={g} colSpan={ls.length} className={cn(head, "border-r border-b border-border text-center")}>{g}</th>
+                  <th key={g} colSpan={ls.length} className={cn(head, "border-r border-b border-foreground/10 text-center")}>{g}</th>
                 ))}
               </tr>
               <tr>
                 <th className={cn(head, "top-[33px]")}>MRP</th>
                 {chans.map((c, i) => (
-                  <th key={c.uid} className={cn(head, "top-[33px]", i === chans.length - 1 && "border-r border-border")}>{c.name}</th>
+                  <th key={c.uid} className={cn(head, "top-[33px]", i === chans.length - 1 && "border-r border-foreground/10")}>{c.name}</th>
                 ))}
                 {[...byGroup].flatMap(([, ls]) =>
                   ls.map((l, i) => (
-                    <th key={l.uid} className={cn(head, "top-[33px] max-w-32", i === ls.length - 1 && "border-r border-border")}>
-                      <Link href={`/price-list?list=${l.uid}`} title={`${l.name} - ${l.customers} customer${l.customers === 1 ? "" : "s"}`} className="block truncate hover:text-foreground hover:underline">{l.name}</Link>
+                    <th key={l.uid} className={cn(head, "top-[33px] max-w-32", i === ls.length - 1 && "border-r border-foreground/10")}>
+                      <Link href={`/price-list/lists?list=${l.uid}`} title={`${l.name} - ${l.customers} customer${l.customers === 1 ? "" : "s"}`} className="block truncate hover:text-foreground hover:underline">{l.name}</Link>
                     </th>
                   )),
                 )}
@@ -112,32 +106,31 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                 const mine = check?.prices.get(p.sku);
                 return (
                   <tr key={p.uid} className="hover:bg-muted/40">
-                    <td className={cn(stickyLeft, "min-w-60 border-t border-r border-border px-3 py-2")}>
-                      {i === 0 || rows[i - 1].category !== p.category ? <div className="pb-0.5 text-[10px] font-semibold tracking-wide text-tertiary-foreground uppercase">{p.category}</div> : null}
-                      <div className="flex items-center gap-2"><ProductThumb image={p.image} size={32} /><div className="min-w-0">
-                      <div className="font-medium">{p.name}</div>
-                      <div className="text-[11px] text-tertiary-foreground"><span className="font-mono">{p.sku}</span>
-                        <span className="ml-1.5 rounded bg-muted px-1.5 text-muted-foreground" title="Pack quantity">{p.packQty ?? "—"}</span>
-                        <span className="ml-1 rounded bg-muted px-1.5 text-muted-foreground" title="Unit">{p.unit ?? "—"}</span>{!p.inApp ? <span className="ml-1.5">· not in app</span> : !p.inShop ? <span className="ml-1.5">· trade only</span> : null}</div></div></div>
+                    <td className={cn(stickyLeft, "min-w-60 border-t border-r border-foreground/10 px-3 py-2")}>
+                      {i === 0 || rows[i - 1].category !== p.category ? <div className="pb-0.5 text-[10px] font-semibold tracking-wide text-foreground/75 uppercase">{p.category}</div> : null}
+                      <div className="flex items-center gap-2"><ProductThumb image={p.image} size={30} /><div className="min-w-0">
+                      <Link href={`/price-list?sku=${p.uid}`} className="font-medium hover:underline">{p.name}</Link>
+                      <div className="tabular-nums text-[12px] text-foreground/75">{[p.sku, [p.packQty, p.unit].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}{!p.inApp ? " · not on sale" : ""}</div></div></div>
                     </td>
                     {check ? (
-                      <td className="num border-t border-r border-border px-3 py-2 text-right whitespace-nowrap">
+                      <td className="tabular-nums border-t border-r border-foreground/10 px-3 py-2 text-right whitespace-nowrap">
                         {mine && p.inApp ? (
                           <>
                             <div className="font-semibold">{money(mine.price)}</div>
-                            <div className="text-[11px] text-tertiary-foreground">{SOURCE[mine.source]}</div>
+                            <div className="text-[11px] text-foreground/75">{SOURCE[mine.source]}</div>
                           </>
                         ) : (
-                          <span className="text-[11px] text-tertiary-foreground">{p.inApp ? "no price - hidden" : "not in app"}</span>
+                          <span className="text-[11px] text-foreground/75">{p.inApp ? "no price - hidden" : "not in app"}</span>
                         )}
                       </td>
                     ) : null}
-                    <td className="num border-t border-border px-3 py-2 text-right font-semibold whitespace-nowrap">{money(p.mrp)}</td>
+                    <td className="tabular-nums border-t border-r border-foreground/10 px-3 py-2 text-right whitespace-nowrap text-foreground/75">{(() => { const v = packFor(costs, p.sku)?.perPc; return v == null ? "-" : money(Math.round(v * 100) / 100); })()}</td>
+                    <td className="tabular-nums border-t border-foreground/10 px-3 py-2 text-right font-semibold whitespace-nowrap">{money(p.mrp)}</td>
                     {chans.map((c, j) => {
                       const v = pr?.get(c.uid);
                       return (
-                        <td key={c.uid} className={cn("num border-t border-border px-3 py-2 text-right whitespace-nowrap", j === chans.length - 1 && "border-r")}>
-                          {v ? <span title={`${Math.round(((p.mrp - v) / p.mrp) * 1000) / 10}% below MRP`}>{money(v)}</span> : <span className="text-tertiary-foreground">-</span>}
+                        <td key={c.uid} className={cn("tabular-nums border-t border-foreground/10 px-3 py-2 text-right whitespace-nowrap", j === chans.length - 1 && "border-r")}>
+                          {v ? <span title={`${Math.round(((p.mrp - v) / p.mrp) * 1000) / 10}% below MRP`}>{money(v)}</span> : <span className="text-foreground/75">-</span>}
                         </td>
                       );
                     })}
@@ -149,12 +142,12 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                           <td
                             key={l.uid}
                             className={cn(
-                              "num border-t border-border px-3 py-2 text-right whitespace-nowrap",
+                              "tabular-nums border-t border-foreground/10 px-3 py-2 text-right whitespace-nowrap",
                               j === ls.length - 1 && "border-r",
                             )}
                             title={v && db ? `${v < db ? "Below" : v > db ? "Above" : "Same as"} the distributor price ${money(db)}` : undefined}
                           >
-                            {v ? money(v) : <span className="text-tertiary-foreground">-</span>}
+                            {v ? money(v) : <span className="text-foreground/75">-</span>}
                           </td>
                         );
                       }),
@@ -163,12 +156,12 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                 );
               })}
               {rows.length === 0 ? (
-                <tr><td colSpan={99} className="px-4 py-10 text-center text-muted-foreground">No products match.</td></tr>
+                <tr><td colSpan={99} className="px-4 py-10 text-center text-foreground/75">No products match.</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
-        <p className="text-[12px] text-tertiary-foreground">
+        <p className="text-[12px] text-foreground/75">
           &quot;-&quot; means the list does not price that product, so its customers pay their channel price.
         </p>
       </div>
