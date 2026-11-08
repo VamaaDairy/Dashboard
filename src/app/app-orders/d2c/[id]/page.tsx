@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ChevronDown, MapPin, Phone, Printer } from "lucide-react";
+import { ArrowLeft, FileText, MapPin, Phone } from "lucide-react";
 import { StatusSelect } from "@/components/shop/StatusSelect";
 import { AssignSelect } from "@/components/shop/AssignSelect";
 import { query } from "@/lib/db";
@@ -13,7 +13,9 @@ import { d2cAccount } from "@/lib/app-orders";
 import { paymentsOf } from "@/lib/payments/easebuzz";
 import { dateOnly, when } from "../../parts";
 import { RouteMap } from "@/components/shop/RouteMap";
-import { D2cInvoice, isBilled } from "@/components/shop/D2cInvoice";
+import { isBilled } from "@/components/shop/D2cInvoice";
+import { labelOf, productLabels } from "@/lib/products/names";
+import { PackQty, PackUnit, ProductCell } from "@/components/products/Product";
 import { GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { orderTrack } from "@/lib/shop/track";
 
@@ -24,13 +26,15 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const o = await getOrderById(Number(id));
   if (!o) notFound();
-  const [account, riders, me, payments, track] = await Promise.all([
+  const [account, riders, me, payments, track, labels] = await Promise.all([
     d2cAccount(o.id),
     query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`),
     userFromToken((await cookies()).get("session")?.value),
     paymentsOf(o.id),
     orderTrack(o.id).catch(() => null),
+    productLabels(),
   ]);
+  const units = o.items.reduce((n, i) => n + i.qty, 0);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
   const map = o.lat !== null && o.lng !== null ? `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}` : null;
 
@@ -57,34 +61,55 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
           <div className="text-right">
             <div className="text-[22px] font-semibold tracking-tight tabular-nums text-foreground">{rupees(o.total)}</div>
             <div className="text-[13px] text-foreground/75">{o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "UPI Autopay" : "Online"} · {paidText}</div>
+            <a href={`/app-orders/d2c/${o.id}/invoice`} target="_blank" rel="noreferrer" title={isBilled(o) ? "Open the invoice in a new tab to view, print or save as PDF" : "Not charged yet: the customer is billed once the order is delivered"}
+              className="mt-2 inline-flex h-7 items-center gap-1.5 rounded-md border border-foreground/15 px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.04]">
+              <FileText className="size-3.5" /> Invoice{isBilled(o) ? "" : " (not charged yet)"}
+            </a>
           </div>
         </div>
 
         <div className="mt-6 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="min-w-0 space-y-5">
+            <section className="overflow-hidden rounded-lg border border-foreground/10 bg-card">
+              <header className="flex items-baseline justify-between px-4 py-3">
+                <h2 className="text-[14px] font-semibold text-foreground">Items</h2>
+                <span className="text-[12px] text-foreground/75">{o.items.length} product{o.items.length === 1 ? "" : "s"} · {units} unit{units === 1 ? "" : "s"}</span>
+              </header>
+              <table className="w-full text-[13px] tabular-nums">
+                <thead>
+                  <tr className="border-y border-foreground/10 bg-foreground/[0.025] text-left text-[12px] text-foreground/75">
+                    <th className="px-4 py-2 font-medium">Product</th>
+                    <th className="px-3 py-2 font-medium">Pack qty</th>
+                    <th className="px-3 py-2 font-medium">Unit</th>
+                    <th className="px-3 py-2 text-right font-medium">Ordered</th>
+                    <th className="px-3 py-2 text-right font-medium">Price</th>
+                    <th className="px-4 py-2 text-right font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {o.items.map((i) => {
+                    const l = labelOf(labels, i.sku_code, i.name, i.image_url);
+                    return (
+                      <tr key={i.sku_code} className="border-b border-foreground/[0.06]">
+                        <td className="px-4 py-2.5"><ProductCell p={l} size={40} /></td>
+                        <td className="px-3 py-2.5 text-foreground"><PackQty p={l} /></td>
+                        <td className="px-3 py-2.5 text-foreground"><PackUnit p={l} /></td>
+                        <td className="px-3 py-2.5 text-right font-medium text-foreground">{i.qty}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{rupees(i.unit_price)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-foreground">{rupees(i.line_total)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <dl className="ml-auto w-64 space-y-1 px-4 py-3 text-[13px] tabular-nums">
+                <div className="flex justify-between"><dt className="text-foreground/75">Item total</dt><dd className="text-foreground">{rupees(o.subtotal)}</dd></div>
+                <div className="flex justify-between"><dt className="text-foreground/75">Delivery fee</dt><dd className="text-foreground">{Number(o.delivery_fee) ? rupees(o.delivery_fee) : "Free"}</dd></div>
+                <div className="flex justify-between pt-1 text-[14px] font-semibold"><dt className="text-foreground">Total</dt><dd className="text-foreground">{rupees(o.total)}</dd></div>
+              </dl>
+            </section>
             <DeliveryRoute t={track} status={o.status} orderId={o.id} />
-            <details className="group overflow-hidden rounded-lg border border-foreground/10 bg-card">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-foreground/[0.02] [&::-webkit-details-marker]:hidden">
-                <div className="min-w-0">
-                  <div className="text-[14px] font-semibold text-foreground">Invoice <span className="ml-1 font-normal text-foreground/75">INV-{o.order_no}</span></div>
-                  <div className="text-[12px] text-foreground/75">
-                    {isBilled(o) ? "Charged · same as the invoice in the customer's app" : o.status === "cancelled" || o.payment_status === "refunded" ? "Not charged: cancelled or refunded" : "Not charged yet: billed once delivered"}
-                  </div>
-                </div>
-                <span className="flex items-center gap-3 text-[13px] text-foreground">
-                  <span className="font-semibold tabular-nums">{rupees(o.total)}</span>
-                  <ChevronDown className="size-4 text-foreground/70 transition-transform group-open:rotate-180" />
-                </span>
-              </summary>
-              <div className="border-t border-foreground/10">
-                <div className="flex justify-end px-4 pt-3">
-                  <a href={`/app-orders/d2c/${o.id}/invoice`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-foreground/15 px-3 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04]">
-                    <Printer className="size-4" /> Print or save PDF
-                  </a>
-                </div>
-                <D2cInvoice o={o} />
-              </div>
-            </details>
+
 
             <Section title="Delivery">
               <KV label="Deliver to">{o.name}</KV>
