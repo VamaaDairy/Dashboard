@@ -109,7 +109,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
         </div>
 
         {/* today, whatever the filters */}
-        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-foreground/10 bg-foreground/10 md:grid-cols-5">
+        <div className="mt-6 grid grid-cols-2 gap-x-10 gap-y-4 md:flex md:flex-wrap">
           {[
             { l: "Orders today", v: String(t.orders), n: `${t.subscription} subscription · ${t.orders - t.subscription} regular` },
             { l: "Order value today", v: inr(t.value), n: t.orders ? `about ${inr(t.value / t.orders)} per order` : "no orders yet" },
@@ -125,12 +125,12 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
               </>
             );
             return k.href
-              ? <Link key={k.l} href={k.href} className="bg-card px-4 py-3.5 hover:bg-foreground/[0.02]">{body}</Link>
-              : <div key={k.l} className="bg-card px-4 py-3.5">{body}</div>;
+              ? <Link key={k.l} href={k.href} className="min-w-0 rounded-md hover:opacity-80">{body}</Link>
+              : <div key={k.l} className="min-w-0">{body}</div>;
           })}
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-xl border border-foreground/10 bg-card">
+        <div className="mt-7 overflow-hidden rounded-xl border border-foreground/10 bg-card">
           <nav className="flex gap-5 overflow-x-auto border-b border-foreground/10 px-4" aria-label="Order status">
             {TABS.map(([v, l]) => {
               const on = (f.status ?? "") === v;
@@ -139,7 +139,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
                 <Link key={v} href={link({ status: v || undefined, page: undefined })} aria-current={on ? "page" : undefined}
                   className={cn("-mb-px flex shrink-0 items-center gap-1.5 border-b-2 py-3 text-[13px]", on ? "border-foreground font-semibold text-foreground" : "border-transparent text-foreground/75 hover:text-foreground")}>
                   {l}
-                  <span className="rounded-full bg-foreground/[0.07] px-1.5 text-[11px] font-medium tabular-nums text-foreground">{n.toLocaleString("en-IN")}</span>
+                  <span className="text-[12px] font-normal tabular-nums text-foreground/70">{n.toLocaleString("en-IN")}</span>
                 </Link>
               );
             })}

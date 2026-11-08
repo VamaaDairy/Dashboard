@@ -24,7 +24,7 @@ export function OrderFilters({ ranges, riders, pins }: {
   const range = sp.get("range") ?? "all";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-foreground/10 py-3 pr-32 pl-4">
+    <div className="flex flex-wrap items-center gap-2 py-3 pr-32 pl-4">
       <form onSubmit={(e) => { e.preventDefault(); set({ q: q.trim() || null }); }} className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-foreground/60" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search order no, customer, phone, address" className={`${ctl} w-80 pl-8 placeholder:text-foreground/55`} />
