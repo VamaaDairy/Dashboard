@@ -240,3 +240,14 @@ export async function invoiceOrders(customerId: number | null, phone: string, fr
     [customerId, phone, from, to],
   );
 }
+
+/** Per customer: how many subscription orders they have, the first and last day, and what was charged this month (India time). */
+export async function subscriptionStats(): Promise<Map<number, { orders: number; first: string; last: string; month: number }>> {
+  const rows = await query<{ customer_id: number; orders: number; first: string; last: string; month: number }>(
+    `select o.customer_id, count(*)::int as orders, to_char(min(o.subscription_day), 'YYYY-MM-DD') as first, to_char(max(o.subscription_day), 'YYYY-MM-DD') as last,
+            coalesce(sum(o.total) filter (where o.status = 'delivered' and o.payment_status <> 'refunded'
+                                            and date_trunc('month', o.subscription_day) = date_trunc('month', (now() at time zone 'Asia/Kolkata')::date)), 0)::float as month
+       from shop_order o where o.subscription_day is not null and o.customer_id is not null group by o.customer_id`,
+  );
+  return new Map(rows.map((r) => [r.customer_id, r]));
+}

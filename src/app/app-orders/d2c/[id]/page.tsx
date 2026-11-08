@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ChevronDown, FileText, MapPin, Phone } from "lucide-react";
+import { ArrowLeft, FileText, MapPin, Phone } from "lucide-react";
 import { StatusSelect } from "@/components/shop/StatusSelect";
 import { AssignSelect } from "@/components/shop/AssignSelect";
 import { query } from "@/lib/db";
@@ -18,9 +18,6 @@ import { labelOf, productLabels } from "@/lib/products/names";
 import { PackQty, PackUnit, ProductCell } from "@/components/products/Product";
 import { GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { orderTrack } from "@/lib/shop/track";
-import { subscriptionOrders } from "@/lib/shop/order-board";
-import { toOrderRow } from "@/lib/shop/order-rows";
-import { OrdersTable } from "@/components/shop/OrdersTable";
 
 export const dynamic = "force-dynamic";
 
@@ -37,17 +34,6 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
     orderTrack(o.id).catch(() => null),
     productLabels(),
   ]);
-  const subs = o.subscription_day ? await subscriptionOrders(o.customer_id ?? null, o.phone) : [];
-  const now = new Date();
-  const subRows = subs.map((x) => toOrderRow(x, labels, now));
-  // the months with subscription orders, newest first, each with its invoice
-  const months = [...subs.reduce((m, x) => {
-    const k = new Date(x.subscription_day as unknown as string).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
-    const e = m.get(k) ?? { n: 0, charged: 0 };
-    e.n++; if (isBilled(x)) e.charged += Number(x.total);
-    return m.set(k, e);
-  }, new Map<string, { n: number; charged: number }>())];
-  const monthName = (k: string) => new Date(`${k}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
   const units = o.items.reduce((n, i) => n + i.qty, 0);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
   const map = o.lat !== null && o.lng !== null ? `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}` : null;
@@ -59,7 +45,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="flex flex-1 flex-col bg-background px-4 pt-6 pb-8 md:px-8">
-      <div className="mx-auto w-full max-w-7xl">
+      <div className="mx-auto w-full max-w-6xl">
         <Link href="/shop-orders" className="inline-flex items-center gap-1 text-[13px] text-foreground/75 hover:text-foreground"><ArrowLeft className="size-4" /> D2C orders</Link>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -177,28 +163,6 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
           </aside>
         </div>
 
-        {o.subscription_day ? (
-          <details className="group mt-8 overflow-hidden rounded-lg border border-foreground/10 bg-card">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-foreground/[0.02] [&::-webkit-details-marker]:hidden">
-              <div>
-                <div className="text-[14px] font-semibold text-foreground">Subscription orders and invoices</div>
-                <div className="text-[12px] text-foreground/75">{subs.length} order{subs.length === 1 ? "" : "s"} from this customer&apos;s subscription · {months.length} monthly invoice{months.length === 1 ? "" : "s"}</div>
-              </div>
-              <ChevronDown className="size-4 text-foreground/70 transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="flex flex-wrap items-center gap-2 border-t border-foreground/10 px-4 py-3">
-              <span className="mr-1 text-[12px] text-foreground/75">Monthly invoice</span>
-              {months.map(([k, m]) => (
-                <a key={k} href={`/app-orders/d2c/${o.id}/invoice?month=${k}`} target="_blank" rel="noreferrer"
-                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-foreground/15 px-2.5 text-[12px] text-foreground hover:bg-foreground/[0.04]">
-                  <FileText className="size-3.5" /> {monthName(k)} <span className="tabular-nums text-foreground/75">{m.n} · {rupees(m.charged)}</span>
-                </a>
-              ))}
-            </div>
-            <OrdersTable rows={subRows} riders={riders} canEdit={canEdit} columnsButton={false}
-              footer={<span className="tabular-nums">{subs.length} subscription order{subs.length === 1 ? "" : "s"}{subs.length >= 500 ? " (latest 500)" : ""} · charged {rupees(subs.filter(isBilled).reduce((a, x) => a + Number(x.total), 0))}</span>} />
-          </details>
-        ) : null}
       </div>
     </div>
   );
