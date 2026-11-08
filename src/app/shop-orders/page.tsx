@@ -1,137 +1,165 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Bell, Bike, CalendarClock, ExternalLink, GalleryHorizontal, MapPin, Route, Search, Store, UserX, Repeat } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { StatusSelect } from "@/components/shop/StatusSelect";
-import { AssignSelect } from "@/components/shop/AssignSelect";
+import { ChevronDown, Download } from "lucide-react";
+import { OrderFilters } from "@/components/shop/OrderFilters";
+import { OrdersTable, type OrderRow } from "@/components/shop/OrdersTable";
 import { query } from "@/lib/db";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { listOrders } from "@/lib/shop/orders";
-import { rupees, STATUS_LABEL } from "@/lib/shop/pricing";
+import { DATE_RANGES, PAGE_SIZE, boardFilter, orderBoard, recentPincodes, today, trackingOf, type BoardParams } from "@/lib/shop/order-board";
+import { STATUS_LABEL } from "@/lib/shop/pricing";
 import { labelOf, productLabels } from "@/lib/products/names";
-import { ProductLine } from "@/components/products/Product";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-const when = (d: Date) =>
-  new Date(d).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+const placed = (d: Date) => new Date(d).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const dayOnly = (d: string | Date) => new Date(d).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
+const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+const TABS: Array<[string, string]> = [["", "All"], ["placed", "New"], ["confirmed", "Confirmed"], ["out_for_delivery", "Out for delivery"], ["delivered", "Delivered"], ["cancelled", "Cancelled"], ["awaiting_payment", "Awaiting payment"]];
+const MORE: Array<[string, string]> = [
+  ["/shop-orders/riders", "Riders"], ["/shop-orders/subscriptions", "Subscriptions"], ["/shop-orders/autopay", "Autopay"], ["/shop-orders/live", "Live map"],
+  ["/shop-orders/banners", "Banners"], ["/shop-orders/notifications", "Notifications"], ["/shop-orders/deletion-requests", "Deletion requests"],
+];
 
 /**
- * D2C orders: every home-delivery order from the Gaia app and the online shop (one table, shop_order).
- * This is the only D2C orders list; /app-orders/d2c redirects here, and each order opens its detail page.
+ * D2C orders: every home-delivery order from the Gaia app and the online shop (shop_order). Today's figures on
+ * top, then the orders by status with filters; a row opens the order's page (with its route map).
  */
-export default async function ShopOrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; kind?: string; q?: string }> }) {
-  const { status, kind: k, q: rawQ } = await searchParams;
-  const kind = k === "regular" || k === "subscription" ? k : undefined;
-  const q = rawQ?.trim() || undefined;
-  const href = (st: string, kd: string) => {
-    const p = new URLSearchParams(); if (st) p.set("status", st); if (kd) p.set("kind", kd); if (q) p.set("q", q);
+export default async function ShopOrdersPage({ searchParams }: { searchParams: Promise<BoardParams> }) {
+  const sp = await searchParams;
+  const f = boardFilter(sp);
+  const [board, t, riders, pins, me, labels] = await Promise.all([
+    orderBoard(f),
+    today(),
+    query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`),
+    recentPincodes(),
+    userFromToken((await cookies()).get("session")?.value),
+    productLabels(),
+  ]);
+  const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
+  const now = new Date();
+
+  const rows: OrderRow[] = board.rows.map((o) => {
+    const tr = trackingOf(o, now);
+    return {
+      id: o.id,
+      orderNo: o.order_no,
+      placed: placed(o.created_at),
+      type: o.subscription_day ? `Subscription · ${dayOnly(o.subscription_day)}` : "Regular",
+      subscription: !!o.subscription_day,
+      name: o.name,
+      phone: o.phone,
+      nth: o.nth,
+      address: o.address,
+      pincode: o.pincode,
+      noPin: o.lat === null,
+      note: o.notes,
+      items: o.items.map((i) => { const l = labelOf(labels, i.sku_code, i.name, i.image_url); return { name: l.name, image: l.image, qty: i.qty }; }),
+      qty: o.items.reduce((a, i) => a + i.qty, 0),
+      subtotal: Number(o.subtotal),
+      deliveryFee: Number(o.delivery_fee),
+      total: Number(o.total),
+      payMethod: o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : "Online",
+      paid: o.payment_status === "paid"
+        ? { label: o.payment_method === "cod" ? "Collected" : "Paid", tone: "good" }
+        : o.payment_status === "refunded" ? { label: "Refunded", tone: "bad" }
+        : o.status === "cancelled" ? { label: "Not paid", tone: "bad" }
+        : { label: o.payment_method === "cod" ? "To collect" : "Pending", tone: "wait" },
+      status: o.status,
+      statusLabel: o.status === "placed" ? "New" : STATUS_LABEL[o.status] ?? o.status,
+      tracking: { ...tr, route: !!o.picked_up_at },
+      rider: o.rider?.name ?? null,
+      stop: o.delivery_seq ? `stop ${o.delivery_seq}` : null,
+    };
+  });
+
+  const link = (patch: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries({ ...sp, ...patch })) if (v) p.set(k, String(v));
     return p.size ? `/shop-orders?${p}` : "/shop-orders";
   };
-  const filter = status && status in STATUS_LABEL ? status : undefined;
-  const [orders, riders, me, labels] = await Promise.all([listOrders(filter, kind, q), query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`), userFromToken((await cookies()).get("session")?.value), productLabels()]);
-  const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
+  const exportHref = `/shop-orders/export?${new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && k !== "page") as Array<[string, string]>)}`;
+  const first = board.total ? (f.page - 1) * PAGE_SIZE + 1 : 0;
+  const last = Math.min(board.total, f.page * PAGE_SIZE);
+  const pages = Math.max(1, Math.ceil(board.total / PAGE_SIZE));
 
   return (
-    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
-      <div className="w-full space-y-4">
-        <PageHeader
-          icon={Store}
-          title="D2C orders"
-          subtitle="Every home-delivery order from the Gaia app and the online shop."
-          actions={
-            <div className="flex gap-2">
-            <Link href="/shop-orders/riders" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <Bike className="h-4 w-4" /> Riders
-            </Link>
-            <Link href="/shop-orders/subscriptions" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <CalendarClock className="h-4 w-4" /> Subscriptions
-            </Link>
-            <Link href="/shop-orders/autopay" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <Repeat className="h-4 w-4" /> Autopay
-            </Link>
-            <Link href="/shop-orders/banners" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <GalleryHorizontal className="h-4 w-4" /> Banners
-            </Link>
-            <Link href="/shop-orders/live" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <MapPin className="h-4 w-4" /> Live map
-            </Link>
-            <Link href="/shop-orders/notifications" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <Bell className="h-4 w-4" /> Notifications
-            </Link>
-            <Link href="/shop-orders/deletion-requests" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <UserX className="h-4 w-4" /> Deletion requests
-            </Link>
-            <Link href="/shop" target="_blank" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">
-              <ExternalLink className="h-4 w-4" /> Open shop
-            </Link>
-            </div>
-          }
-        />
-        <form action="/shop-orders" className="flex max-w-md items-center gap-2">
-          {filter ? <input type="hidden" name="status" value={filter} /> : null}
-          {kind ? <input type="hidden" name="kind" value={kind} /> : null}
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input name="q" defaultValue={q ?? ""} placeholder="Search order no, name, phone, address"
-              className="h-8 w-full rounded-lg border border-input bg-transparent pl-8 pr-3 text-sm focus:border-primary focus:outline-none" />
+    <div className="flex flex-1 flex-col bg-background px-4 pt-6 pb-6 md:px-8">
+      <div className="w-full">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[22px] font-semibold tracking-tight text-foreground">D2C orders</h1>
+            <p className="mt-1 text-[13px] text-foreground/75">Every home-delivery order from the Gaia app and the online shop.</p>
           </div>
-          <button type="submit" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Search</button>
-          {q ? <Link href={href(filter ?? "", kind ?? "")} className="text-sm text-muted-foreground hover:underline">Clear</Link> : null}
-        </form>
-        <div className="flex flex-wrap gap-1.5 text-sm">
-          {[["", "All orders"], ["regular", "Regular"], ["subscription", "Subscription"]].map(([v, l]) => (
-            <Link key={v} href={href(filter ?? "", v)}
-              className={`rounded-full border px-3 py-1 ${(kind ?? "") === v ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"}`}>
-              {l}
-            </Link>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-1.5 text-sm">
-          {[["", "All"], ...Object.entries(STATUS_LABEL)].map(([v, l]) => (
-            <Link key={v} href={href(v, kind ?? "")}
-              className={`rounded-full border px-3 py-1 ${(filter ?? "") === v ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"}`}>
-              {l}
-            </Link>
-          ))}
+          <div className="flex gap-2">
+            <a href={exportHref} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-foreground/15 bg-card px-3 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04]">
+              <Download className="size-4" /> Export CSV
+            </a>
+            <details className="relative">
+              <summary className="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-lg border border-foreground/15 bg-card px-3 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04]">
+                More <ChevronDown className="size-4" />
+              </summary>
+              <div className="absolute right-0 z-30 mt-1 w-52 rounded-lg border border-foreground/15 bg-popover p-1 shadow-lg">
+                {MORE.map(([h, l]) => <Link key={h} href={h} className="block rounded-md px-3 py-1.5 text-[13px] text-foreground hover:bg-foreground/[0.05]">{l}</Link>)}
+                <a href="/shop" target="_blank" rel="noreferrer" className="block rounded-md px-3 py-1.5 text-[13px] text-foreground hover:bg-foreground/[0.05]">Open the online shop</a>
+              </div>
+            </details>
+          </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-              <tr>
-                {["Order", "Placed", "Customer", "Address", "Items", "Total", "Rider", "Status"].map((h) => (
-                  <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id} className="border-t border-border align-top hover:bg-muted/40">
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs"><Link href={`/app-orders/d2c/${o.id}`} className="font-semibold text-primary hover:underline">{o.order_no}</Link>{o.subscription_day ? <div className="mt-0.5 w-fit rounded bg-blue-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-blue-700">SUBSCRIPTION</div> : null}</td>
-                  <td className="whitespace-nowrap px-3 py-2">{when(o.created_at)}</td>
-                  <td className="px-3 py-2"><div className="font-medium">{o.name}</div><div className="font-mono text-xs text-muted-foreground">{o.phone}</div></td>
-                  <td className="min-w-56 px-3 py-2 text-muted-foreground">{o.address}{o.pincode ? ` - ${o.pincode}` : ""}{o.notes ? <div className="text-xs italic">Note: {o.notes}</div> : null}</td>
-                  <td className="min-w-72 px-3 py-2">{o.items.map((i) => <ProductLine key={i.sku_code} p={labelOf(labels, i.sku_code, i.name, i.image_url)} count={i.qty} />)}</td>
-                  <td className="num whitespace-nowrap px-3 py-2 text-right">{rupees(o.total)}<div className="text-xs text-muted-foreground">{o.payment_method === "online" ? "Online" : "COD"} · {o.payment_status}</div></td>
-                  <td className="px-3 py-2">
-                    {canEdit ? <AssignSelect orderId={o.id} riderId={o.rider_id} riders={riders} /> : o.rider?.name ?? "-"}
-                    {o.lat === null ? <div className="mt-1 text-xs text-amber-600">No map pin</div> : null}
-                    {o.rider_id && o.picked_up_at ? (
-                      <Link href={`/shop-orders/track/${o.id}`} className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-                        <Route className="h-3.5 w-3.5" /> {o.status === "out_for_delivery" ? "Track live" : "Route"}
-                      </Link>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2">{canEdit ? <StatusSelect id={o.id} status={o.status} /> : STATUS_LABEL[o.status] ?? o.status}</td>
-                </tr>
-              ))}
-              {orders.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">{q || filter || kind ? "No orders match." : "No orders yet."}</td></tr>
-              ) : null}
-            </tbody>
-          </table>
+        {/* today, whatever the filters */}
+        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-foreground/10 bg-foreground/10 md:grid-cols-5">
+          {[
+            { l: "Orders today", v: String(t.orders), n: `${t.subscription} subscription · ${t.orders - t.subscription} regular` },
+            { l: "Order value today", v: inr(t.value), n: t.orders ? `about ${inr(t.value / t.orders)} per order` : "no orders yet" },
+            { l: "To deliver", v: String(t.toDeliver), n: t.unassigned ? `${t.unassigned} without a rider` : "all have a rider", warn: t.unassigned > 0, href: "/shop-orders?rider=none" },
+            { l: "Cash to collect", v: inr(t.cashToCollect), n: `${t.codOut} cash orders out now`, href: "/shop-orders?pay=cod" },
+            { l: "Awaiting payment", v: String(t.awaitingPayment), n: "online orders not paid yet", warn: t.awaitingPayment > 0, href: "/shop-orders?status=awaiting_payment" },
+          ].map((k) => {
+            const body = (
+              <>
+                <div className="text-[12px] font-medium text-foreground/75">{k.l}</div>
+                <div className={cn("mt-1 text-[20px] font-semibold tracking-tight tabular-nums", k.warn ? "text-amber-700" : "text-foreground")}>{k.v}</div>
+                <div className="mt-0.5 truncate text-[12px] text-foreground/75">{k.n}</div>
+              </>
+            );
+            return k.href
+              ? <Link key={k.l} href={k.href} className="bg-card px-4 py-3.5 hover:bg-foreground/[0.02]">{body}</Link>
+              : <div key={k.l} className="bg-card px-4 py-3.5">{body}</div>;
+          })}
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-xl border border-foreground/10 bg-card">
+          <nav className="flex gap-5 overflow-x-auto border-b border-foreground/10 px-4" aria-label="Order status">
+            {TABS.map(([v, l]) => {
+              const on = (f.status ?? "") === v;
+              const n = v ? board.counts[v] ?? 0 : board.all;
+              return (
+                <Link key={v} href={link({ status: v || undefined, page: undefined })} aria-current={on ? "page" : undefined}
+                  className={cn("-mb-px flex shrink-0 items-center gap-1.5 border-b-2 py-3 text-[13px]", on ? "border-foreground font-semibold text-foreground" : "border-transparent text-foreground/75 hover:text-foreground")}>
+                  {l}
+                  <span className="rounded-full bg-foreground/[0.07] px-1.5 text-[11px] font-medium tabular-nums text-foreground">{n.toLocaleString("en-IN")}</span>
+                </Link>
+              );
+            })}
+          </nav>
+          <OrderFilters ranges={DATE_RANGES} riders={riders} pins={pins} />
+          <OrdersTable
+            rows={rows}
+            riders={riders}
+            canEdit={canEdit}
+            footer={
+              <>
+                <span className="tabular-nums">{board.total ? `Showing ${first}–${last} of ${board.total.toLocaleString("en-IN")}` : "No orders"} · value {inr(board.value)}</span>
+                <span className="flex items-center gap-3">
+                  {f.page > 1 ? <Link href={link({ page: String(f.page - 1) })} className="font-medium text-foreground hover:underline">‹ Previous</Link> : <span className="opacity-50">‹ Previous</span>}
+                  <span className="tabular-nums">Page {f.page} of {pages}</span>
+                  {f.page < pages ? <Link href={link({ page: String(f.page + 1) })} className="font-medium text-foreground hover:underline">Next ›</Link> : <span className="opacity-50">Next ›</span>}
+                </span>
+              </>
+            }
+          />
         </div>
       </div>
     </div>

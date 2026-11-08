@@ -98,6 +98,7 @@ export interface ShopOrder {
   payment_status: string;
   status: string;
   created_at: Date;
+  updated_at?: Date;
   /** Set when the order was made from a subscription (the delivery day, YYYY-MM-DD). */
   subscription_day: string | null;
   lat: number | null;
@@ -117,7 +118,7 @@ export interface ShopOrder {
   items: Array<{ sku_code: string; name: string; image_url: string | null; qty: number; unit_price: number; line_total: number }>;
 }
 
-const WITH_ITEMS = `
+export const WITH_ITEMS = `
   select o.*, coalesce((
     -- the product's photo as it is now (the link saved with an old order may no longer open)
     select json_agg(json_build_object('sku_code', i.sku_code, 'name', i.name, 'qty', i.qty,
