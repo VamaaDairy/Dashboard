@@ -55,11 +55,13 @@ const initials = (s: string) => s.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)
  * The D2C orders table. Each row opens the order's page; tick rows to give them to a rider, change their status
  * or print delivery slips together. Columns can be hidden (remembered in this browser).
  */
-export function OrdersTable({ rows, riders, canEdit, footer }: {
+export function OrdersTable({ rows, riders, canEdit, footer, columnsButton = true }: {
   rows: OrderRow[];
   riders: Array<{ id: number; name: string }>;
   canEdit: boolean;
   footer: React.ReactNode;
+  /** the Columns button sits in the filter bar above the table; off where there is no such bar */
+  columnsButton?: boolean;
 }) {
   const router = useRouter();
   const [hidden, setHidden] = useState<Set<Col>>(new Set());
@@ -145,7 +147,7 @@ export function OrdersTable({ rows, riders, canEdit, footer }: {
       ) : null}
 
       <div className="relative">
-        <div className={cn("absolute -top-11 right-4 z-20", (sel.size || note) && "hidden")}>
+        <div className={cn("absolute -top-11 right-4 z-20", (sel.size || note || !columnsButton) && "hidden")}>
           <button type="button" onClick={() => setPicking((v) => !v)} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-foreground/15 bg-card px-2 text-[12px] text-foreground hover:bg-foreground/[0.04]" aria-expanded={picking}>
             <Columns3 className="size-3.5" /> Columns
           </button>
