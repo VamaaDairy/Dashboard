@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Phone, Smartphone } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Printer, Smartphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Panel, Pill } from "@/components/cn/ui";
@@ -15,9 +15,8 @@ import { rupees } from "@/lib/shop/pricing";
 import { d2cAccount } from "@/lib/app-orders";
 import { paymentsOf } from "@/lib/payments/easebuzz";
 import { D2cStatus, Field, dateOnly, when } from "../../parts";
-import { labelOf, productLabels } from "@/lib/products/names";
-import { PackQty, PackUnit, ProductCell } from "@/components/products/Product";
 import { RouteMap } from "@/components/shop/RouteMap";
+import { D2cInvoice, isBilled } from "@/components/shop/D2cInvoice";
 import { AMBER, GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { orderTrack } from "@/lib/shop/track";
 
@@ -28,17 +27,15 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const o = await getOrderById(Number(id));
   if (!o) notFound();
-  const [account, riders, me, payments, labels, track] = await Promise.all([
+  const [account, riders, me, payments, track] = await Promise.all([
     d2cAccount(o.id),
     query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`),
     userFromToken((await cookies()).get("session")?.value),
     paymentsOf(o.id),
-    productLabels(),
     orderTrack(o.id).catch(() => null),
   ]);
   const canEdit = !!me && atLeast(levelFor(me, "shop"), "edit");
   const map = o.lat !== null && o.lng !== null ? `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}` : null;
-  const units = o.items.reduce((s, i) => s + i.qty, 0);
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
@@ -60,39 +57,20 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="min-w-0 space-y-5">
             <DeliveryRoute t={track} status={o.status} orderId={o.id} />
-            <Panel title="Items" description={`${o.items.length} product${o.items.length === 1 ? "" : "s"} · ${units} unit${units === 1 ? "" : "s"}`} flush>
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2 font-semibold">Product</th>
-                    <th className="px-4 py-2 font-semibold">Pack qty</th>
-                    <th className="px-4 py-2 font-semibold">Unit</th>
-                    <th className="px-4 py-2 text-right font-semibold">Ordered</th>
-                    <th className="px-4 py-2 text-right font-semibold">Price</th>
-                    <th className="px-4 py-2 text-right font-semibold">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {o.items.map((i) => (
-                    <tr key={i.sku_code} className="border-t border-border">
-                      <td className="px-4 py-2.5">
-                        <ProductCell p={labelOf(labels, i.sku_code, i.name, i.image_url)} size={40} />
-                      </td>
-                      <td className="num px-4 py-2.5"><PackQty p={labelOf(labels, i.sku_code, i.name)} /></td>
-                      <td className="px-4 py-2.5"><PackUnit p={labelOf(labels, i.sku_code, i.name)} /></td>
-                      <td className="num px-4 py-2.5 text-right">{i.qty}</td>
-                      <td className="num px-4 py-2.5 text-right">{rupees(i.unit_price)}</td>
-                      <td className="num px-4 py-2.5 text-right font-medium">{rupees(i.line_total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t border-border text-[13px]">
-                  <tr><td colSpan={3} className="px-4 pt-3 text-right text-muted-foreground">Item total</td><td className="num px-4 pt-3 text-right">{rupees(o.subtotal)}</td></tr>
-                  <tr><td colSpan={3} className="px-4 py-1 text-right text-muted-foreground">Delivery fee</td><td className="num px-4 py-1 text-right">{o.delivery_fee ? rupees(o.delivery_fee) : "Free"}</td></tr>
-                  <tr className="font-semibold"><td colSpan={3} className="px-4 pb-3 text-right">Total</td><td className="num px-4 pb-3 text-right">{rupees(o.total)}</td></tr>
-                </tfoot>
-              </table>
-            </Panel>
+            <section className="overflow-hidden rounded-lg border border-foreground/10 bg-card">
+              <header className="flex flex-wrap items-center justify-between gap-3 border-b border-foreground/10 px-4 py-3">
+                <div>
+                  <div className="text-[14px] font-semibold text-foreground">Invoice</div>
+                  <div className="text-[12px] text-foreground/75">
+                    {isBilled(o) ? "The same invoice the customer downloads in the Gaia app." : o.status === "cancelled" || o.payment_status === "refunded" ? "Not charged: the order was cancelled or refunded." : "Not charged yet: the customer is billed once the order is delivered."}
+                  </div>
+                </div>
+                <a href={`/app-orders/d2c/${o.id}/invoice`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-foreground/15 px-3 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04]">
+                  <Printer className="size-4" /> Print or save PDF
+                </a>
+              </header>
+              <D2cInvoice o={o} />
+            </section>
 
             <Panel title="Delivery" flush>
               <dl className="divide-y divide-border">
