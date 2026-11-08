@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Phone, Printer, Smartphone } from "lucide-react";
+import { ArrowLeft, ChevronDown, MapPin, Phone, Printer, Smartphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Panel, Pill } from "@/components/cn/ui";
@@ -17,7 +17,7 @@ import { paymentsOf } from "@/lib/payments/easebuzz";
 import { D2cStatus, Field, dateOnly, when } from "../../parts";
 import { RouteMap } from "@/components/shop/RouteMap";
 import { D2cInvoice, isBilled } from "@/components/shop/D2cInvoice";
-import { AMBER, GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
+import { GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { orderTrack } from "@/lib/shop/track";
 
 export const dynamic = "force-dynamic";
@@ -57,20 +57,28 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="min-w-0 space-y-5">
             <DeliveryRoute t={track} status={o.status} orderId={o.id} />
-            <section className="overflow-hidden rounded-lg border border-foreground/10 bg-card">
-              <header className="flex flex-wrap items-center justify-between gap-3 border-b border-foreground/10 px-4 py-3">
-                <div>
-                  <div className="text-[14px] font-semibold text-foreground">Invoice</div>
+            <details className="group overflow-hidden rounded-lg border border-foreground/10 bg-card">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-foreground/[0.02] [&::-webkit-details-marker]:hidden">
+                <div className="min-w-0">
+                  <div className="text-[14px] font-semibold text-foreground">Invoice <span className="ml-1 font-normal text-foreground/75">INV-{o.order_no}</span></div>
                   <div className="text-[12px] text-foreground/75">
-                    {isBilled(o) ? "The same invoice the customer downloads in the Gaia app." : o.status === "cancelled" || o.payment_status === "refunded" ? "Not charged: the order was cancelled or refunded." : "Not charged yet: the customer is billed once the order is delivered."}
+                    {isBilled(o) ? "Charged · same as the invoice in the customer's app" : o.status === "cancelled" || o.payment_status === "refunded" ? "Not charged: cancelled or refunded" : "Not charged yet: billed once delivered"}
                   </div>
                 </div>
-                <a href={`/app-orders/d2c/${o.id}/invoice`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-foreground/15 px-3 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04]">
-                  <Printer className="size-4" /> Print or save PDF
-                </a>
-              </header>
-              <D2cInvoice o={o} />
-            </section>
+                <span className="flex items-center gap-3 text-[13px] text-foreground">
+                  <span className="font-semibold tabular-nums">{rupees(o.total)}</span>
+                  <ChevronDown className="size-4 text-foreground/70 transition-transform group-open:rotate-180" />
+                </span>
+              </summary>
+              <div className="border-t border-foreground/10">
+                <div className="flex justify-end px-4 pt-3">
+                  <a href={`/app-orders/d2c/${o.id}/invoice`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-foreground/15 px-3 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04]">
+                    <Printer className="size-4" /> Print or save PDF
+                  </a>
+                </div>
+                <D2cInvoice o={o} />
+              </div>
+            </details>
 
             <Panel title="Delivery" flush>
               <dl className="divide-y divide-border">
@@ -151,32 +159,34 @@ function DeliveryRoute({ t, status, orderId }: { t: Awaited<ReturnType<typeof or
   const delivered = status === "delivered" || !!o.deliveredAt;
   const markers: MapMarker[] = [];
   const start = t.legFrom ?? t.store;
-  markers.push({ lng: start.lng, lat: start.lat, label: t.legFrom ? `From ${t.legFrom.orderNo.slice(-4)}` : "House of Gaia", color: GREY });
-  if (o.lat != null && o.lng != null) markers.push({ lng: o.lng, lat: o.lat, label: delivered ? "Delivered here" : "Customer", color: delivered ? GREEN : AMBER, popup: o.address });
+  markers.push({ lng: start.lng, lat: start.lat, label: t.legFrom ? `Previous drop ${t.legFrom.orderNo}` : "House of Gaia", color: GREY });
+  if (o.lat != null && o.lng != null) markers.push({ lng: o.lng, lat: o.lat, label: delivered ? "Delivered" : "Customer", color: delivered ? GREEN : NAVY, popup: o.address });
   const last = taken?.segments.at(-1)?.at(-1);
   if (t.live && last) markers.push({ lng: last[0], lat: last[1], label: t.rider?.name.split(" ")[0] ?? "Rider", color: "#111827" });
   const canMap = o.lat != null && o.lng != null;
+  const state = delivered ? `Delivered ${hm(o.deliveredAt)}` : status === "cancelled" ? "Cancelled, not delivered" : o.pickedUpAt ? "On the way, not delivered yet" : "Not picked up yet";
+  const note = !canMap ? "This order has no map pin, so there is no route to show."
+    : !o.pickedUpAt ? "The route shows once the rider picks the order up."
+    : !taken?.points ? "No route was recorded for this trip: the rider's phone was off duty or offline." : null;
 
   return (
     <section id="route" className="scroll-mt-4 overflow-hidden rounded-lg border border-foreground/10 bg-card">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-foreground/10 px-4 py-3">
-        <div className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
-          <span className={`size-2.5 rounded-full ${delivered ? "bg-emerald-600" : status === "cancelled" ? "bg-destructive" : "bg-amber-500"}`} />
-          {delivered ? `Delivered ${hm(o.deliveredAt)}` : status === "cancelled" ? "Cancelled, not delivered" : o.pickedUpAt ? "Not delivered yet: on the way" : "Not delivered yet"}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-foreground">
-          <span className="inline-flex items-center gap-1.5"><i className="inline-block h-1 w-5 rounded" style={{ background: NAVY }} />Route taken{taken?.points ? ` · ${km(taken.metres)}` : ""}</span>
-          <span className="inline-flex items-center gap-1.5"><i className="inline-block w-5 border-t-2 border-dashed" style={{ borderColor: GREY }} />Advised route{planned ? ` · ${km(planned.metres)} · about ${Math.round(planned.secs / 60)} min` : ""}</span>
-          {o.pickedUpAt ? <a href={`/shop-orders/track/${orderId}`} className="font-medium text-primary hover:underline">Full route details</a> : null}
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3">
+        <div className="text-[14px] font-semibold text-foreground">Delivery route</div>
+        <div className="flex items-baseline gap-4 text-[13px]">
+          <span className={delivered ? "font-medium text-foreground" : "text-foreground"}>{state}</span>
+          {o.pickedUpAt ? <a href={`/shop-orders/track/${orderId}`} className="text-primary hover:underline">Full details</a> : null}
         </div>
       </header>
-      {canMap ? (
-        <div className="p-3">
-          <RouteMap track={taken?.segments ?? []} planned={planned?.path} markers={markers} live={t.live} height="340px" />
-          {!o.pickedUpAt ? <p className="mt-2 text-[13px] text-foreground/75">The route shows once the rider picks the order up.</p>
-            : !taken?.points ? <p className="mt-2 text-[13px] text-foreground/75">No route was recorded for this trip (the rider&apos;s phone was off duty or offline).</p> : null}
-        </div>
-      ) : <p className="px-4 py-4 text-[13px] text-foreground/75">This order has no map pin, so there is no route to show.</p>}
+      {canMap ? <RouteMap plain track={taken?.segments ?? []} planned={planned?.path} markers={markers} live={t.live} height="360px" /> : null}
+      <footer className="flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-foreground/10 px-4 py-2.5 text-[12px] text-foreground/80">
+        {note ? <span>{note}</span> : (
+          <>
+            <span className="inline-flex items-center gap-2"><svg width="22" height="6" aria-hidden><line x1="1" y1="3" x2="21" y2="3" stroke={NAVY} strokeWidth="3" strokeLinecap="round" /></svg>Route taken{taken?.points ? <span className="tabular-nums text-foreground">{km(taken.metres)}</span> : null}</span>
+            <span className="inline-flex items-center gap-2"><svg width="22" height="6" aria-hidden><line x1="1" y1="3" x2="21" y2="3" stroke={GREY} strokeWidth="2.5" strokeDasharray="4 3" /></svg>Advised route{planned ? <span className="tabular-nums text-foreground">{km(planned.metres)} · {Math.round(planned.secs / 60)} min</span> : null}</span>
+          </>
+        )}
+      </footer>
     </section>
   );
 }
