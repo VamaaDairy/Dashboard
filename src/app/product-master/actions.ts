@@ -62,9 +62,7 @@ export async function updateProductAction(
   return who ? done(await ap.updateProduct(channel, uid, patch, who)) : NO;
 }
 
-export async function setPricesAction(channel: AppChannel, uid: string, patch: { mrp?: number; shopPrice?: number | null }) {
-  // the app price is the D2C app's own
-  if (patch.shopPrice !== undefined && channel !== "d2c") return NO;
+export async function setPricesAction(channel: AppChannel, uid: string, patch: { mrp: number }) {
   const who = await editor(channel);
   return who ? done(await ap.setPrices(uid, patch, who)) : NO;
 }
