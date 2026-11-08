@@ -406,13 +406,13 @@ export async function daySummary(day: string): Promise<{ customers: number; item
 }
 
 export interface SubscriptionRow {
-  id: number; customer: string; phone: string; product: string; qty: number; frequency: Frequency;
+  id: number; customer_id: number; customer: string; phone: string; product: string; qty: number; frequency: Frequency;
   weekdays: number[] | null; every_n: number | null; start_date: string; end_date: string | null; status: string; address: string;
 }
 
 export async function allSubscriptions(): Promise<SubscriptionRow[]> {
   const rows = await query<SubscriptionRow & { sku_code: string }>(
-    `select s.id, c.name as customer, c.phone, s.sku_code, s.sku_code as product, s.qty, s.frequency, s.weekdays, s.every_n,
+    `select s.id, s.customer_id, c.name as customer, c.phone, s.sku_code, s.sku_code as product, s.qty, s.frequency, s.weekdays, s.every_n,
             to_char(s.start_date, 'YYYY-MM-DD') as start_date, to_char(s.end_date, 'YYYY-MM-DD') as end_date, s.status, s.address
        from shop_subscription s join shop_customer c on c.id = s.customer_id
       where s.status <> 'cancelled'
