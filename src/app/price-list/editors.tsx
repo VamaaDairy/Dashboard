@@ -185,7 +185,7 @@ export function NewList({ groups }: { groups: string[] }) {
         e.preventDefault();
         start(async () => {
           const r = await createListAction(name, grp);
-          if (r.ok) { setOpen(false); setName(""); router.push(`/price-list/lists?list=${r.uid}`); } else setError(r.error);
+          if (r.ok) { setOpen(false); setName(""); router.push(`/price-list?list=${r.uid}`); } else setError(r.error);
         });
       }}
     >
@@ -209,7 +209,7 @@ export function ListSettings({ uid, name, grp }: { uid: string; name: string; gr
     start(async () => {
       const r = await updateListAction(uid, patch);
       if (!r.ok && r.error) window.alert(r.error);
-      else if (patch.active === false) router.push("/price-list/lists");
+      else if (patch.active === false) router.push("/price-list");
       else router.refresh();
     });
   const btn = "h-8 rounded-md border border-border px-3 text-sm hover:bg-muted disabled:opacity-50";
@@ -222,7 +222,7 @@ export function ListSettings({ uid, name, grp }: { uid: string; name: string; gr
   );
 }
 
-/** Jump between the party lists (grouped). */
+/** Jump between the standard prices and the party lists (grouped), or pick a customer to check. */
 export function ListPicker({ lists, current, q }: { lists: Array<{ uid: string; name: string; grp: string | null; customers: number }>; current?: string; q?: string }) {
   const router = useRouter();
   const groups = new Map<string, typeof lists>();
@@ -234,12 +234,12 @@ export function ListPicker({ lists, current, q }: { lists: Array<{ uid: string; 
         const p = new URLSearchParams();
         if (e.target.value) p.set("list", e.target.value);
         if (q) p.set("q", q);
-        router.push(p.size ? `/price-list/lists?${p}` : "/price-list/lists");
+        router.push(p.size ? `/price-list?${p}` : "/price-list");
       }}
       aria-label="Price list"
       className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm font-medium md:w-80"
     >
-      <option value="">All price lists</option>
+      <option value="">Standard prices (MRP, Retailer, Distributor)</option>
       {[...groups].map(([g, ls]) => (
         <optgroup key={g} label={g}>
           {ls.map((l) => (
@@ -251,8 +251,8 @@ export function ListPicker({ lists, current, q }: { lists: Array<{ uid: string; 
   );
 }
 
-/** Customer search that opens the price sheet of the one picked. */
-export function CustomerCheckPicker({ current, className }: { current?: string; className?: string }) {
+/** Customer search that opens the price check for the one picked. */
+export function CustomerCheckPicker({ current }: { current?: string }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Awaited<ReturnType<typeof findCustomersAction>>>([]);
@@ -262,7 +262,7 @@ export function CustomerCheckPicker({ current, className }: { current?: string; 
     return () => clearTimeout(t);
   }, [q]);
   return (
-    <div className={className ?? "relative w-full md:w-96"}>
+    <div className="relative w-full md:w-96">
       <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
       <input
         value={q}
@@ -276,7 +276,7 @@ export function CustomerCheckPicker({ current, className }: { current?: string; 
             <li key={h.uid}>
               <button
                 type="button"
-                onClick={() => { setQ(""); setHits([]); router.push(`/price-list/customers/${h.uid}`); }}
+                onClick={() => { setQ(""); setHits([]); router.push(`/price-list/overview?customer=${h.uid}`); }}
                 className="block w-full px-3 py-2 text-left hover:bg-muted"
               >
                 <div className="truncate font-medium">{h.name}</div>
@@ -288,40 +288,6 @@ export function CustomerCheckPicker({ current, className }: { current?: string; 
           ))}
         </ul>
       ) : null}
-    </div>
-  );
-}
-
-/** The price list a customer is on: pick another to move them (a customer is on one list at a time), or none. */
-export function CustomerListSelect({ firmUid, current, lists }: {
-  firmUid: string; current: string | null; lists: Array<{ uid: string; name: string; grp: string | null }>;
-}) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const groups = new Map<string, typeof lists>();
-  for (const l of lists) groups.set(l.grp ?? "Other", [...(groups.get(l.grp ?? "Other") ?? []), l]);
-  const change = (to: string) => start(async () => {
-    const r: { ok: boolean; error?: string } = to ? await addCustomerAction(to, firmUid) : current ? await removeCustomerAction(current, firmUid) : { ok: true };
-    if (r.ok) { setError(null); router.refresh(); } else setError(r.error ?? "Could not change the list.");
-  });
-  return (
-    <div className="space-y-1">
-      <select
-        value={current ?? ""}
-        disabled={pending}
-        onChange={(e) => change(e.target.value)}
-        aria-label="Price list"
-        className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm font-medium disabled:opacity-50 sm:w-72"
-      >
-        <option value="">No list - channel prices</option>
-        {[...groups].map(([g, ls]) => (
-          <optgroup key={g} label={g}>
-            {ls.map((l) => <option key={l.uid} value={l.uid}>{l.name}</option>)}
-          </optgroup>
-        ))}
-      </select>
-      {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
     </div>
   );
 }

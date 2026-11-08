@@ -1,100 +1,179 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { ProductThumb } from "@/components/products/Product";
 import { cookies } from "next/headers";
-import { AlertTriangle, Package, Search, Tags, TrendingUp } from "lucide-react";
+import { Grid3x3, Search, Tags } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { Panel, StatCard } from "@/components/cn/ui";
-import { PricingTabs } from "@/components/pricing/PricingTabs";
+import { buttonVariants } from "@/components/ui/button";
+import { Panel } from "@/components/cn/ui";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { allListPrices, standardPrices } from "@/lib/price-list";
-import { marginPct, packCosts, packFor } from "@/lib/pricing";
+import { listCustomers, listPrices, priceList, priceLists, standardPrices } from "@/lib/price-list";
 import { cn } from "@/lib/utils";
-import { SkuRows, type SkuRow } from "./sku-rows";
+import { CustomerPicker, ListPicker, ListSettings, NewList, PriceCell, RemoveCustomer } from "./editors";
 
 export const dynamic = "force-dynamic";
 
-type Show = "all" | "missing" | "nopack";
-const SHOW: Array<[Show, string]> = [["all", "All SKUs"], ["missing", "Missing a trade price"], ["nopack", "No packaging cost"]];
+const pct = (price: number | null, mrp: number) => (price && mrp ? `${Math.round(((mrp - price) / mrp) * 1000) / 10}% margin` : "");
 
 /**
- * SKU prices: the standard price of every product - MRP (what the D2C app sells at), the retailer and distributor
- * prices with the margin each leaves - and its packaging cost per piece, opened as a subsection under the SKU.
- * Party price lists override the trade prices for the customers on them (Party price lists tab).
+ * Price list: what every customer pays, one list at a time. Standard prices (MRP, Retailer, Distributor) apply to
+ * everyone; a party price list overrides them for the customers on it. The Gaia app shows each customer its own price.
  */
-export default async function SkuPricesPage({ searchParams }: { searchParams: Promise<{ list?: string; q?: string; cat?: string; show?: string }> }) {
-  const sp = await searchParams;
-  // the party lists used to open here
-  if (sp.list) redirect(`/price-list/lists?list=${encodeURIComponent(sp.list)}`);
-  const q = sp.q?.trim() ?? "";
-  const show: Show = SHOW.some(([k]) => k === sp.show) ? (sp.show as Show) : "all";
-
+export default async function PriceListPage({ searchParams }: { searchParams: Promise<{ list?: string; q?: string }> }) {
+  const { list: listUid, q } = await searchParams;
   const me = await userFromToken((await cookies()).get("session")?.value);
   const canEdit = !!me && atLeast(levelFor(me, "pricelist"), "edit");
-  const [products, costs, listPrices] = await Promise.all([standardPrices(), packCosts(), allListPrices()]);
 
-  const all: SkuRow[] = products.map((p) => ({
-    ...p,
-    rtMargin: marginPct(p.rt, p.mrp),
-    dbMargin: marginPct(p.db, p.mrp),
-    lists: listPrices.get(p.uid)?.size ?? 0,
-    pack: packFor(costs, p.sku),
-  }));
-  const cats = [...new Set(all.map((r) => r.category))];
-  const rows = all.filter((r) =>
-    (!sp.cat || r.category === sp.cat) &&
-    (!q || `${r.sku} ${r.name} ${r.category}`.toLowerCase().includes(q.toLowerCase())) &&
-    (show === "all" || (show === "missing" ? r.inApp && (!r.rt || !r.db) : r.pack?.perPc == null)),
-  );
-
-  const inApp = all.filter((r) => r.inApp);
-  const missing = inApp.filter((r) => !r.rt || !r.db).length;
-  const noPack = all.filter((r) => r.pack?.perPc == null).length;
-  const margins = inApp.map((r) => r.dbMargin).filter((m): m is number => m !== null);
-  const avgDb = margins.length ? Math.round((margins.reduce((a, b) => a + b, 0) / margins.length) * 10) / 10 : null;
-
-  const link = (patch: Record<string, string | undefined>) => {
-    const p = new URLSearchParams();
-    for (const [k, v] of Object.entries({ q: q || undefined, cat: sp.cat, show: show === "all" ? undefined : show, ...patch })) if (v) p.set(k, v);
-    return p.size ? `/price-list?${p}` : "/price-list";
-  };
-  const chip = (on: boolean) => cn("rounded-full border px-2.5 py-1 text-[12px]", on ? "border-foreground bg-foreground text-background" : "border-border hover:bg-muted");
+  const [products, lists, list] = await Promise.all([standardPrices(), priceLists(), listUid ? priceList(listUid) : Promise.resolve(null)]);
+  const [prices, customers] = list ? await Promise.all([listPrices(list.uid), listCustomers(list.uid)]) : [null, []];
+  const shown = q?.trim() ? products.filter((p) => `${p.sku} ${p.name} ${p.category}`.toLowerCase().includes(q.trim().toLowerCase())) : products;
+  const groups = [...new Set(lists.map((l) => l.grp).filter((g): g is string => !!g))];
+  const cols = list ? 5 : 4;
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="mx-auto w-full max-w-7xl space-y-4">
-        <PageHeader icon={Tags} title="SKU prices" subtitle="Standard price of every SKU: MRP, retailer and distributor price with margins, and the packaging cost per piece." />
-        <PricingTabs on="skus" />
+        <PageHeader
+          icon={Tags}
+          title="Price list"
+          subtitle="Pick a list, click a price to change it. A party's own list comes first, then the Retailer or Distributor price."
+          actions={<Link href="/price-list/overview" className={buttonVariants({ variant: "outline" })}><Grid3x3 className="size-4" /> Price overview</Link>}
+        />
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard icon={Tags} label="SKUs in the apps" value={inApp.length.toLocaleString("en-IN")} note={`${all.length - inApp.length} without MRP`} />
-          <StatCard icon={AlertTriangle} label="Missing a trade price" value={String(missing)} tone={missing ? "warning" : "success"} note="retailer or distributor price empty" href={link({ show: "missing" })} />
-          <StatCard icon={Package} label="No packaging cost" value={String(noPack)} tone={noPack ? "warning" : "success"} note="no packing list in the plant" href={link({ show: "nopack" })} />
-          <StatCard icon={TrendingUp} label="Avg distributor margin" value={avgDb === null ? "—" : `${avgDb}%`} tone="brand" note="below MRP, across SKUs" />
+        {/* which list, which products */}
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 md:flex-row md:items-center">
+          <ListPicker lists={lists} current={list?.uid} q={q} />
+          <form action="/price-list" className="relative flex-1 md:max-w-sm">
+            {list ? <input type="hidden" name="list" value={list.uid} /> : null}
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input name="q" defaultValue={q} placeholder="Search product, SKU or category" className="h-10 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-foreground" />
+          </form>
+          {canEdit ? <div className="md:ml-auto md:w-56"><NewList groups={groups} /></div> : null}
         </div>
 
-        <Panel flush>
-          <div className="flex flex-col gap-3 border-b border-border p-3 lg:flex-row lg:flex-wrap lg:items-center">
-            <form action="/price-list" className="relative lg:w-72">
-              {sp.cat ? <input type="hidden" name="cat" value={sp.cat} /> : null}
-              {show !== "all" ? <input type="hidden" name="show" value={show} /> : null}
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input name="q" defaultValue={q} placeholder="Search SKU, name or category" className="h-9 w-full rounded-lg border border-input bg-background pr-3 pl-8 text-sm outline-none focus:border-foreground" />
-            </form>
-            <div className="flex flex-wrap gap-1.5">
-              {SHOW.map(([k, l]) => <Link key={k} href={link({ show: k === "all" ? undefined : k })} className={chip(show === k)}>{l}</Link>)}
+        {list ? (
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold">{list.name}</h2>
+                {list.grp ? <span className="text-[13px] text-tertiary-foreground">· {list.grp}</span> : null}
+              </div>
+              <p className="text-[13px] text-tertiary-foreground">
+                {customers.length} customer{customers.length === 1 ? "" : "s"} pay these prices. Empty price = the product is not on this list; they pay their channel price (grey).
+              </p>
             </div>
-            <div className="flex flex-wrap gap-1.5 lg:ml-auto">
-              <Link href={link({ cat: undefined })} className={chip(!sp.cat)}>All categories</Link>
-              {cats.map((c) => <Link key={c} href={link({ cat: c })} className={chip(sp.cat === c)}>{c}</Link>)}
+            {canEdit ? <ListSettings uid={list.uid} name={list.name} grp={list.grp} /> : null}
+          </div>
+        ) : null}
+
+        <div className={cn("grid items-start gap-5", list && "xl:grid-cols-[minmax(0,1fr)_21rem]")}>
+          <Panel flush>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 font-semibold">Product</th>
+                    <th className="px-2 py-2.5 text-right font-semibold">MRP</th>
+                    {list ? (
+                      <>
+                        <th className="px-2 py-2.5 text-right font-semibold">Distributor</th>
+                        <th className="px-2 py-2.5 text-right font-semibold text-foreground">This list</th>
+                        <th className="px-4 py-2.5 text-right font-semibold">Margin</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-2 py-2.5 text-right font-semibold">Retailer</th>
+                        <th className="px-4 py-2.5 text-right font-semibold">Distributor</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((p, i) => (
+                    <FragmentRow key={p.uid} category={i === 0 || shown[i - 1].category !== p.category ? p.category : null} cols={cols}>
+                      <tr className="border-t border-border hover:bg-muted/30">
+                        <td className="min-w-64 px-4 py-2">
+                          <div className="flex items-center gap-2"><ProductThumb image={p.image} size={32} /><div className="min-w-0">
+                          <div className="font-medium text-foreground">{p.name}</div>
+                          <div className="text-[11px] text-tertiary-foreground">
+                            <span className="font-mono">{p.sku}</span>
+                            <span className="ml-2 rounded bg-muted px-1.5 text-muted-foreground" title="Pack quantity">{p.packQty ?? "—"}</span>
+                            <span className="ml-1 rounded bg-muted px-1.5 text-muted-foreground" title="Unit">{p.unit ?? "—"}</span>
+                            {!p.inApp ? <span className="ml-2">· no MRP, not in the app</span> : !p.inShop ? <span className="ml-2">· distributors & retailers only (hidden from the shop)</span> : null}
+                          </div>
+                          </div></div>
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <PriceCell target={{ kind: "mrp" }} productUid={p.uid} value={p.mrp} canEdit={canEdit && !list} />
+                        </td>
+                        {list ? (
+                          <>
+                            <td className="num px-2 py-2 text-right text-muted-foreground">{p.db ? `₹${p.db}` : "-"}</td>
+                            <td className="px-2 py-2 text-right">
+                              <PriceCell target={{ kind: "list", list: list.uid }} productUid={p.uid} value={prices?.get(p.uid) ?? null} fallback={p.db} canEdit={canEdit} clearable />
+                            </td>
+                            <td className="num px-4 py-2 text-right text-[12px] text-tertiary-foreground">{pct(prices?.get(p.uid) ?? null, p.mrp)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-2 py-2 text-right">
+                              <PriceCell target={{ kind: "channel", channel: "RT" }} productUid={p.uid} value={p.rt} canEdit={canEdit} />
+                              <div className="pr-2 text-[11px] text-tertiary-foreground">{pct(p.rt, p.mrp)}</div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <PriceCell target={{ kind: "channel", channel: "DB" }} productUid={p.uid} value={p.db} canEdit={canEdit} />
+                              <div className="pr-2 text-[11px] text-tertiary-foreground">{pct(p.db, p.mrp)}</div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    </FragmentRow>
+                  ))}
+                  {shown.length === 0 ? (
+                    <tr><td colSpan={cols} className="px-4 py-10 text-center text-muted-foreground">No products match.</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
-          </div>
-          <SkuRows rows={rows} canEdit={canEdit} />
-          <div className="border-t border-border bg-muted/30 px-4 py-2 text-[12px] text-tertiary-foreground">
-            {rows.length} of {all.length} SKUs · click a price to change it · margins are % below MRP · packaging comes from each SKU&apos;s packing list in the plant at today&apos;s material rates.
-          </div>
-        </Panel>
+          </Panel>
+
+          {list ? (
+            <Panel title={`Customers (${customers.length})`} description="Each customer is on one list at a time." className="xl:sticky xl:top-4">
+              <div className="space-y-3">
+                {canEdit ? <CustomerPicker listUid={list.uid} /> : null}
+                <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto text-[13px]">
+                  {customers.map((c) => (
+                    <li key={c.uid} className="flex items-center justify-between gap-2 py-2">
+                      <div className="min-w-0">
+                        <Link href={`/price-list/overview?customer=${c.uid}`} className="block truncate font-medium hover:underline">{c.name}</Link>
+                        <div className="truncate text-[11px] text-tertiary-foreground">
+                          <span className="font-mono">{c.code}</span> · {[c.channel, c.city].filter(Boolean).join(", ")}{c.active ? "" : " · inactive"}
+                        </div>
+                      </div>
+                      {canEdit ? <RemoveCustomer listUid={list.uid} firmUid={c.uid} name={c.name} /> : null}
+                    </li>
+                  ))}
+                  {customers.length === 0 ? <li className="py-3 text-tertiary-foreground">No customers yet.</li> : null}
+                </ul>
+              </div>
+            </Panel>
+          ) : null}
+        </div>
       </div>
     </div>
+  );
+}
+
+/** A product row, with its category as a heading row above the first product of each category. */
+function FragmentRow({ category, cols, children }: { category: string | null; cols: number; children: React.ReactNode }) {
+  return (
+    <>
+      {category ? (
+        <tr className="border-t border-border bg-muted/30">
+          <td colSpan={cols} className="px-4 py-1.5 text-[11px] font-semibold tracking-wide text-tertiary-foreground uppercase">{category}</td>
+        </tr>
+      ) : null}
+      {children}
+    </>
   );
 }

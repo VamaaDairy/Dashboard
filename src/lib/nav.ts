@@ -81,15 +81,7 @@ const distProducts = orders("Product Management", Package, ["fpproducts", "fpfoc
 const salesTeam = orders("Sales team", Users, ["staffs", "employeecustomermaster", "employeefaceregistration", "attendance", "leave", "employeeTarget", "catalogue", "lms"]);
 const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
 // Pricing
-const priceList: NavItem = {
-  href: "/price-list", key: "pricelist", label: "Prices", icon: Tags,
-  children: [
-    { href: "/price-list/overview", key: "pricelist", label: "Price overview" },
-    { href: "/price-list", key: "pricelist", label: "SKU prices & packaging", exact: true },
-    { href: "/price-list/lists", key: "pricelist", label: "Party price lists" },
-    { href: "/price-list/customers", key: "pricelist", label: "Customer prices" },
-  ],
-};
+const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Price list", icon: Tags };
 const appProductPrices: NavItem = {
   href: "/product-master/d2c", key: "productmaster", label: "App product prices", icon: PackageSearch,
   children: [
@@ -368,7 +360,7 @@ const WORKING: NavSection[] = [
   {
     id: "pricing", label: "Pricing", icon: Tags,
     groups: [
-      { label: "Prices", items: [priceList] },
+      { label: "Customer prices", items: [priceList] },
       { label: "App products", items: [appProductPrices] },
       { label: "Names", items: [{ href: "/product-names", key: "productnames", label: "Product names check", icon: ClipboardCheck }] },
       { label: "Distributor & retail", items: items(marginsSlabs, schemes) },
