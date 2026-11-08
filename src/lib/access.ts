@@ -61,6 +61,7 @@ export const RESOURCES: Resource[] = [
   { key: "productmaster.distributor", label: "Distributor app products", group: "Product Master", path: "/product-master/distributor" },
   { key: "productnames", label: "Product names check (SKU clashes)", group: "Product Master", path: "/product-names" },
   { key: "customers", label: "Customer Master (distributors, retailers, D2C, profiles)", group: "Customer Master", path: "/customers" },
+  { key: "employees", label: "Employee Master (Salesforce, Plant, Office, departments, profiles)", group: "Employee Master", path: "/employees" },
   // the Gaia Dairy app's business: each its own permission
   { key: "d2c.customers", label: "Customer Master (app customers)", group: "D2C business", path: "/d2c/customers" },
   { key: "d2c.sales", label: "Sales dashboard", group: "D2C business", path: "/d2c/sales" },
@@ -137,6 +138,15 @@ export function levelsFor(user: { role: string; access: AccessMap }): AccessMap 
 }
 
 /** Keeps only known resources with a real level; drops "none". Untrusted input goes through this. */
+const RANK_OF: Record<Level, number> = { none: 0, view: 1, edit: 2 };
+
+/** Two access maps together, the higher level winning per resource (a department's plus a person's own). */
+export function mergeAccess(a: AccessMap, b: AccessMap): AccessMap {
+  const out: AccessMap = { ...a };
+  for (const [k, v] of Object.entries(b)) if (RANK_OF[v] > RANK_OF[out[k] ?? "none"]) out[k] = v;
+  return out;
+}
+
 export function cleanAccess(raw: unknown): AccessMap {
   const out: AccessMap = {};
   if (!raw || typeof raw !== "object") return out;
