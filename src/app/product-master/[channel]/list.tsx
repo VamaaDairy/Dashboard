@@ -248,18 +248,17 @@ function ProductRow({ channel, line: l, categories, first, last, canEdit, canMov
         {categories.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
       <div className="w-24 text-right">
-        <PriceInput label="MRP" value={l.mrp} canEdit={canEdit} onSave={(v) => run(() => setPricesAction(channel, l.uid, { mrp: v ?? 0 }))} />
+        <PriceInput label={channel === "d2c" ? "Price (MRP)" : "MRP"} value={l.mrp} canEdit={canEdit} onSave={(v) => run(() => setPricesAction(channel, l.uid, { mrp: v }))} />
       </div>
-      <div className="w-28 text-right">
-        {channel === "d2c" ? (
-          <PriceInput label="App price" value={l.shopPrice} placeholder={l.mrp} canEdit={canEdit} clearable onSave={(v) => run(() => setPricesAction(channel, l.uid, { shopPrice: v }))} />
-        ) : (
+      {/* D2C sells at the MRP; the trade lists show their default price next to it */}
+      {channel === "d2c" ? null : (
+        <div className="w-28 text-right">
           <Link href="/price-list" title="Default price - change it on the Price list page; party lists can override it" className="block text-right hover:underline">
             <div className="text-[10px] text-tertiary-foreground">{channel === "retail" ? "Retailer price" : "Distributor price"}</div>
             <div className="num text-sm">{l.rate ? money(l.rate) : <span className="text-tertiary-foreground">none</span>}</div>
           </Link>
-        )}
-      </div>
+        </div>
+      )}
       {canEdit ? (
         <div className="flex items-center">
           <Button
@@ -290,16 +289,16 @@ function ProductRow({ channel, line: l, categories, first, last, canEdit, canMov
 }
 
 /** A price you can click to change: Enter or leaving the box saves, Esc cancels. */
-function PriceInput({ label, value, placeholder, canEdit, clearable, onSave }: {
-  label: string; value: number | null; placeholder?: number; canEdit: boolean; clearable?: boolean; onSave: (v: number | null) => void;
+function PriceInput({ label, value, canEdit, onSave }: {
+  label: string; value: number; canEdit: boolean; onSave: (v: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const save = () => {
     setEditing(false);
     const t = text.trim().replace(/[₹,\s]/g, "");
-    const next = t === "" ? null : Number(t);
-    if (next === value || (next !== null && !Number.isFinite(next)) || (next === null && !clearable)) return;
+    const next = Number(t);
+    if (t === "" || next === value || !Number.isFinite(next)) return;
     onSave(next);
   };
   return (
@@ -313,17 +312,16 @@ function PriceInput({ label, value, placeholder, canEdit, clearable, onSave }: {
           onChange={(e) => setText(e.target.value)}
           onBlur={save}
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-          placeholder={clearable ? "= MRP" : ""}
           className="num h-7 w-full rounded-md border border-foreground bg-background px-1.5 text-right text-sm outline-none"
         />
       ) : (
         <button
           type="button"
           disabled={!canEdit}
-          onClick={() => { setText(value === null ? "" : String(value)); setEditing(true); }}
+          onClick={() => { setText(String(value)); setEditing(true); }}
           className={cn("num w-full rounded-md px-1 text-right text-sm", canEdit && "hover:bg-muted")}
         >
-          {value !== null ? money(value) : placeholder !== undefined ? <span className="text-tertiary-foreground">{money(placeholder)}</span> : "-"}
+          {money(value)}
         </button>
       )}
     </div>

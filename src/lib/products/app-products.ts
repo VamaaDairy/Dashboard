@@ -75,7 +75,6 @@ interface Row {
   visible: boolean;
   sort: number;
   mrp: number;
-  shopPrice: number | null;
   description: string | null;
   active: boolean;
   image: string | null;
@@ -101,9 +100,8 @@ export interface AppProduct {
   visible: boolean;
   /** False when the product is switched off in the company Product Master (then no app shows it). */
   active: boolean;
+  /** The one price: what the D2C app sells at, and the MRP every app shows. */
   mrp: number;
-  /** D2C selling price (null = the MRP). */
-  shopPrice: number | null;
   description: string | null;
   image: string | null;
   images: string[];
@@ -118,14 +116,13 @@ async function rows(channel: AppChannel, where = "true", params: unknown[] = [])
             nullif(trim(p.sku_size), '') as "masterSize",
             -- one name and size for a SKU in every app: the D2C list's (see src/lib/products/names.ts)
             nullif(trim(d.name), '') as "ownName", nullif(trim(d.size), '') as "ownSize",
-            nullif(trim(a.category), '') as "ownCategory", a.visible, a.sort, p.mrp::float as mrp, si.price::float as "shopPrice",
+            nullif(trim(a.category), '') as "ownCategory", a.visible, a.sort, p.mrp::float as mrp,
             nullif(trim(p.description), '') as description, coalesce(p.active, 0) = 1 and p.mrp > 0 as active,
             (select ${photo()} from fp_product_image i where i.product_uid = p.uid and i.archived_at is null order by i.imagesno nulls last limit 1) as image,
             coalesce((select array_agg(${photo()} order by i.imagesno nulls last) from fp_product_image i where i.product_uid = p.uid and i.archived_at is null), '{}') as images
      from app_product a
      join fp_product p on p.uid = a.product_uid
      left join app_product d on d.channel = 'd2c' and d.product_uid = p.uid
-     left join shop_item si on si.sku_code = p.sku_code
      where a.channel = $1 and ${where}`,
     [channel, ...params],
   );
@@ -146,7 +143,6 @@ const shape = (r: Row): AppProduct => {
     visible: r.visible,
     active: r.active,
     mrp: Number(r.mrp),
-    shopPrice: r.shopPrice === null ? null : Number(r.shopPrice),
     description: r.description,
     image: r.image,
     images: r.images,
@@ -179,7 +175,7 @@ export async function appList(channel: AppChannel): Promise<{ categories: string
 
 /**
  * What an app shows: the list's visible products that are active with an MRP, in order. `price` is the D2C
- * price (shop price, else MRP); the Partners app puts each customer's own price on top.
+ * price, which is the MRP; the Partners app puts each customer's own price on top.
  */
 export async function appCatalog(channel: AppChannel, skus?: string[]): Promise<ShopProduct[]> {
   const raw = await rows(
@@ -197,7 +193,7 @@ export async function appCatalog(channel: AppChannel, skus?: string[]): Promise<
     subCategory: p.category,
     size: p.size,
     mrp: p.mrp,
-    price: p.shopPrice ?? p.mrp,
+    price: p.mrp,
     description: p.description,
     image: p.image,
     images: p.images,
@@ -226,7 +222,7 @@ export async function appCatalogWithUnavailable(channel: AppChannel): Promise<Sh
     subCategory: p.category,
     size: p.size,
     mrp: p.mrp,
-    price: p.shopPrice ?? p.mrp,
+    price: p.mrp,
     description: p.description,
     image: p.image,
     images: p.images,
@@ -418,23 +414,12 @@ export async function removeFromList(channel: AppChannel, uid: string, who: stri
   return OK;
 }
 
-/** MRP (Product Master, every app) and the D2C app's selling price (empty = MRP). */
-export async function setPrices(uid: string, patch: { mrp?: number; shopPrice?: number | null }, who: string): Promise<Result> {
+/** The MRP (Product Master): the one price - the D2C app sells at it and every app shows it. */
+export async function setPrices(uid: string, patch: { mrp: number }, who: string): Promise<Result> {
   const p = await one<{ sku: string; mrp: number }>(`select sku_code as sku, mrp::float as mrp from fp_product where uid = $1`, [uid]);
   if (!p) return { ok: false, error: "That product no longer exists." };
-  if (patch.mrp !== undefined) {
-    if (!Number.isFinite(patch.mrp) || patch.mrp <= 0 || patch.mrp > 1e6) return { ok: false, error: "Enter a valid MRP." };
-    await query(`update fp_product set mrp = $2, updated_at = now() where uid = $1`, [uid, patch.mrp]);
-  }
-  if (patch.shopPrice !== undefined) {
-    const v = patch.shopPrice;
-    if (v !== null && (!Number.isFinite(v) || v <= 0 || v > 1e6)) return { ok: false, error: "Enter a valid price." };
-    await query(
-      `insert into shop_item (sku_code, price) values ($1, $2)
-       on conflict (sku_code) do update set price = $2, updated_at = now()`,
-      [p.sku, v],
-    );
-  }
+  if (!Number.isFinite(patch.mrp) || patch.mrp <= 0 || patch.mrp > 1e6) return { ok: false, error: "Enter a valid MRP." };
+  await query(`update fp_product set mrp = $2, updated_at = now() where uid = $1`, [uid, patch.mrp]);
   await query(`insert into master_audit (actor, slug, record_id, action, summary, before, after) values ($1, 'fpproducts', $2, 'update', $3, $4, $5)`, [
     who, uid, `Price changed (${p.sku})`, JSON.stringify({ mrp: p.mrp }), JSON.stringify(patch),
   ]);
