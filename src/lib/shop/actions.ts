@@ -86,7 +86,11 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   const text = (k: string) => String(form.get(k) ?? "").trim();
   const id = Number(text("id")) || null;
   const title = text("title");
-  const sku = text("sku") || null;
+  // what tapping the banner opens: one product, a whole category, an offer - or nothing
+  const link = text("link");
+  const sku = link === "product" ? text("sku") || null : null;
+  const category = link === "category" ? text("category").slice(0, 60) || null : null;
+  const offerId = link === "offer" ? Number(text("offerId")) || null : null;
   const bg = text("bgColor") || "#2F3992";
   const priority = Number(text("priority") || 0);
   const starts = text("startsAt") || null;
@@ -100,16 +104,20 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   if (starts && ends && ends < starts) return { ok: false, error: "The end date is before the start date." };
   if (poster && !POSTER_TYPES.has(poster.type)) return { ok: false, error: "The poster must be a JPG, PNG or WebP image." };
   if (poster && poster.size > POSTER_MAX) return { ok: false, error: "The poster must be under 3 MB." };
+  if (link === "product" && !sku) return { ok: false, error: "Pick the product the banner opens." };
+  if (link === "category" && !category) return { ok: false, error: "Pick the category the banner opens." };
+  if (link === "offer" && !offerId) return { ok: false, error: "Pick the offer the banner opens." };
   if (sku && !(await query(`select 1 from fp_product where sku_code = $1`, [sku])).length) return { ok: false, error: "That product does not exist." };
+  if (offerId && !(await query(`select 1 from shop_offer where id = $1`, [offerId])).length) return { ok: false, error: "That offer does not exist." };
 
   const bytes = poster ? Buffer.from(await poster.arrayBuffer()) : null;
-  const vals = [title, text("subtitle") || null, text("cta") || null, sku, bg.toUpperCase(), priority, starts, ends];
+  const vals = [title, text("subtitle") || null, text("cta") || null, sku, bg.toUpperCase(), priority, starts, ends, category, offerId];
   if (id) {
     // a new poster replaces the old one; "remove" goes back to a designed card
-    const img = bytes ? `, image = $10, image_mime = $11` : removeImage ? `, image = null, image_mime = null` : "";
+    const img = bytes ? `, image = $12, image_mime = $13` : removeImage ? `, image = null, image_mime = null` : "";
     const [row] = await query<{ image: boolean }>(
       `update shop_banner set title = $2, subtitle = $3, cta = $4, sku_code = $5, bg_color = $6, priority = $7, starts_at = $8, ends_at = $9,
-              updated_at = now()${img}
+              category = $10, offer_id = $11, updated_at = now()${img}
         where id = $1 returning image is not null as image`,
       [id, ...vals, ...(bytes ? [bytes, poster!.type] : [])],
     );
@@ -118,8 +126,8 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   } else {
     if (!title && !bytes) return { ok: false, error: "Give the banner a title or a poster image." };
     await query(
-      `insert into shop_banner (title, subtitle, cta, sku_code, bg_color, priority, starts_at, ends_at, image, image_mime)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      `insert into shop_banner (title, subtitle, cta, sku_code, bg_color, priority, starts_at, ends_at, category, offer_id, image, image_mime)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [...vals, bytes, poster?.type ?? null],
     );
   }
@@ -136,6 +144,18 @@ export async function setBannerAction(id: number, patch: { active?: boolean; pri
   );
   revalidatePath("/shop-orders/banners");
   return { ok: true };
+}
+
+/** A copy (switched off) to start a similar banner from. */
+export async function duplicateBannerAction(id: number): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canEdit())) return NO;
+  const r = await query(
+    `insert into shop_banner (title, subtitle, cta, sku_code, bg_color, image, image_mime, priority, active, starts_at, ends_at, category, offer_id)
+     select title, subtitle, cta, sku_code, bg_color, image, image_mime, priority, false, starts_at, ends_at, category, offer_id from shop_banner where id = $1 returning id`,
+    [id],
+  );
+  revalidatePath("/shop-orders/banners");
+  return r.length ? { ok: true } : { ok: false, error: "That banner no longer exists." };
 }
 
 export async function deleteBannerAction(id: number): Promise<{ ok: boolean; error?: string }> {

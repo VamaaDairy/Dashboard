@@ -195,15 +195,17 @@ export async function exportOrders(f: BoardFilter) {
   const w = where(f, true);
   return query<{
     order_no: string; placed: string; day: string; type: string; name: string; phone: string; address: string; pincode: string | null; notes: string | null;
-    items: string; qty: number; subtotal: number; delivery_fee: number; total: number; payment_method: string; payment_status: string; status: string;
+    items: string; qty: number; subtotal: number; discount: number; offers: string; delivery_fee: number; total: number; payment_method: string; payment_status: string; status: string;
     rider: string | null; assigned: string | null; picked_up: string | null; delivered: string | null; rating: number | null;
   }>(
     `select o.order_no, to_char(o.created_at at time zone 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') as placed, to_char(${DAY}, 'YYYY-MM-DD') as day,
             case when o.subscription_day is null then 'Regular' else 'Subscription' end as type,
             o.name, o.phone, o.address, o.pincode, o.notes,
-            coalesce((select string_agg(i.qty || ' x ' || i.name || ' (' || i.sku_code || ')', '; ' order by i.id) from shop_order_item i where i.order_id = o.id), '') as items,
+            coalesce((select string_agg(i.qty || ' x ' || i.name || ' (' || i.sku_code || ')' || case when i.free then ' FREE' else '' end, '; ' order by i.id) from shop_order_item i where i.order_id = o.id), '') as items,
             coalesce((select sum(i.qty)::int from shop_order_item i where i.order_id = o.id), 0) as qty,
-            o.subtotal::float as subtotal, o.delivery_fee::float as delivery_fee, o.total::float as total, o.payment_method, o.payment_status, o.status,
+            o.subtotal::float as subtotal, o.discount::float as discount,
+            concat_ws(' ', o.coupon_code, (select string_agg(x.title, '; ' order by x.offer_id) from shop_order_offer x where x.order_id = o.id)) as offers,
+            o.delivery_fee::float as delivery_fee, o.total::float as total, o.payment_method, o.payment_status, o.status,
             (select r.name from shop_rider r where r.id = o.rider_id) as rider,
             to_char(o.assigned_at at time zone 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') as assigned,
             to_char(o.picked_up_at at time zone 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') as picked_up,

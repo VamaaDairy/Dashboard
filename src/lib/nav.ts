@@ -10,7 +10,7 @@
  * one, run `node scripts/nav-audit.mjs` and add it to the section where it belongs.
  */
 import {
-  Archive, BarChart3, Beaker, Bike, Boxes, CalendarDays, ClipboardCheck, Contact, Cylinder, Database, Droplets, Factory,
+  Archive, BadgePercent, BarChart3, Beaker, Bike, Boxes, CalendarDays, ClipboardCheck, Contact, Cylinder, Database, Droplets, Factory,
   Briefcase, FileClock, Fuel, Gift, HardHat, Home, IndianRupee, MapPin, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
   ReceiptText, Route, Scale, Settings2, ShoppingBag, Smartphone, Star, Store, Tags, Target, Truck, UserPlus, Users, Wallet, Warehouse, Zap,
 } from "lucide-react";
@@ -300,6 +300,12 @@ const WORKING: NavSection[] = [
             href: "/product-master/d2c", key: "productmaster.d2c", label: "Catalogue", icon: PackageSearch,
             children: [
               { href: "/product-master/d2c", key: "productmaster.d2c", label: "App products" },
+            ],
+          },
+          {
+            href: "/shop-orders/offers", key: "shop", label: "Marketing", icon: BadgePercent,
+            children: [
+              { href: "/shop-orders/offers", key: "shop", label: "Offers" },
               { href: "/shop-orders/banners", key: "shop", label: "Banners" },
             ],
           },

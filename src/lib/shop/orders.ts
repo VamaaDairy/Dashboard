@@ -6,7 +6,8 @@ import { notifyOrderStatus, notifyRiderAssigned } from "@/lib/push";
 import { expireUnpaid } from "@/lib/payments/easebuzz";
 import { haversine } from "./route-plan";
 import { photoUrlOf, pricesFor } from "./catalog";
-import { deliveryFor, MAX_LINE_QTY, MAX_LINES, type DeliveryRule } from "./pricing";
+import { priceCart } from "./offers";
+import { MAX_LINE_QTY, MAX_LINES, type DeliveryRule } from "./pricing";
 
 export const deliveryRule: DeliveryRule = { fee: shop.deliveryFee, freeAbove: shop.freeDeliveryAbove };
 
@@ -23,6 +24,8 @@ export interface OrderInput {
   customerId?: number | null;
   /** "online": the order waits for its Easebuzz payment before it is placed; else cash on delivery. */
   paymentMethod?: "cod" | "online";
+  /** A coupon code the customer entered (offers without a code apply by themselves). */
+  code?: string | null;
 }
 
 export type PlaceResult = { ok: true; accessKey: string } | { ok: false; error: string };
@@ -47,22 +50,29 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
   );
   if ((recent?.n ?? 0) >= RECENT_LIMIT) return { ok: false, error: "Too many orders from this number just now. Please try again later." };
 
-  const items = [...merged].map(([sku, qty]) => {
-    const p = prices.get(sku)!;
-    return { sku, qty, name: p.size ? `${p.name} ${p.size}` : p.name, image: p.image, unit: p.price, total: Math.round(p.price * qty * 100) / 100 };
+  // today's prices with every offer that applies (src/lib/shop/offers-engine.ts)
+  const priced = await priceCart([...merged].map(([sku, qty]) => ({ sku, qty })), {
+    customerId: input.customerId ?? null, phone: input.phone, code: input.code, rule: deliveryRule, prices,
   });
-  const subtotal = Math.round(items.reduce((s, i) => s + i.total, 0) * 100) / 100;
-  const fee = deliveryFor(subtotal, deliveryRule);
+  // a code that no longer works is not silently dropped: the customer sees why and decides
+  if (input.code && priced.codeStatus !== "applied") return { ok: false, error: priced.codeMessage ?? "This code cannot be used." };
+  const items = [
+    ...priced.lines.map((l) => ({ sku: l.sku, qty: l.qty, name: l.name, image: l.image, unit: l.price, total: l.gross, discount: l.discount, free: false, offerId: l.offerId })),
+    ...priced.free.map((f) => ({ sku: f.sku, qty: f.qty, name: f.name, image: f.image, unit: 0, total: 0, discount: 0, free: true, offerId: f.offerId as number | null })),
+  ];
+  const subtotal = priced.subtotal;
+  const discount = priced.discount;
+  const fee = priced.deliveryFee;
 
   const online = input.paymentMethod === "online";
   if (online) await expireUnpaid();
   const placed = await tx(async (c) => {
     const o = await c.query(
-      `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, customer_id, payment_method, status)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id, access_key`,
+      `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, customer_id, payment_method, status, discount, coupon_code)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) returning id, access_key`,
       [
-        input.name, input.phone, input.address, input.pincode, input.notes, input.lat, input.lng, subtotal, fee, subtotal + fee, input.customerId ?? null,
-        online ? "online" : "cod", online ? "awaiting_payment" : "placed",
+        input.name, input.phone, input.address, input.pincode, input.notes, input.lat, input.lng, subtotal, fee, priced.total, input.customerId ?? null,
+        online ? "online" : "cod", online ? "awaiting_payment" : "placed", discount, priced.code,
       ],
     );
     // the account remembers where it last ordered to, so the next checkout is pre-filled
@@ -71,9 +81,12 @@ export async function placeOrder(input: OrderInput): Promise<PlaceResult> {
     }
     for (const i of items) {
       await c.query(
-        `insert into shop_order_item (order_id, sku_code, name, image_url, qty, unit_price, line_total) values ($1, $2, $3, $4, $5, $6, $7)`,
-        [o.rows[0].id, i.sku, i.name, i.image, i.qty, i.unit, i.total],
+        `insert into shop_order_item (order_id, sku_code, name, image_url, qty, unit_price, line_total, discount, free, offer_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [o.rows[0].id, i.sku, i.name, i.image, i.qty, i.unit, i.total, i.discount, i.free, i.offerId],
       );
+    }
+    for (const a of priced.applied) {
+      await c.query(`insert into shop_order_offer (order_id, offer_id, title, discount, free_units) values ($1, $2, $3, $4, $5)`, [o.rows[0].id, a.id, a.title, a.discount, a.freeUnits]);
     }
     return { id: o.rows[0].id as number, key: o.rows[0].access_key as string };
   });
@@ -94,6 +107,11 @@ export interface ShopOrder {
   subtotal: number;
   delivery_fee: number;
   total: number;
+  /** taken off the items by offers (included in total) */
+  discount: number;
+  coupon_code: string | null;
+  /** the offers this order used */
+  offers: Array<{ id: number; title: string; discount: number; free_units: number }>;
   payment_method: string;
   payment_status: string;
   status: string;
@@ -116,7 +134,7 @@ export interface ShopOrder {
   delivery_seq: number | null;
   delivery_leg_m: number | null;
   rider: { name: string; phone: string; lat: number | null; lng: number | null; location_at: Date | null } | null;
-  items: Array<{ sku_code: string; name: string; image_url: string | null; qty: number; unit_price: number; line_total: number }>;
+  items: Array<{ sku_code: string; name: string; image_url: string | null; qty: number; unit_price: number; line_total: number; discount: number; free: boolean }>;
 }
 
 export const WITH_ITEMS = `
@@ -125,8 +143,10 @@ export const WITH_ITEMS = `
     select json_agg(json_build_object('sku_code', i.sku_code, 'name', i.name, 'qty', i.qty,
                                       'image_url', coalesce((select ${photoUrlOf("ph")} from fp_product p join fp_product_image ph on ph.product_uid = p.uid
                                                              where p.sku_code = i.sku_code and ph.archived_at is null order by ph.imagesno nulls last limit 1), i.image_url),
-                                      'unit_price', i.unit_price, 'line_total', i.line_total) order by i.id)
+                                      'unit_price', i.unit_price, 'line_total', i.line_total, 'discount', i.discount, 'free', i.free) order by i.free, i.id)
     from shop_order_item i where i.order_id = o.id), '[]'::json) as items,
+    coalesce((select json_agg(json_build_object('id', x.offer_id, 'title', x.title, 'discount', x.discount, 'free_units', x.free_units) order by x.offer_id)
+              from shop_order_offer x where x.order_id = o.id), '[]'::json) as offers,
     (select json_build_object('name', r.name, 'phone', r.phone, 'lat', r.lat, 'lng', r.lng, 'location_at', r.location_at)
      from shop_rider r where r.id = o.rider_id) as rider
   from shop_order o`;
