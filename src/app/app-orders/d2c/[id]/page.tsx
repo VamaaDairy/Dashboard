@@ -90,20 +90,27 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                   {o.items.map((i) => {
                     const l = labelOf(labels, i.sku_code, i.name, i.image_url);
                     return (
-                      <tr key={i.sku_code} className="border-b border-foreground/[0.06]">
+                      <tr key={`${i.sku_code}${i.free ? "-free" : ""}`} className="border-b border-foreground/[0.06]">
                         <td className="px-4 py-2.5"><ProductCell p={l} size={40} /></td>
                         <td className="px-3 py-2.5 text-foreground"><PackQty p={l} /></td>
                         <td className="px-3 py-2.5 text-foreground"><PackUnit p={l} /></td>
                         <td className="px-3 py-2.5 text-right font-medium text-foreground">{i.qty}</td>
-                        <td className="px-3 py-2.5 text-right text-foreground">{rupees(i.unit_price)}</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-foreground">{rupees(i.line_total)}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{i.free ? <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">FREE</span> : rupees(i.unit_price)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-foreground">
+                          {rupees(i.line_total)}
+                          {Number(i.discount) ? <div className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400">−{rupees(i.discount)} offer</div> : null}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <dl className="ml-auto w-64 space-y-1 px-4 py-3 text-[13px] tabular-nums">
+              <dl className="ml-auto w-72 space-y-1 px-4 py-3 text-[13px] tabular-nums">
                 <div className="flex justify-between"><dt className="text-foreground/75">Item total</dt><dd className="text-foreground">{rupees(o.subtotal)}</dd></div>
+                {Number(o.discount) ? (
+                  <div className="flex justify-between gap-3 text-emerald-700 dark:text-emerald-400"><dt>Offer discount{o.coupon_code ? ` · ${o.coupon_code}` : ""}</dt><dd className="whitespace-nowrap">−{rupees(o.discount)}</dd></div>
+                ) : null}
+                {o.offers?.length ? <div className="text-[11px] text-foreground/60">{o.offers.map((x) => x.title).join(" · ")}</div> : null}
                 <div className="flex justify-between"><dt className="text-foreground/75">Delivery fee</dt><dd className="text-foreground">{Number(o.delivery_fee) ? rupees(o.delivery_fee) : "Free"}</dd></div>
                 <div className="flex justify-between pt-1 text-[14px] font-semibold"><dt className="text-foreground">Total</dt><dd className="text-foreground">{rupees(o.total)}</dd></div>
               </dl>

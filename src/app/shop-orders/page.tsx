@@ -17,7 +17,7 @@ const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const TABS: Array<[string, string]> = [["", "All"], ["placed", "New"], ["confirmed", "Confirmed"], ["out_for_delivery", "Out for delivery"], ["delivered", "Delivered"], ["cancelled", "Cancelled"], ["awaiting_payment", "Awaiting payment"]];
 const MORE: Array<[string, string]> = [
   ["/shop-orders/riders", "Riders"], ["/shop-orders/subscriptions", "Subscriptions"], ["/shop-orders/autopay", "Autopay"], ["/shop-orders/live", "Live map"],
-  ["/shop-orders/banners", "Banners"], ["/shop-orders/notifications", "Notifications"], ["/shop-orders/deletion-requests", "Deletion requests"],
+  ["/shop-orders/offers", "Offers"], ["/shop-orders/banners", "Banners"], ["/shop-orders/notifications", "Notifications"], ["/shop-orders/deletion-requests", "Deletion requests"],
 ];
 
 /**

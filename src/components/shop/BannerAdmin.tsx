@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { deleteBannerAction, saveBannerAction, setBannerAction } from "@/lib/shop/actions";
+import { deleteBannerAction, duplicateBannerAction, saveBannerAction, setBannerAction } from "@/lib/shop/actions";
 
 export interface BannerRow {
   id: number;
@@ -9,6 +9,8 @@ export interface BannerRow {
   subtitle: string | null;
   cta: string | null;
   sku: string | null;
+  category: string | null;
+  offerId: number | null;
   bgColor: string;
   priority: number;
   active: boolean;
@@ -18,12 +20,15 @@ export interface BannerRow {
 }
 
 export interface ProductOption { sku: string; name: string; image: string | null }
+export interface OfferOption { id: number; title: string; badge: string | null; live: boolean }
+/** What the form can point a banner at. */
+export interface BannerTargets { products: ProductOption[]; categories: string[]; offers: OfferOption[] }
 
 const box = "h-9 rounded-lg border border-input bg-transparent px-3 text-sm";
 const label = "text-xs text-muted-foreground";
 
 /** Roughly what the phone shows (same story-card style as the app), so colour and words can be judged before saving. */
-function Preview({ title, subtitle, cta, bg, poster, product }: { title: string; subtitle: string; cta: string; bg: string; poster: string | null; product: ProductOption | null }) {
+function Preview({ title, subtitle, cta, bg, poster, product, badge }: { title: string; subtitle: string; cta: string; bg: string; poster: string | null; product: ProductOption | null; badge?: string | null }) {
   if (poster) {
     // like the app: the whole picture, never cropped, on a soft blurred copy of itself
     /* eslint-disable @next/next/no-img-element -- a local preview of the picture being uploaded */
@@ -59,6 +64,7 @@ function Preview({ title, subtitle, cta, bg, poster, product }: { title: string;
           // eslint-disable-next-line @next/next/no-img-element
           <img src="/gaia-logo.jpg" alt="" className="mb-2 h-8 w-8 rounded-full bg-white object-contain p-0.5" />
         ) : null}
+        {badge ? <div className="mb-1.5 w-fit rounded bg-[#1E8E3E] px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-white">{badge}</div> : null}
         <div className="line-clamp-3 text-[15px] font-medium leading-tight tracking-tight">{title || "Banner title"}</div>
         {subtitle ? <div className="mt-1 line-clamp-2 text-[10px] opacity-90">{subtitle}</div> : null}
         {cta ? <div className="mt-2 w-fit rounded-full bg-white px-3 py-1 text-[10px] font-bold" style={{ color: deep }}>{cta}</div> : null}
@@ -68,7 +74,11 @@ function Preview({ title, subtitle, cta, bg, poster, product }: { title: string;
 }
 
 /** Add a banner, or edit one when `banner` is given. */
-export function BannerForm({ products, banner, onDone }: { products: ProductOption[]; banner?: BannerRow; onDone?: () => void }) {
+export function BannerForm({ targets, banner, onDone }: { targets: BannerTargets; banner?: BannerRow; onDone?: () => void }) {
+  const { products, categories, offers } = targets;
+  const [link, setLink] = useState<"" | "product" | "category" | "offer">(banner?.offerId ? "offer" : banner?.category ? "category" : banner?.sku ? "product" : "");
+  const [category, setCategory] = useState(banner?.category ?? "");
+  const [offerId, setOfferId] = useState(banner?.offerId ? String(banner.offerId) : "");
   const [title, setTitle] = useState(banner?.title ?? "");
   const [subtitle, setSubtitle] = useState(banner?.subtitle ?? "");
   const [cta, setCta] = useState(banner?.cta ?? "");
@@ -80,7 +90,8 @@ export function BannerForm({ products, banner, onDone }: { products: ProductOpti
   const [pending, start] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const product = products.find((p) => p.sku === sku) ?? null;
+  const product = link === "product" ? products.find((p) => p.sku === sku) ?? null : null;
+  const offer = link === "offer" ? offers.find((o) => String(o.id) === offerId) ?? null : null;
 
   return (
     <form
@@ -95,7 +106,7 @@ export function BannerForm({ products, banner, onDone }: { products: ProductOpti
           setError("");
           if (onDone) return onDone();
           formRef.current?.reset();
-          setTitle(""); setSubtitle(""); setCta(""); setSku(""); setBg("#2F3992"); setPoster(null);
+          setTitle(""); setSubtitle(""); setCta(""); setSku(""); setBg("#2F3992"); setPoster(null); setLink(""); setCategory(""); setOfferId("");
         });
       }}
     >
@@ -105,12 +116,40 @@ export function BannerForm({ products, banner, onDone }: { products: ProductOpti
         <label className={label}>Title<input name="title" value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} className={`${box} mt-1 block w-full`} placeholder="Pure Desi Ghee" /></label>
         <label className={label}>Button text<input name="cta" value={cta} maxLength={20} onChange={(e) => setCta(e.target.value)} className={`${box} mt-1 block w-full`} placeholder="Shop now" /></label>
         <label className={`${label} sm:col-span-2`}>Subtitle<input name="subtitle" value={subtitle} maxLength={100} onChange={(e) => setSubtitle(e.target.value)} className={`${box} mt-1 block w-full`} placeholder="Rich aroma, slow-cooked the traditional way" /></label>
-        <label className={label}>Product (tap opens it)
-          <select name="sku" value={sku} onChange={(e) => setSku(e.target.value)} className={`${box} mt-1 block w-full`}>
-            <option value="">None</option>
-            {products.map((p) => <option key={p.sku} value={p.sku}>{p.name}</option>)}
-          </select>
-        </label>
+        <div className="sm:col-span-2">
+          <div className={label}>Tapping the banner opens</div>
+          <input type="hidden" name="link" value={link} />
+          <div className="mt-1 inline-flex rounded-lg border border-input p-0.5">
+            {([["", "Nothing"], ["product", "A product"], ["category", "A category"], ["offer", "An offer"]] as const).map(([v, l]) => (
+              <button key={v} type="button" onClick={() => setLink(v)} className={`h-8 rounded-md px-3 text-sm ${link === v ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+        {link === "product" ? (
+          <label className={`${label} sm:col-span-2`}>Product
+            <select name="sku" value={sku} onChange={(e) => setSku(e.target.value)} className={`${box} mt-1 block w-full`}>
+              <option value="">Choose…</option>
+              {products.map((p) => <option key={p.sku} value={p.sku}>{p.name}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {link === "category" ? (
+          <label className={`${label} sm:col-span-2`}>Category
+            <select name="category" value={category} onChange={(e) => setCategory(e.target.value)} className={`${box} mt-1 block w-full`}>
+              <option value="">Choose…</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {link === "offer" ? (
+          <label className={`${label} sm:col-span-2`}>Offer (the app opens it with its products)
+            <select name="offerId" value={offerId} onChange={(e) => setOfferId(e.target.value)} className={`${box} mt-1 block w-full`}>
+              <option value="">Choose…</option>
+              {offers.map((o) => <option key={o.id} value={o.id}>{o.title}{o.live ? "" : " (not running)"}</option>)}
+            </select>
+            {!offers.length ? <span className="mt-1 block">No offers yet - create one under Marketing → Offers.</span> : null}
+          </label>
+        ) : null}
         <div className="flex gap-2">
           <label className={label}>Colour<input type="color" name="bgColor" value={bg} onChange={(e) => setBg(e.target.value)} className="mt-1 block h-9 w-14 rounded-lg border border-input" /></label>
           <label className={`${label} flex-1`}>Priority<input name="priority" type="number" defaultValue={banner?.priority ?? 50} className={`${box} mt-1 block w-full`} /></label>
@@ -143,13 +182,13 @@ export function BannerForm({ products, banner, onDone }: { products: ProductOpti
       </div>
       <div>
         <div className={`${label} mb-1`}>Preview</div>
-        <Preview title={title} subtitle={subtitle} cta={cta} bg={bg} poster={poster} product={product} />
+        <Preview title={title} subtitle={subtitle} cta={cta} bg={bg} poster={poster} product={product} badge={offer?.badge} />
       </div>
     </form>
   );
 }
 
-export function BannerActions({ banner, products }: { banner: BannerRow; products: ProductOption[] }) {
+export function BannerActions({ banner, targets }: { banner: BannerRow; targets: BannerTargets }) {
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
@@ -164,6 +203,7 @@ export function BannerActions({ banner, products }: { banner: BannerRow; product
         <button disabled={pending} title="Show earlier" onClick={() => run(() => setBannerAction(banner.id, { priority: banner.priority + 10 }))} className={btn}>↑</button>
         <button disabled={pending} title="Show later" onClick={() => run(() => setBannerAction(banner.id, { priority: banner.priority - 10 }))} className={btn}>↓</button>
         <button disabled={pending} onClick={() => setEditing(true)} className={btn}>Edit</button>
+        <button disabled={pending} onClick={() => run(() => duplicateBannerAction(banner.id))} className={btn}>Duplicate</button>
         <button disabled={pending} onClick={() => run(() => setBannerAction(banner.id, { active: !banner.active }))} className={btn}>{banner.active ? "Turn off" : "Turn on"}</button>
         <button
           disabled={pending}
@@ -176,7 +216,7 @@ export function BannerActions({ banner, products }: { banner: BannerRow; product
       {editing ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-16" onClick={() => setEditing(false)}>
           <div className="w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
-            <BannerForm products={products} banner={banner} onDone={() => setEditing(false)} />
+            <BannerForm targets={targets} banner={banner} onDone={() => setEditing(false)} />
           </div>
         </div>
       ) : null}

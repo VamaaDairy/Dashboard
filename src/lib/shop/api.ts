@@ -30,10 +30,14 @@ export function orderJson(o: ShopOrder) {
       ? { name: o.rider.name, phone: o.rider.phone, lat: o.rider.lat, lng: o.rider.lng, locationAt: o.rider.location_at ? new Date(o.rider.location_at).toISOString() : null }
       : o.rider ? { name: o.rider.name, phone: o.rider.phone, lat: null, lng: null, locationAt: null } : null,
     subtotal: o.subtotal,
+    discount: Number(o.discount ?? 0),
+    couponCode: o.coupon_code ?? null,
+    offers: (o.offers ?? []).map((x) => ({ title: x.title, discount: Number(x.discount), freeUnits: x.free_units })),
     deliveryFee: o.delivery_fee,
     total: o.total,
     items: o.items.map((i) => ({
       sku: i.sku_code, name: i.name, image: i.image_url, qty: i.qty, unitPrice: i.unit_price, lineTotal: i.line_total,
+      discount: Number(i.discount ?? 0), free: !!i.free,
     })),
   };
 }

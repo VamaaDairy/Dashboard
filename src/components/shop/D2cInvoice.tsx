@@ -55,8 +55,8 @@ export function D2cInvoice({ o, print = false }: { o: ShopOrder; print?: boolean
   // the same product at a different price gets its own line, sorted by name (as in the app)
   const lines = new Map<string, { name: string; qty: number; rate: number; amount: number }>();
   for (const i of o.items) {
-    const k = `${i.sku_code}|${i.unit_price}`;
-    const l = lines.get(k) ?? { name: i.name, qty: 0, rate: Number(i.unit_price), amount: 0 };
+    const k = `${i.sku_code}|${i.unit_price}|${i.free ? "free" : ""}`;
+    const l = lines.get(k) ?? { name: i.free ? `${i.name} (free - offer)` : i.name, qty: 0, rate: Number(i.unit_price), amount: 0 };
     l.qty += i.qty; l.amount += Number(i.line_total);
     lines.set(k, l);
   }
@@ -123,7 +123,7 @@ export function D2cInvoice({ o, print = false }: { o: ShopOrder; print?: boolean
           <div className="text-[13px]">{amountInWords(total)}</div>
         </div>
         <div className="w-64 tabular-nums">
-          {[["Items total", Number(o.subtotal)], ["Delivery", Number(o.delivery_fee)]].map(([l, v]) => (
+          {[["Items total", Number(o.subtotal)], ...(Number(o.discount) ? [[`Offer discount${o.coupon_code ? ` (${o.coupon_code})` : ""}`, -Number(o.discount)]] : []), ["Delivery", Number(o.delivery_fee)]].map(([l, v]) => (
             <div key={l as string} className="flex justify-between py-0.5 text-[13px]"><span className={grey}>{l}</span><span>{invoiceMoney(v as number)}</span></div>
           ))}
           <div className="flex justify-between py-1 text-[15px] font-bold"><span>Total</span><span>{invoiceMoney(total)}</span></div>
@@ -159,14 +159,15 @@ export function D2cPeriodInvoice({ orders, from, to, customer, print = false }: 
   const billed = orders.filter(isBilled);
   const lines = new Map<string, { name: string; qty: number; rate: number; amount: number }>();
   for (const o of billed) for (const i of o.items) {
-    const k = `${i.sku_code}|${i.unit_price}`;
-    const l = lines.get(k) ?? { name: i.name, qty: 0, rate: Number(i.unit_price), amount: 0 };
+    const k = `${i.sku_code}|${i.unit_price}|${i.free ? "free" : ""}`;
+    const l = lines.get(k) ?? { name: i.free ? `${i.name} (free - offer)` : i.name, qty: 0, rate: Number(i.unit_price), amount: 0 };
     l.qty += i.qty; l.amount += Number(i.line_total);
     lines.set(k, l);
   }
   const list = [...lines.values()].sort((a, b) => a.name.localeCompare(b.name));
   const sum = (xs: ShopOrder[], f: (o: ShopOrder) => number) => xs.reduce((a, o) => a + f(o), 0);
   const subtotal = sum(billed, (o) => Number(o.subtotal)), delivery = sum(billed, (o) => Number(o.delivery_fee)), total = sum(billed, (o) => Number(o.total));
+  const discount = sum(billed, (o) => Number(o.discount ?? 0));
   const paid = sum(billed.filter((o) => o.payment_status === "paid"), (o) => Number(o.total));
   const digits = customer.phone.replace(/\D/g, "");
   const number = `GD-${digits.length > 4 ? digits.slice(-4) : digits}-${ymd(from)}-${ymd(to)}`;
@@ -232,6 +233,7 @@ export function D2cPeriodInvoice({ orders, from, to, customer, print = false }: 
         </div>
         <div className="w-64 tabular-nums">
           <div className="flex justify-between py-0.5 text-[13px]"><span className={grey}>Items total</span><span>{invoiceMoney(subtotal)}</span></div>
+          {discount ? <div className="flex justify-between py-0.5 text-[13px]"><span className={grey}>Offer discount</span><span>{invoiceMoney(-discount)}</span></div> : null}
           <div className="flex justify-between py-0.5 text-[13px]"><span className={grey}>Delivery</span><span>{invoiceMoney(delivery)}</span></div>
           <div className="flex justify-between py-1 text-[15px] font-bold"><span>Total</span><span>{invoiceMoney(total)}</span></div>
           <div className="flex justify-between py-0.5 text-[13px]"><span className={grey}>Paid</span><span>{invoiceMoney(paid)}</span></div>
