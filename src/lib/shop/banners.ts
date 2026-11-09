@@ -23,9 +23,9 @@ export async function liveBanners(): Promise<ShopBanner[]> {
     `select b.id, b.title, b.subtitle, b.cta, b.sku_code as sku, b.category, f.id as offer_id, f.badge as offer_badge, b.bg_color, b.image is not null as has_image,
             extract(epoch from b.updated_at)::bigint::text as v
        from shop_banner b
-       -- an offer banner points at the offer only while it runs (else the banner still shows, opening nothing)
+       -- an offer's banner shows only while the offer runs
        left join shop_offer f on f.id = b.offer_id and f.active and (f.starts_at is null or f.starts_at <= now()) and (f.ends_at is null or f.ends_at > now())
-      where b.active
+      where b.active and (b.offer_id is null or f.id is not null)
         and (b.starts_at is null or b.starts_at <= (now() at time zone 'Asia/Kolkata')::date)
         and (b.ends_at is null or b.ends_at >= (now() at time zone 'Asia/Kolkata')::date)
       order by b.priority desc, b.id`,

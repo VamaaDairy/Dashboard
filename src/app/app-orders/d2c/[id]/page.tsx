@@ -95,7 +95,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                         <td className="px-3 py-2.5 text-foreground"><PackQty p={l} /></td>
                         <td className="px-3 py-2.5 text-foreground"><PackUnit p={l} /></td>
                         <td className="px-3 py-2.5 text-right font-medium text-foreground">{i.qty}</td>
-                        <td className="px-3 py-2.5 text-right text-foreground">{i.free ? <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">FREE</span> : rupees(i.unit_price)}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{i.free ? <span className="rounded bg-[#C1DCFE] px-1.5 py-0.5 text-[10px] font-bold text-[#2F3992]">FREE</span> : rupees(i.unit_price)}</td>
                         <td className="px-4 py-2.5 text-right font-medium text-foreground">
                           {rupees(i.line_total)}
                           {Number(i.discount) ? <div className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400">−{rupees(i.discount)} offer</div> : null}

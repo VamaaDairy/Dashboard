@@ -28,7 +28,7 @@ const box = "h-9 rounded-lg border border-input bg-transparent px-3 text-sm";
 const label = "text-xs text-muted-foreground";
 
 /** Roughly what the phone shows (same story-card style as the app), so colour and words can be judged before saving. */
-function Preview({ title, subtitle, cta, bg, poster, product, badge }: { title: string; subtitle: string; cta: string; bg: string; poster: string | null; product: ProductOption | null; badge?: string | null }) {
+export function BannerPreview({ title, subtitle, cta, bg, poster, product, badge }: { title: string; subtitle: string; cta: string; bg: string; poster: string | null; product: ProductOption | null; badge?: string | null }) {
   if (poster) {
     // like the app: the whole picture, never cropped, on a soft blurred copy of itself
     /* eslint-disable @next/next/no-img-element -- a local preview of the picture being uploaded */
@@ -64,7 +64,7 @@ function Preview({ title, subtitle, cta, bg, poster, product, badge }: { title: 
           // eslint-disable-next-line @next/next/no-img-element
           <img src="/gaia-logo.jpg" alt="" className="mb-2 h-8 w-8 rounded-full bg-white object-contain p-0.5" />
         ) : null}
-        {badge ? <div className="mb-1.5 w-fit rounded bg-[#1E8E3E] px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-white">{badge}</div> : null}
+        {badge ? <div className="mb-1.5 w-fit rounded bg-[#C1DCFE] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#2F3992]">{badge}</div> : null}
         <div className="line-clamp-3 text-[15px] font-medium leading-tight tracking-tight">{title || "Banner title"}</div>
         {subtitle ? <div className="mt-1 line-clamp-2 text-[10px] opacity-90">{subtitle}</div> : null}
         {cta ? <div className="mt-2 w-fit rounded-full bg-white px-3 py-1 text-[10px] font-bold" style={{ color: deep }}>{cta}</div> : null}
@@ -90,8 +90,8 @@ export function BannerForm({ targets, banner, onDone }: { targets: BannerTargets
   const [pending, start] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const product = link === "product" ? products.find((p) => p.sku === sku) ?? null : null;
   const offer = link === "offer" ? offers.find((o) => String(o.id) === offerId) ?? null : null;
+  const product = link === "product" || (link === "offer" && sku) ? products.find((p) => p.sku === sku) ?? null : null;
 
   return (
     <form
@@ -141,6 +141,7 @@ export function BannerForm({ targets, banner, onDone }: { targets: BannerTargets
             </select>
           </label>
         ) : null}
+        {link === "offer" ? <input type="hidden" name="sku" value={sku} /> : null}
         {link === "offer" ? (
           <label className={`${label} sm:col-span-2`}>Offer (the app opens it with its products)
             <select name="offerId" value={offerId} onChange={(e) => setOfferId(e.target.value)} className={`${box} mt-1 block w-full`}>
@@ -182,7 +183,7 @@ export function BannerForm({ targets, banner, onDone }: { targets: BannerTargets
       </div>
       <div>
         <div className={`${label} mb-1`}>Preview</div>
-        <Preview title={title} subtitle={subtitle} cta={cta} bg={bg} poster={poster} product={product} badge={offer?.badge} />
+        <BannerPreview title={title} subtitle={subtitle} cta={cta} bg={bg} poster={poster} product={product} badge={offer?.badge} />
       </div>
     </form>
   );

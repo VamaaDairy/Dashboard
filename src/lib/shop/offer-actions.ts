@@ -127,14 +127,46 @@ export async function saveOfferAction(id: number | null, raw: OfferInput): Promi
   } catch (e) {
     return { ok: false, error: `Could not save the offer: ${(e as Error).message}` };
   }
+  await syncOfferBanner(saved);
   revalidatePath("/shop-orders/offers", "layout");
+  revalidatePath("/shop-orders/banners");
   return { ok: true, id: saved };
+}
+
+/**
+ * An offer shown in the app is one of the moving banners at the top of the home screen: designed with
+ * its product and badge, and tapping it adds the offer to the cart. The banner is made the first time and
+ * kept in step with the offer's name, details and product (a poster uploaded on Banners stays); it is
+ * switched off with the offer, and the app only shows it while the offer runs.
+ */
+async function syncOfferBanner(id: number) {
+  const o = await one<{ title: string; description: string | null; show_in_app: boolean; active: boolean; applies_to: string; sku: string | null; code: string | null; priority: number }>(
+    `select title, description, show_in_app, active, applies_to, coalesce(skus[1], free_sku) as sku, code, priority from shop_offer where id = $1`,
+    [id],
+  );
+  if (!o) return;
+  const on = o.show_in_app && o.active;
+  const cta = o.applies_to === "cart" ? (o.code ? `Use ${o.code}` : "Shop now") : "Tap to add";
+  const has = await one(`select 1 from shop_banner where offer_id = $1`, [id]);
+  if (has) {
+    await query(
+      `update shop_banner set title = left($2, 60), subtitle = left($3, 100), cta = $4, sku_code = $5, active = $6, updated_at = now() where offer_id = $1`,
+      [id, o.title, o.description, cta, o.sku, on],
+    );
+  } else if (on) {
+    await query(
+      `insert into shop_banner (title, subtitle, cta, sku_code, offer_id, priority, active) values (left($1, 60), left($2, 100), $3, $4, $5, $6, true)`,
+      [o.title, o.description, cta, o.sku, id, 100 + o.priority],
+    );
+  }
 }
 
 export async function setOfferActiveAction(id: number, active: boolean): Promise<Result> {
   if (!(await editor())) return NO;
   await query(`update shop_offer set active = $2, updated_at = now() where id = $1`, [id, active]);
+  await syncOfferBanner(id);
   revalidatePath("/shop-orders/offers", "layout");
+  revalidatePath("/shop-orders/banners");
   return { ok: true };
 }
 
@@ -159,10 +191,12 @@ export async function deleteOfferAction(id: number): Promise<Result> {
   if (!(await editor())) return NO;
   if (await one(`select 1 from shop_order_offer where offer_id = $1 limit 1`, [id])) {
     await query(`update shop_offer set active = false, updated_at = now() where id = $1`, [id]);
+    await syncOfferBanner(id);
     revalidatePath("/shop-orders/offers", "layout");
     return { ok: false, error: "Orders have used this offer, so it was switched off instead of deleted (their bills still show it)." };
   }
-  await query(`update shop_banner set offer_id = null where offer_id = $1`, [id]);
+  // its own banner goes with it
+  await query(`delete from shop_banner where offer_id = $1`, [id]);
   await query(`delete from shop_offer where id = $1`, [id]);
   revalidatePath("/shop-orders/offers", "layout");
   return { ok: true };
