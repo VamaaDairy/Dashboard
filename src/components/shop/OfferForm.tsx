@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Gift, IndianRupee, Minus, Plus, Search, ShoppingBasket, Tags, Package, X } from "lucide-react";
 import { saveOfferAction, type OfferInput } from "@/lib/shop/offer-actions";
+import { BannerPreview } from "@/components/shop/BannerAdmin";
 import { applyOffers, describeOffer, type Offer } from "@/lib/shop/offers-engine";
 import { cn } from "@/lib/utils";
 
@@ -243,7 +244,7 @@ export function OfferForm({ id, initial, products, categories }: { id: number | 
             <label className={lbl}>Priority<input type="number" {...t("priority")} className={cn(input, "mt-1")} /><span className="mt-1 block text-[11px]">Higher shows first in the app</span></label>
           </div>
           <div className="mt-2 border-t border-border pt-2">
-            <Toggle on={o.showInApp} onChange={(v) => set("showInApp", v)} title="Show in the app's offers list" desc="Off: it still applies, but is not advertised (good for private codes)." />
+            <Toggle on={o.showInApp} onChange={(v) => set("showInApp", v)} title="Show as a banner in the app" desc="Adds it to the moving banners on the home screen; tapping the banner puts the offer in the customer's cart. Off: it still applies, but is not advertised (good for private codes)." />
           </div>
         </Section>
       </div>
@@ -273,31 +274,20 @@ export function OfferForm({ id, initial, products, categories }: { id: number | 
   );
 }
 
-/** Roughly how the app shows a product the offer covers: the photo with the offer ribbon. */
+/** The offer as the app shows it: its banner in the home carousel (tapping it adds the offer to the cart). */
 function AppPreview({ offer, products }: { offer: OfferInput; products: PickProduct[] }) {
-  const p = offer.appliesTo === "products" ? products.find((x) => x.sku === offer.skus[0])
-    : offer.appliesTo === "categories" ? products.find((x) => offer.categories.includes(x.category)) : null;
+  const sku = offer.appliesTo === "products" ? offer.skus[0] : offer.freeSku ?? undefined;
+  const p = sku ? products.find((x) => x.sku === sku) ?? null : null;
   const badge = offer.badge || (offer.kind === "percent" && offer.percent ? `${offer.percent}% OFF` : offer.kind === "flat" && offer.amount ? `₹${offer.amount} OFF` : offer.kind === "free_item" ? "FREE GIFT" : "OFFER");
+  const cta = offer.appliesTo === "cart" ? (offer.code ? `Use ${offer.code}` : "Shop now") : "Tap to add";
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-3 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">In the app</div>
-      <div className="flex gap-3">
-        {p ? (
-          <div className="w-32 shrink-0 overflow-hidden rounded-2xl border border-[#E8E2D2] bg-[#FBF7EC]">
-            <div className="relative aspect-square">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {p.image ? <img src={p.image} alt="" className="size-full object-contain p-2" /> : null}
-              <span className="absolute left-0 top-2 rounded-r-md bg-[#1E8E3E] px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-white">{badge}</span>
-            </div>
-            <div className="px-2 pb-2 text-[10px] font-semibold leading-tight text-[#1C1C1C]">{p.name}<div className="mt-0.5 text-[11px] font-extrabold">{inr(p.price)}</div></div>
-          </div>
-        ) : null}
-        <div className="min-w-0 flex-1 rounded-2xl bg-gradient-to-br from-[#2F3992] to-[#1d2466] p-3 text-white">
-          <div className="inline-block rounded bg-white/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wider">{badge}</div>
-          <div className="mt-1.5 text-[13px] font-semibold leading-tight">{offer.title || "Offer name"}</div>
-          {offer.code ? <div className="mt-2 inline-block rounded border border-dashed border-white/60 px-1.5 py-0.5 font-mono text-[10px]">USE {offer.code}</div> : null}
+      <div className="mb-3 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">Home banner in the app</div>
+      {offer.showInApp ? (
+        <div className="origin-top-left scale-[0.98]">
+          <BannerPreview title={offer.title || "Offer name"} subtitle={offer.description} cta={cta} bg="#2F3992" poster={null} product={p} badge={badge} />
         </div>
-      </div>
+      ) : <p className="text-sm text-muted-foreground">Not shown in the app - it applies only when its conditions are met{offer.code ? " and the code is typed" : ""}.</p>}
     </div>
   );
 }
@@ -347,13 +337,13 @@ function TryIt({ offer, products }: { offer: OfferInput; products: PickProduct[]
             </div>
           ))}
           {q.free.map((f) => (
-            <div key={f.sku} className="flex items-center gap-2 text-[#1E8E3E]">
+            <div key={f.sku} className="flex items-center gap-2 text-[#2F3992]">
               <Gift className="size-3.5" /><span className="min-w-0 flex-1 truncate">{f.name} × {f.qty}</span><span className="font-semibold">FREE</span>
             </div>
           ))}
           <div className="mt-2 space-y-0.5 border-t border-border pt-2 text-[13px]">
             <div className="flex justify-between text-muted-foreground"><span>Items</span><span className="num">{inr(q.subtotal)}</span></div>
-            {q.discount ? <div className="flex justify-between text-[#1E8E3E]"><span>Offer discount</span><span className="num">−{inr(q.discount)}</span></div> : null}
+            {q.discount ? <div className="flex justify-between text-[#2F3992]"><span>Offer discount</span><span className="num">−{inr(q.discount)}</span></div> : null}
             <div className="flex justify-between font-semibold"><span>Customer pays</span><span className="num">{inr(q.subtotal - q.discount)}</span></div>
           </div>
           {!q.applied.length ? <p className="rounded-md bg-muted px-2 py-1.5 text-[12px] text-muted-foreground">{q.hints[0] ?? q.codeMessage ?? "This cart does not get the offer yet."}</p> : null}

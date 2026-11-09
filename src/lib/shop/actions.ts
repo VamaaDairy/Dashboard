@@ -88,7 +88,8 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   const title = text("title");
   // what tapping the banner opens: one product, a whole category, an offer - or nothing
   const link = text("link");
-  const sku = link === "product" ? text("sku") || null : null;
+  // an offer's banner keeps the product it shows (set from the offer)
+  const sku = link === "product" || link === "offer" ? text("sku") || null : null;
   const category = link === "category" ? text("category").slice(0, 60) || null : null;
   const offerId = link === "offer" ? Number(text("offerId")) || null : null;
   const bg = text("bgColor") || "#2F3992";

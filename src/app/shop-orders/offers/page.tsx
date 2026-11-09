@@ -51,7 +51,7 @@ export default async function OffersPage() {
         <PageHeader
           icon={BadgePercent}
           title="Offers"
-          subtitle="Discounts, free items and coupon codes for the Gaia app. The server applies them to every order; the app shows them within a minute."
+          subtitle="Discounts, free items and coupon codes. Each offer shown in the app is a home banner; tapping it adds the offer to the cart. The server prices every order."
           actions={
             <div className="flex gap-2">
               <Link href="/shop-orders/banners" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Banners</Link>
@@ -109,7 +109,7 @@ export default async function OffersPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Link href={canEdit ? `/shop-orders/offers/${o.id}` : "#"} className="font-semibold hover:underline">{o.title}</Link>
                         <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset", STATE[state].cls)}>{STATE[state].label}</span>
-                        {o.badge ? <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white">{o.badge}</span> : null}
+                        {o.badge ? <span className="rounded bg-[#C1DCFE] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-[#2F3992]">{o.badge}</span> : null}
                         {o.code ? <span className="inline-flex items-center gap-1 rounded border border-dashed border-foreground/30 px-1.5 py-0.5 font-mono text-[11px]"><Ticket className="size-3" />{o.code}</span> : null}
                       </div>
                       <div className="mt-0.5 text-sm text-muted-foreground">{summaryOf(o)}</div>
