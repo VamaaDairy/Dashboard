@@ -7,15 +7,15 @@ import { qtyUnit } from "@/lib/products/qty-unit";
 
 /**
  * Product Master for the apps: one product list per app channel (migration 068). D2C is the Gaia shop app,
- * Retail and Distributors are the Gaia Partners app (retailer logins, and distributor / sales officer logins).
+ * Retail and Distributors are the Gaia Distributors app (retailer logins, and distributor / sales officer logins).
  * Each list holds, for its app only, which products show, their order, category, name and size.
  */
 export type AppChannel = "d2c" | "retail" | "distributor";
 
 export const APP_CHANNELS: Array<{ key: AppChannel; label: string; app: string }> = [
   { key: "d2c", label: "D2C", app: "Gaia app (customers)" },
-  { key: "retail", label: "Retailer", app: "Gaia Partners app (retailers)" },
-  { key: "distributor", label: "Wholesale (Distributors)", app: "Gaia Partners app (distributors & sales officers)" },
+  { key: "retail", label: "Retailer", app: "Gaia Distributors app (retailers)" },
+  { key: "distributor", label: "Wholesale (Distributors)", app: "Gaia Distributors app (distributors & sales officers)" },
 ];
 
 export const isAppChannel = (c: string): c is AppChannel => APP_CHANNELS.some((x) => x.key === c);

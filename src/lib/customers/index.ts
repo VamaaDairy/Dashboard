@@ -5,7 +5,7 @@ import { listCustomers, type CustomerRow } from "@/lib/d2c/sales";
 /**
  * Customer Master: every customer the business sells to, in three kinds.
  * - Distributors and retailers are the Customer Masters firms (fp_firm) in the DB and RT channels; they order
- *   from the Gaia Partners app or through sales officers, and may also be a route-orders party.
+ *   from the Gaia Distributors app or through sales officers, and may also be a route-orders party.
  * - D2C customers are the Gaia app's shoppers (shop_customer).
  * The same person or shop can turn up in more than one list (or twice in one): `duplicates` finds those by mobile.
  */

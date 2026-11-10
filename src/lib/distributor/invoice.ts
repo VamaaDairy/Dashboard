@@ -4,7 +4,7 @@ import { one, tx } from "@/lib/db";
 import { labelJoin, syncProductLabels } from "@/lib/products/names";
 
 /**
- * Invoices for the orders placed from the Gaia Partners app (db/081). The seller is the firm the order is
+ * Invoices for the orders placed from the Gaia Distributors app (db/081). The seller is the firm the order is
  * supplied by (its name, GSTIN and address from the Customer Masters), the buyer the distributor or retailer.
  * Prices include GST. An invoice is frozen when issued (at order time, or the first time an older order's
  * invoice is asked for) and numbered per financial year: GP/26-27/00001.

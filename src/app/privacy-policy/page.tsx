@@ -3,7 +3,7 @@ import { GaiaLogo } from "@/components/brand";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Gaia Dairy",
-  description: "Privacy Policy for the Gaia Fresh, Gaia Delivery Partner, Gaia Partners and Gaia Salesforce apps, operated by Vamaa Dairy Private Limited.",
+  description: "Privacy Policy for the Gaia Fresh, Gaia Delivery Partner, Gaia Distributors and Gaia Salesforce apps, operated by Vamaa Dairy Private Limited.",
 };
 
 const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: string[] }[] = [
@@ -31,7 +31,7 @@ const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: str
     list: [
       "Gaia Fresh (Gaia Dairy), for customers who buy our products;",
       "Gaia Delivery Partner, for our delivery boys and transporters;",
-      "Gaia Partners, for our distributors and retailers;",
+      "Gaia Distributors, for our distributors and retailers;",
       "Gaia Salesforce, for our sales officers and other employees.",
     ],
     after: [
@@ -44,14 +44,14 @@ const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: str
       "Gaia Fresh: only when you choose to use your current location to fill in a delivery address. The app never reads your location in the background.",
       "Gaia Delivery Partner: your precise location while you are on duty, including when the screen is off or another app is open. A notification (“Sharing location while you deliver”) stays on the screen the whole time. It is used to show the customer where their order is, to plan routes and dispatch, and to record deliveries. Switching to off duty or signing out stops it.",
       "Gaia Salesforce: your precise location when you punch in and out and when you check in at a store, and your route during the working day (from punch-in to punch-out), including when the screen is off. A notification stays on the screen while the route is being recorded. It is used for attendance, to confirm store visits and to work out travel claims. Nothing is recorded after you punch out.",
-      "Gaia Partners: only when you choose to use your current location to set your firm’s or delivery address.",
+      "Gaia Distributors: only when you choose to use your current location to set your firm’s or delivery address.",
     ],
   },
   {
     title: "Partner and Staff Information",
     list: [
       "Gaia Delivery Partner: name, mobile number, vehicle number (transporters), the orders you deliver, delivery confirmation codes, and ratings that customers give you.",
-      "Gaia Partners: firm and owner name, mobile number, GSTIN, PAN, business address and location, orders, invoices and payment records.",
+      "Gaia Distributors: firm and owner name, mobile number, GSTIN, PAN, business address and location, orders, invoices and payment records.",
       "Gaia Salesforce: your employee profile from our HR records (such as designation, department, date of birth, address, emergency contact, bank account and IFSC, PAN and the last four digits of Aadhaar), attendance, leave, expense claims with photos of receipts you attach, salary slips, an optional profile photo, and the store visits and orders you record.",
       "All apps: your mobile number and PIN. The PIN is stored only in encrypted (hashed) form, and repeated wrong PINs lock the number for a short time. One-time codes for signing up or resetting a PIN are sent by SMS.",
       "Fingerprint or face unlock, where offered, is checked by your phone. We never receive or store biometric data.",
@@ -77,7 +77,7 @@ const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: str
   {
     title: "Keeping and Deleting Your Data",
     paras: [
-      "We keep your information while your account is active and afterwards only for as long as the law requires (for example invoices, tax and payroll records) or as needed to settle disputes. Gaia Fresh customers can delete their account at production.vamadairy.in/delete-account. Users of Gaia Delivery Partner, Gaia Partners or Gaia Salesforce can ask for their account and its data to be deleted by writing to customercare@vamaadairy.com from their registered email or calling +91 8085959595 from their registered number. Records that we must keep by law (such as invoices, tax and payroll records) are retained for the period the law requires and are not used for anything else.",
+      "We keep your information while your account is active and afterwards only for as long as the law requires (for example invoices, tax and payroll records) or as needed to settle disputes. Gaia Fresh customers can delete their account at production.vamadairy.in/delete-account. Users of Gaia Delivery Partner, Gaia Distributors or Gaia Salesforce can ask for their account and its data to be deleted by writing to customercare@vamaadairy.com from their registered email or calling +91 8085959595 from their registered number. Records that we must keep by law (such as invoices, tax and payroll records) are retained for the period the law requires and are not used for anything else.",
     ],
   },
   {
@@ -149,7 +149,7 @@ export default function PrivacyPolicyPage() {
     <article className="mx-auto max-w-3xl px-5 py-10 text-sm leading-relaxed">
       <GaiaLogo className="mx-auto mb-6 w-40" />
       <h1 className="mb-1 text-2xl font-semibold">Privacy Policy</h1>
-      <p className="mb-6 text-muted-foreground">Last updated: 4 November 2026</p>
+      <p className="mb-6 text-muted-foreground">Last updated: 10 November 2026</p>
       {SECTIONS.map((s, i) => (
         <section key={i} className="mb-6 space-y-3">
           {s.title && <h2 className="text-base font-semibold uppercase tracking-wide">{s.title}</h2>}
