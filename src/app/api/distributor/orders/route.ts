@@ -1,14 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { distFromRequest, listDistOrders, MAX_LINE_QTY, placeDistOrder } from "@/lib/distributor";
+import { appOrderExtras } from "@/lib/orders/direct";
 
 export const dynamic = "force-dynamic";
 
-/** Orders this login placed (a distributor: its own; a salesman: the ones he booked). */
+/**
+ * Orders this login placed (a distributor: its own; a salesman: the ones he booked). Each carries deliveryDate,
+ * editableUntil (ISO time, or null when the buyer can no longer change it) and history (placed / edited by Gaia /
+ * confirmed ..., with what changed).
+ */
 export async function GET(req: NextRequest) {
   const login = await distFromRequest(req);
   if (!login) return fail(401, "Please sign in again.");
-  return NextResponse.json({ orders: await listDistOrders(login) });
+  const orders = await listDistOrders(login);
+  const extras = await appOrderExtras(orders.map((o) => o.uid));
+  return NextResponse.json({
+    orders: orders.map(({ uid, ...o }) => ({ ...o, ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }) })),
+  });
 }
 
 /** Place a primary order. Body: { firmUid?, notes?, lines: [{ sku, qty }] } - prices are always worked out here. */

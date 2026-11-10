@@ -206,6 +206,33 @@ async function dealerPrices(firmUid: string, skus?: string[]): Promise<Map<strin
   return new Map((await firmPrices(firmUid, skus)).map((r) => [r.sku, r.price]));
 }
 
+export type PricedLine = { uid: string; sku: string; mrp: number; dp: number; qty: number };
+
+/**
+ * Prices order lines server-side for one buyer: each SKU must be on that app's Product Master list and have a
+ * dealer price for the firm. Used when an order is placed and when it is edited (by the buyer or the office).
+ */
+export async function priceDistLines(
+  channel: "retail" | "distributor", firmUid: string, merged: Map<string, number>,
+): Promise<{ ok: true; lines: PricedLine[] } | { ok: false; error: string }> {
+  const skus = [...merged.keys()];
+  const [listed, prices, prods] = await Promise.all([
+    listAllProducts(channel),
+    dealerPrices(firmUid, skus),
+    query<{ uid: string; sku: string; mrp: number }>(`select uid, sku_code as sku, mrp from fp_product where sku_code = any($1) and active = 1`, [skus]),
+  ]);
+  const visible = new Set(listed.map((p) => p.sku));
+  const byUid = new Map(prods.map((p) => [p.sku, p]));
+  const lines: PricedLine[] = [];
+  for (const [sku, qty] of merged) {
+    const p = byUid.get(sku);
+    const dp = prices.get(sku);
+    if (!p || !visible.has(sku) || !dp || dp <= 0) return { ok: false, error: `${sku} is not available to order.` };
+    lines.push({ uid: p.uid, sku, mrp: Number(p.mrp), dp, qty });
+  }
+  return { ok: true, lines };
+}
+
 export type PlaceResult = { ok: true; orderId: number; total: number } | { ok: false; error: string };
 
 export async function placeDistOrder(
@@ -220,22 +247,9 @@ export async function placeDistOrder(
   if (!merged.size) return { ok: false, error: "The cart is empty." };
   if (merged.size > MAX_LINES) return { ok: false, error: `At most ${MAX_LINES} products per order.` };
 
-  const skus = [...merged.keys()];
-  // a product on this app's Product Master list that has a price for this customer, priced server-side
-  const [listed, prices, prods] = await Promise.all([
-    listAllProducts(appChannelOf(login)),
-    dealerPrices(firm.uid, skus),
-    query<{ uid: string; sku: string; mrp: number }>(`select uid, sku_code as sku, mrp from fp_product where sku_code = any($1) and active = 1`, [skus]),
-  ]);
-  const visible = new Set(listed.map((p) => p.sku));
-  const byUid = new Map(prods.map((p) => [p.sku, p]));
-  const lines: Array<{ uid: string; mrp: number; dp: number; qty: number }> = [];
-  for (const [sku, qty] of merged) {
-    const p = byUid.get(sku);
-    const dp = prices.get(sku);
-    if (!p || !visible.has(sku) || !dp || dp <= 0) return { ok: false, error: `${sku} is not available to order.` };
-    lines.push({ uid: p.uid, mrp: Number(p.mrp), dp, qty });
-  }
+  const priced = await priceDistLines(appChannelOf(login), firm.uid, merged);
+  if (!priced.ok) return priced;
+  const lines = priced.lines;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const total = Math.round(lines.reduce((s, l) => s + l.qty * l.dp, 0) * 100) / 100;
 
@@ -263,8 +277,9 @@ export async function placeDistOrder(
       `insert into fp_booking_order
          (order_uid, order_id, order_type, booking_time, booking_date, total_item, week_of_month, total_quantity,
           total_cost, dealer_cost, status, current_status, reference, from_firm_uid, to_firm_uid, staff_uid,
-          app_kind, app_login_id, app_notes, sf_visit_id)
-       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          app_kind, app_login_id, app_notes, sf_visit_id, delivery_date)
+       values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+               (now() at time zone 'Asia/Kolkata')::date + 1)
        returning uid`,
       [
         n, type, now, now.toISOString().slice(0, 10), lines.length, Math.ceil(now.getDate() / 7), totalQty,
@@ -277,6 +292,10 @@ export async function placeDistOrder(
       ],
     );
     const orderUid = ins.rows[0].uid;
+    await c.query(
+      `insert into dist_order_event (order_uid, action, actor, actor_kind) values ($1, 'placed', $2, 'app')`,
+      [orderUid, `${login.name} (${login.kind})`],
+    );
     let i = 0;
     for (const l of lines) {
       await c.query(
@@ -312,6 +331,8 @@ export interface DistOrderRow {
   /** its GST invoice number, once issued */
   invoiceNo: string | null;
   lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number }>;
+  /** internal: the API adds the order's delivery date, edit window and history from it, then drops it */
+  uid: string;
 }
 
 /** The order's uid when this login may see it (as on its Orders list), else null. */
@@ -343,6 +364,7 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
   );
   return rows.map(({ uid, ...r }) => ({
     ...r,
+    uid,
     date: new Date(r.date).toISOString(),
     lines: items.filter((i) => i.b === uid).map(({ b: _b, ...l }) => l),
   }));
