@@ -99,7 +99,7 @@ export async function distLogin(phone: string, pin: string, kind?: DistLogin["ki
 }
 
 /**
- * The login behind a request's bearer token. `scope` keeps the two apps apart: the Gaia Partners app ("partner",
+ * The login behind a request's bearer token. `scope` keeps the two apps apart: the Gaia Distributors app ("partner",
  * the default) only accepts distributors and retailers, the Gaia Salesforce app ("salesman") only sales officers;
  * "any" is for shared endpoints such as push registration.
  */

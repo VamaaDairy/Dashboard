@@ -20,7 +20,7 @@ function Party({ title, p }: { title: string; p: InvoiceParty }) {
   );
 }
 
-/** The invoice of an app order, laid out to print on A4 (the same invoice the Gaia Partners app shows). */
+/** The invoice of an app order, laid out to print on A4 (the same invoice the Gaia Distributors app shows). */
 export default async function InvoicePage({ params }: { params: Promise<{ uid: string }> }) {
   const { uid } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(uid)) notFound();

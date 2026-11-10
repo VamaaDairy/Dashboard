@@ -37,7 +37,7 @@ export default function DeleteAccountPage() {
       </section>
 
       <section className="mt-8 space-y-3">
-        <h2 className="text-base font-semibold">Gaia Delivery Partner, Gaia Partners and Gaia Salesforce</h2>
+        <h2 className="text-base font-semibold">Gaia Delivery Partner, Gaia Distributors and Gaia Salesforce</h2>
         <p>
           This form is for Gaia Dairy customer accounts. To delete a delivery partner, distributor, retailer or staff account, write to{" "}
           <a className="underline" href="mailto:customercare@vamaadairy.com">customercare@vamaadairy.com</a> or call +91 8085959595 from your
