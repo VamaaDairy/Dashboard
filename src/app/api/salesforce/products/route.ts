@@ -10,6 +10,6 @@ export async function GET(req: NextRequest) {
   const login = await sfFromRequest(req);
   if (!login) return fail(401, "Please sign in again.");
   const products = await catalogFor(login, req.nextUrl.searchParams.get("firm") ?? undefined);
-  if (!products) return fail(400, "Choose the distributor first.");
+  if (!products) return fail(400, "Choose the party first.");
   return jsonWithEtag(req, { products }, 0, "private");
 }
