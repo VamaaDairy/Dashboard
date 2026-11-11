@@ -26,6 +26,8 @@ const TRADE_FROM = `fp_booking_order b
   left join fp_firm par on par.uid = f.parent_firm_uid
   left join dist_login dl on dl.id = b.app_login_id`;
 
+// the day an app order is for (db/098): set when placed, else the day after
+const DELIVERY = `coalesce(b.delivery_date, (b.booking_time at time zone 'Asia/Kolkata')::date + 1)`;
 const IS_RETAIL = `(b.app_kind = 'retailer' or ch.channel_code = 'RT')`;
 // every primary order is a distributor's (whether placed from the app or the portal); retailer orders are the app's
 const IS_TRADE = `(b.app_kind is not null or b.order_type = 'PRIMARY')`;
@@ -51,16 +53,23 @@ export interface TradeOrderRow {
   gstin: string | null;
   supplier: string | null;
   bookedBy: string | null;
+  /** app orders only: the day it is for (db/098) */
+  deliveryDate: string | null;
 }
 
 const TRADE_ROW = `b.uid, b.order_id as "orderId", b.booking_time as "placedAt", b.status, b.rejection_reason as reason,
   b.total_item as items, b.total_quantity as qty, b.total_cost as total, b.app_kind as "appKind", b.app_notes as notes,
   f.name as buyer, f.firm_code as "buyerCode", f.city, f.state_state as state, coalesce(f.phone, dl.phone) as phone, f.gstin,
-  sup.name as supplier, ${person("so")} as "bookedBy"`;
+  sup.name as supplier, ${person("so")} as "bookedBy",
+  case when b.app_kind is not null then ${DELIVERY}::text end as "deliveryDate"`;
 
-export async function listTradeOrders(kind: TradeKind, opts: { status?: string; q?: string } = {}): Promise<TradeOrderRow[]> {
+export async function listTradeOrders(kind: TradeKind, opts: { status?: string; q?: string; date?: string } = {}): Promise<TradeOrderRow[]> {
   const params: unknown[] = [];
   const where = [tradeWhere(kind)];
+  if (opts.date && /^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
+    params.push(opts.date);
+    where.push(`b.app_kind is not null and ${DELIVERY} = $${params.length}::date`);
+  }
   if (opts.status) {
     params.push(opts.status.toLowerCase());
     where.push(`lower(b.status) = $${params.length}`);

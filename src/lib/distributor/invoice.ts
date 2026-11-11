@@ -149,6 +149,22 @@ export async function issueInvoice(c: PoolClient, orderUid: string): Promise<Inv
   return data;
 }
 
+/**
+ * Re-draws an issued invoice after the order's lines were edited before confirmation, inside [c]'s transaction.
+ * The invoice keeps its number and issue date; only its lines and totals follow the order.
+ */
+export async function redraftInvoice(c: PoolClient, orderUid: string): Promise<void> {
+  const had = (await c.query(`select data from dist_invoice where booking_order_uid = $1 for update`, [orderUid])).rows[0] as { data: InvoiceData } | undefined;
+  if (!had) {
+    await issueInvoice(c, orderUid);
+    return;
+  }
+  const d = await draft(c, orderUid);
+  if (!d) return;
+  const data: InvoiceData = { ...d, invoiceNo: had.data.invoiceNo, issuedAt: had.data.issuedAt };
+  await c.query(`update dist_invoice set data = $2 where booking_order_uid = $1`, [orderUid, data]);
+}
+
 /** The order's invoice with its status now, issuing it first if the order has none yet. */
 export async function invoiceFor(orderUid: string): Promise<Invoice | null> {
   // an invoice once issued keeps its lines as they were; a new one takes the product names as they are now
