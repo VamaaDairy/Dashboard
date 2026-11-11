@@ -5,7 +5,7 @@ import { sfFromRequest } from "@/lib/salesforce";
 
 export const dynamic = "force-dynamic";
 
-/** Who is signed in and the distributors they can book orders for. */
+/** Who is signed in and the parties they can book orders for (every active party they are the sales contact of). */
 export async function GET(req: NextRequest) {
   const login = await sfFromRequest(req);
   if (!login) return fail(401, "Please sign in again.");

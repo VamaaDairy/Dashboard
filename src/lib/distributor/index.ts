@@ -29,6 +29,8 @@ export interface DistFirm {
   code: string;
   city: string | null;
   channel: string | null;
+  /** DB, SS, MFS, IT, PT, RT ... (RT: a retailer, ordered at retail prices on its distributor) */
+  channelCode: string | null;
   type: string | null;
   class: string | null;
   active: boolean;
@@ -57,7 +59,7 @@ export interface DistFirm {
 
 // the same joins and columns as the Customer Masters page (src/lib/masters/schemas/customers.ts)
 const FIRM_SELECT = `
-  select f.uid, f.name, f.firm_code as code, f.city, ch.channel, f.firm_type as type, f.firm_class as class,
+  select f.uid, f.name, f.firm_code as code, f.city, ch.channel, ch.channel_code as "channelCode", f.firm_type as type, f.firm_class as class,
          f.active = 1 as active, p.name as "servedBy", b.beat_name as route, f.erp_code as "erpCode", f.created_at as "createdAt",
          f.contact_person as "contactPerson", f.phone, f.landline, f.email, f.address, f.place as area, f.district, f.state_state as state, f.pincode,
          f.latitude as lat, f.longitude as lng, f.gstin, f.pan, f.license_no as "licenceNo", f.credit_limit as "creditLimit",
@@ -116,17 +118,13 @@ export async function firmsFor(login: DistLogin): Promise<DistFirm[]> {
   if (login.kind !== "salesman") {
     return query<DistFirm>(`${FIRM_SELECT} where f.uid = $1 and f.active = 1`, [login.firmUid]);
   }
-  const mapped = await query<DistFirm>(
-    `${FIRM_SELECT} join fp_channel c on c.uid = f.channel_uid
-     where f.sales_contact_uid = $1 and f.active = 1 and c.level <= 3
-     order by f.name`,
-    [login.staffUid],
-  );
-  if (mapped.length) return mapped;
+  // every active party this officer is the sales contact for - super stockists, distributors, MFS, institutions,
+  // PT and retailers - but never the company itself; nothing when none is mapped to them
   return query<DistFirm>(
-    `${FIRM_SELECT} join fp_channel c on c.uid = f.channel_uid
-     where f.active = 1 and c.level = 3
-     order by f.name`,
+    `${FIRM_SELECT}
+     where f.sales_contact_uid = $1 and f.active = 1 and coalesce(ch.level, 9) > 1
+     order by coalesce(ch.level, 9), ch.channel, f.name`,
+    [login.staffUid],
   );
 }
 
@@ -139,12 +137,16 @@ async function firmAllowed(login: DistLogin, firmUid: string | undefined): Promi
 /** Which Product Master list a login orders from: retailers the Retail list, distributors and sales officers the Distributors list. */
 export const appChannelOf = (login: DistLogin): "retail" | "distributor" => (login.kind === "retailer" ? "retail" : "distributor");
 
+/** The list an order for this party is priced from: a retailer (RT) party is on the Retail list, whoever books it. */
+export const partyChannel = (login: DistLogin, firm: Pick<DistFirm, "channelCode">): "retail" | "distributor" =>
+  login.kind === "retailer" || (firm.channelCode ?? "").toUpperCase() === "RT" ? "retail" : "distributor";
+
 /** The catalogue the retail app shows, priced at this distributor's dealer price. */
 export async function catalogFor(login: DistLogin, firmUid: string | undefined): Promise<ShopProduct[] | null> {
   const firm = await firmAllowed(login, firmUid);
   if (!firm) return null;
   // the Product Master list for this app (Retail or Distributors), each product they have a price for
-  const [products, prices] = await Promise.all([listAllProducts(appChannelOf(login)), dealerPrices(firm.uid)]);
+  const [products, prices] = await Promise.all([listAllProducts(partyChannel(login, firm)), dealerPrices(firm.uid)]);
   return products.flatMap((p) => {
     const dp = prices.get(p.sku);
     return dp && dp > 0 ? [{ ...p, price: dp }] : [];
@@ -240,14 +242,15 @@ export async function placeDistOrder(
   input: { firmUid?: string; lines: Array<{ sku: string; qty: number }>; notes?: string | null; visitId?: number | null },
 ): Promise<PlaceResult> {
   const firm = await firmAllowed(login, input.firmUid);
-  if (!firm) return { ok: false, error: "Choose the distributor this order is for." };
+  if (!firm) return { ok: false, error: "Choose the party this order is for." };
 
   const merged = new Map<string, number>();
   for (const l of input.lines) merged.set(l.sku, (merged.get(l.sku) ?? 0) + l.qty);
   if (!merged.size) return { ok: false, error: "The cart is empty." };
   if (merged.size > MAX_LINES) return { ok: false, error: `At most ${MAX_LINES} products per order.` };
 
-  const priced = await priceDistLines(appChannelOf(login), firm.uid, merged);
+  const channel = partyChannel(login, firm);
+  const priced = await priceDistLines(channel, firm.uid, merged);
   if (!priced.ok) return priced;
   const lines = priced.lines;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
@@ -259,7 +262,8 @@ export async function placeDistOrder(
     const [{ n }] = (await c.query<{ n: number }>(`select coalesce(max(order_id), 0) + 1 as n from fp_booking_order`)).rows;
     const statuses = (await c.query<{ status: string }>(`select distinct status from fp_booking_order`)).rows.map((r) => r.status);
     const status = statuses.find((s) => /^(pending|open|new|booked|created|placed)/i.test(s)) ?? "Pending";
-    const retailer = login.kind === "retailer";
+    // a retailer's order (placed by the retailer or booked for one by a sales officer) is a secondary order on its distributor
+    const retailer = channel === "retail";
     const type = (await c.query<{ t: string | null }>(
       `select mode() within group (order by b.order_type) as t
        from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid join fp_channel ch on ch.uid = f.channel_uid
