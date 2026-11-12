@@ -36,6 +36,11 @@ export interface BatchMilk {
   fat_pct: number | null;
   snf_pct: number | null;
   cost_per_litre: number | null;
+  /** Lab test of this milk when it was taken out, if entered - a separate record from the tank's blend above. */
+  test_fat_pct: number | null;
+  test_snf_pct: number | null;
+  test_clr: number | null;
+  tested_by: string | null;
 }
 
 /** Milk one batch gave back to one tank. */
@@ -78,6 +83,10 @@ export interface ProductionDaySummary {
   labour_hours: number;   // worker-hours
   labour_cost: number;
   output: { name: string; unit: string; qty: number }[];
+  /** Lab test of the day's milk, weighted by the litres tested; null when nothing was tested. */
+  lab_fat_pct: number | null;
+  lab_snf_pct: number | null;
+  lab_clr: number | null;
 }
 
 export async function getBulkProducts(): Promise<BulkProduct[]> {
@@ -131,8 +140,10 @@ export async function getBatches(date: string): Promise<Batch[]> {
   );
   const milk = await query<BatchMilk & { batch_id: string }>(
     `select m.id, m.bulk_batch_id as batch_id, m.tank_id, t.name as tank_name, m.qty_litre as litres,
-            m.fat_pct, m.snf_pct, m.cost_per_litre
+            m.fat_pct, m.snf_pct, m.cost_per_litre,
+            x.fat_pct as test_fat_pct, x.snf_pct as test_snf_pct, x.clr as test_clr, x.entered_by as tested_by
        from tank_movement m join tank t on t.id = m.tank_id
+       left join production_milk_test x on x.batch_id = m.bulk_batch_id and x.tank_id = m.tank_id
       where m.bulk_batch_id = any($1) and m.direction = 'out' order by t.sort_order, m.created_at, m.id`,
     [batches.map((b) => b.id)],
   );
@@ -184,12 +195,31 @@ export async function getProductionDays(limit = 30): Promise<ProductionDaySummar
   for (const r of rows) {
     let d = byDay.get(r.day);
     if (!d) {
-      d = { day: r.day, batches: r.batches, complete: r.complete, milk_litre: r.milk_litre, labour_hours: r.labour_hours, labour_cost: r.labour_cost, output: [] };
+      d = { day: r.day, batches: r.batches, complete: r.complete, milk_litre: r.milk_litre, labour_hours: r.labour_hours, labour_cost: r.labour_cost, output: [],
+            lab_fat_pct: null, lab_snf_pct: null, lab_clr: null };
       byDay.set(r.day, d);
     }
     const o = d.output.find((x) => x.name === r.name);
     if (o) o.qty += r.qty;
     else d.output.push({ name: r.name, unit: r.unit, qty: r.qty });
+  }
+  if (byDay.size) {
+    const lab = await query<{ day: string; fat: number | null; snf: number | null; clr: number | null }>(
+      `select to_char(b.batch_date, 'YYYY-MM-DD') as day,
+              sum(m.qty_litre * x.fat_pct) / nullif(sum(m.qty_litre) filter (where x.fat_pct is not null), 0) as fat,
+              sum(m.qty_litre * x.snf_pct) / nullif(sum(m.qty_litre) filter (where x.snf_pct is not null), 0) as snf,
+              sum(m.qty_litre * x.clr) / nullif(sum(m.qty_litre) filter (where x.clr is not null), 0) as clr
+         from production_milk_test x
+         join bulk_batch b on b.id = x.batch_id
+         join tank_movement m on m.bulk_batch_id = x.batch_id and m.tank_id = x.tank_id and m.direction = 'out'
+        where b.scenario_id = $1 and b.batch_date = any($2::date[])
+        group by b.batch_date`,
+      [await activeScenarioId(), [...byDay.keys()]],
+    );
+    for (const l of lab) {
+      const d = byDay.get(l.day);
+      if (d) Object.assign(d, { lab_fat_pct: l.fat, lab_snf_pct: l.snf, lab_clr: l.clr });
+    }
   }
   return [...byDay.values()];
 }
