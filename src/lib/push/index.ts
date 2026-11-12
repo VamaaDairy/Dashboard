@@ -113,6 +113,7 @@ const FOR_SUBSCRIPTION = {
   paused: { title: "Subscription paused", body: "Your subscription is paused. No deliveries until you resume it." },
   resumed: { title: "Subscription resumed", body: "Your subscription is active again." },
   cancelled: { title: "Subscription cancelled", body: "Your subscription was cancelled." },
+  updated: { title: "Subscription updated", body: "Gaia updated your subscription. Open the app to see your deliveries." },
 } as const;
 
 /** Tells the customer their subscription was started, paused, resumed or cancelled. */
