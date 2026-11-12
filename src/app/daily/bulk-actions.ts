@@ -1,7 +1,9 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { query, tx } from "@/lib/db";
+import { userFromToken } from "@/lib/access-server";
 import { activeScenarioId } from "@/lib/model/load";
 import { recomputeTank, syncBatchMilk } from "@/lib/tanks/engine";
 import { syncMilkProcessed } from "@/lib/production/sync";
@@ -94,8 +96,8 @@ export async function saveProductIngredients(
 export interface DayRow {
   bulk_product_id: string;
   output_qty: number | null;
-  /** milk taken out of the tanks for it: which tank, how many litres */
-  milk: { tank_id: string; litres: number }[];
+  /** milk taken out of the tanks for it: which tank, how many litres, and optionally its lab test */
+  milk: { tank_id: string; litres: number; fat_pct?: number | null; snf_pct?: number | null; clr?: number | null }[];
   /** milk not used, put back into a tank at the blend it was drawn at */
   returns: { tank_id: string; litres: number }[];
   /** toned / cow milk only: put the output (yield) back into this tank */
@@ -113,6 +115,13 @@ const TANK_OUTPUT = new Set(["toned_milk", "cow_milk"]);
 function check(v: number | null, label: string) {
   if (v === null) return;
   if (!Number.isFinite(v) || v < 0) throw new Error(`${label}: "${v}" is not a valid number`);
+}
+
+/** An optional lab reading: blank is fine, otherwise a number from 0 to [max]. */
+function reading(v: number | null | undefined, max: number, label: string): number | null {
+  if (v === null || v === undefined) return null;
+  if (!Number.isFinite(v) || v < 0 || v > max) throw new Error(`${label}: ${v} doesn't look right (0 to ${max})`);
+  return v;
 }
 
 /**
@@ -133,6 +142,8 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
   return guard(async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Pick a date");
     const scenario = await activeScenarioId();
+    const me = await userFromToken((await cookies()).get("session")?.value);
+    const who = me ? me.name || me.email : null;
 
     await tx(async (client) => {
       const touched = new Set<string>();   // tanks whose ledger changed
@@ -155,10 +166,18 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
 
         // one draw per tank: two lines on the same tank are added together
         const draws = new Map<string, number>();
+        // the lab test of each tank's milk, if entered (a separate record; the tank's own blend is untouched)
+        const tests = new Map<string, { fat: number | null; snf: number | null; clr: number | null }>();
         for (const m of r.milk ?? []) {
           check(m.litres, `${name}: milk`);
           if (!m.tank_id || !(m.litres > 0)) continue;
           draws.set(m.tank_id, (draws.get(m.tank_id) ?? 0) + m.litres);
+          const t = {
+            fat: reading(m.fat_pct, 20, `${name}: lab FAT %`),
+            snf: reading(m.snf_pct, 20, `${name}: lab SNF %`),
+            clr: reading(m.clr, 40, `${name}: lab CLR`),
+          };
+          if (t.fat !== null || t.snf !== null || t.clr !== null) tests.set(m.tank_id, t);
         }
         if (draws.size) {
           const tanks = await client.query(`select id from tank where id = any($1) and scenario_id = $2`, [[...draws.keys()], scenario]);
@@ -243,6 +262,23 @@ export async function saveProductionDay(date: string, rows: DayRow[]): Promise<R
             `insert into bulk_batch_ingredient (batch_id, ingredient_id, name, qty, unit, sort_order)
              values ($1, $2, $3, $4, $5, $6)`,
             [batchId, l.ingredient_id || null, l.name, Number(l.qty), l.unit || "kg", i],
+          );
+        }
+
+        // lab tests: one per tank drawn from; a tank no longer drawn from, or left blank, loses its test
+        await client.query(`delete from production_milk_test where batch_id = $1 and not (tank_id = any($2::uuid[]))`, [batchId, [...tests.keys()]]);
+        for (const [tankId, t] of tests) {
+          await client.query(
+            `insert into production_milk_test (batch_id, tank_id, fat_pct, snf_pct, clr, entered_by)
+             values ($1, $2, $3, $4, $5, $6)
+             on conflict (batch_id, tank_id) do update set fat_pct = excluded.fat_pct, snf_pct = excluded.snf_pct, clr = excluded.clr,
+               entered_by = case when (production_milk_test.fat_pct, production_milk_test.snf_pct, production_milk_test.clr)
+                                      is not distinct from (excluded.fat_pct, excluded.snf_pct, excluded.clr)
+                                 then production_milk_test.entered_by else excluded.entered_by end,
+               updated_at = case when (production_milk_test.fat_pct, production_milk_test.snf_pct, production_milk_test.clr)
+                                      is not distinct from (excluded.fat_pct, excluded.snf_pct, excluded.clr)
+                                 then production_milk_test.updated_at else now() end`,
+            [batchId, tankId, t.fat, t.snf, t.clr, who],
           );
         }
 

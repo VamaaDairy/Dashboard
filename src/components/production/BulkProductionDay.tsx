@@ -19,7 +19,8 @@ import type { Batch, BatchMilk, BulkProduct, IngredientOption, ProductionDaySumm
 import type { TankDay } from "@/lib/tanks/data";
 
 type Line = { ingredient_id: string | null; name: string; qty: string; unit: string; custom?: boolean };
-type Draw = { tank_id: string; litres: string };
+/** A tank line; on a draw, fat / snf / clr are the optional lab test of that milk ("" = not tested). */
+type Draw = { tank_id: string; litres: string; fat?: string; snf?: string; clr?: string };
 type Row = {
   output_qty: string; labour_workers: string; labour_hours: string; labour_cost: string;
   milk: Draw[]; returns: Draw[]; ingredients: Line[];
@@ -38,6 +39,33 @@ const val = (s: string) => {
   return s.trim() === "" || !Number.isFinite(v) ? null : v;
 };
 const num = (n: number | null | undefined) => (n === null || n === undefined ? null : Number(n));
+
+/**
+ * The lab test across a product's draws: each reading weighted by the litres of the tanks it was entered for.
+ * null where nothing was tested. Separate from the tank blend (fat / SNF columns), which drives kg and cost.
+ */
+function labOf(draws: Draw[]): { fat: number | null; snf: number | null; clr: number | null } {
+  const avg = (k: "fat" | "snf" | "clr") => {
+    let l = 0, sum = 0;
+    for (const d of draws) {
+      const v = val(d[k] ?? ""), litres = val(d.litres) ?? 0;
+      if (!d.tank_id || v === null || litres <= 0) continue;
+      l += litres;
+      sum += litres * v;
+    }
+    return l > 0 ? sum / l : null;
+  };
+  return { fat: avg("fat"), snf: avg("snf"), clr: avg("clr") };
+}
+
+/** "4.20 · 8.50 · 28.0" for the table; a dash for each reading not taken, or one dash for none. */
+function labText(t: { fat: number | null; snf: number | null; clr: number | null }): string {
+  if (t.fat === null && t.snf === null && t.clr === null) return "—";
+  const f = (v: number | null, d: number) => (v === null ? "—" : formatNumber(v, d));
+  return `${f(t.fat, 2)} · ${f(t.snf, 2)} · ${f(t.clr, 1)}`;
+}
+
+const reading = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(Number(n)));
 
 /** Litres in a list of tank lines (those with a tank and a quantity). */
 function returned(lines: Draw[]): number {
@@ -111,7 +139,10 @@ export function BulkProductionDay({
       return [p.id, {
         output_qty: str(b.output_qty), labour_workers: str(b.labour_workers), labour_hours: str(b.labour_hours),
         labour_cost: str(b.labour_cost),
-        milk: b.milk.map((m) => ({ tank_id: m.tank_id, litres: String(Number(m.litres)) })),
+        milk: b.milk.map((m) => ({
+          tank_id: m.tank_id, litres: String(Number(m.litres)),
+          fat: reading(m.test_fat_pct), snf: reading(m.test_snf_pct), clr: reading(m.test_clr),
+        })),
         returns: b.returns.map((m) => ({ tank_id: m.tank_id, litres: String(Number(m.litres)) })),
         ingredients: b.ingredients.map((i) => ({ ingredient_id: i.ingredient_id, name: i.name, qty: String(Number(i.qty)), unit: i.unit })),
         output_tank: b.output_tank_id ?? "",
@@ -183,7 +214,10 @@ export function BulkProductionDay({
         bulk_product_id: p.id,
         output_qty: val(r.output_qty), labour_workers: val(r.labour_workers), labour_hours: val(r.labour_hours),
         labour_cost: val(r.labour_cost), notes: null,
-        milk: r.milk.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => ({ tank_id: d.tank_id, litres: val(d.litres) ?? 0 })),
+        milk: r.milk.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => ({
+          tank_id: d.tank_id, litres: val(d.litres) ?? 0,
+          fat_pct: val(d.fat ?? ""), snf_pct: val(d.snf ?? ""), clr: val(d.clr ?? ""),
+        })),
         returns: r.returns.filter((d) => d.tank_id && (val(d.litres) ?? 0) > 0).map((d) => ({ tank_id: d.tank_id, litres: val(d.litres) ?? 0 })),
         output_tank_id: TANK_OUTPUT.includes(p.code) && r.output_tank ? r.output_tank : null,
         ingredients: r.ingredients.map((l) => ({ ingredient_id: l.ingredient_id, name: l.name, qty: Number(l.qty), unit: l.unit })),
@@ -259,6 +293,7 @@ export function BulkProductionDay({
               <Th>Kg fat</Th>
               <Th>Kg SNF</Th>
               <Th>Milk ₹</Th>
+              <Th>Lab FAT · SNF · CLR</Th>
               <Th align="left">Ingredients</Th>
               <Th>Yield</Th>
               <Th>Per 100 L milk</Th>
@@ -319,6 +354,11 @@ export function BulkProductionDay({
                     <td className="num px-3 py-1.5 text-right">{formatNumber(m.kgFat, 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{formatNumber(m.kgSnf, 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{m.litres > 0 ? formatNumber(m.cost, 0) : "—"}</td>
+                    <td className="num px-3 py-1.5 text-right">
+                      <button onClick={() => setDrawing(p.id)} className="hover:underline" title="Lab test of the milk taken out (optional) - enter it in the milk window">
+                        {labText(labOf(draws))}
+                      </button>
+                    </td>
                     <td className="max-w-56 px-3 py-1.5">
                       <button onClick={() => setEditing(p.id)}
                         className="block max-w-full truncate rounded-md border border-border px-2 py-1 text-left text-[12px] hover:bg-muted"
@@ -359,7 +399,7 @@ export function BulkProductionDay({
                   </tr>
                 );
               })}
-              {active.length === 0 ? <Empty colSpan={15}>No products yet - add them below.</Empty> : null}
+              {active.length === 0 ? <Empty colSpan={16}>No products yet - add them below.</Empty> : null}
             </tbody>
             {active.length ? (
               <tfoot>
@@ -371,6 +411,7 @@ export function BulkProductionDay({
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgFat, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.kgSnf, 1)}</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.milkCost, 0)}</td>
+                  <td className="num px-3 py-2 text-right">{labText(labOf(active.flatMap((p) => rows[p.id].milk)))}</td>
                   <td colSpan={5} />
                   <td className="num px-3 py-2 text-right text-muted-foreground">{formatNumber(totals.workerHours, 1)} h</td>
                   <td className="num px-3 py-2 text-right">{formatNumber(totals.labour, 0)}</td>
@@ -410,7 +451,7 @@ export function BulkProductionDay({
         </DialogContent>
       </Dialog>
 
-      <div className="max-w-2xl">
+      <div className="max-w-3xl">
         <Section title="Recent production days">
           <div className="overflow-x-auto">
             <table className="w-full whitespace-nowrap text-[13px]">
@@ -419,6 +460,9 @@ export function BulkProductionDay({
                 <Th>Products</Th>
                 <Th>Complete</Th>
                 <Th>Milk L</Th>
+                <Th>Lab FAT %</Th>
+                <Th>Lab SNF %</Th>
+                <Th>Lab CLR</Th>
                 <Th>Worker-h</Th>
                 <Th>Labour ₹</Th>
               </THead>
@@ -433,11 +477,14 @@ export function BulkProductionDay({
                       {d.complete} / {d.batches}
                     </td>
                     <td className="num px-3 py-1.5 text-right">{formatNumber(d.milk_litre, 0)}</td>
+                    <td className="num px-3 py-1.5 text-right">{d.lab_fat_pct === null ? "—" : formatNumber(Number(d.lab_fat_pct), 2)}</td>
+                    <td className="num px-3 py-1.5 text-right">{d.lab_snf_pct === null ? "—" : formatNumber(Number(d.lab_snf_pct), 2)}</td>
+                    <td className="num px-3 py-1.5 text-right">{d.lab_clr === null ? "—" : formatNumber(Number(d.lab_clr), 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{formatNumber(d.labour_hours, 1)}</td>
                     <td className="num px-3 py-1.5 text-right">{formatNumber(d.labour_cost, 0)}</td>
                   </tr>
                 ))}
-                {history.length === 0 ? <Empty colSpan={6}>No production saved yet.</Empty> : null}
+                {history.length === 0 ? <Empty colSpan={9}>No production saved yet.</Empty> : null}
               </tbody>
             </table>
           </div>
@@ -481,6 +528,10 @@ function MilkBody({
   const updateBack = (i: number, patch: Partial<Draw>) => setBack((bs) => bs.map((b, k) => (k === i ? { ...b, ...patch } : b)));
   const returnTanks = tanks.filter((t) => t.is_active || back.some((b) => b.tank_id === t.tank_id));
   const over = lines.some((l, i) => l.tank_id && (val(l.litres) ?? 0) > available(l.tank_id) - askedElsewhere(l.tank_id, i) + 0.05);
+  const badLab = lines.some((l) => (["fat", "snf", "clr"] as const).some((k) => {
+    const t = (l[k] ?? "").trim(), v = val(t);
+    return t !== "" && (v === null || v < 0 || v > (k === "clr" ? 40 : 20));
+  }));
   const dash = (v: number | null | undefined, d = 2) => (v === null || v === undefined ? "—" : formatNumber(v, d));
 
   return (
@@ -490,6 +541,7 @@ function MilkBody({
         <DialogDescription>
           Pick the tank and how many litres went into today&apos;s {product.name}. Fat, SNF and cost come from the tank;
           Save day takes the milk out of it. Milk you didn&apos;t use can be returned to a tank below.
+          If the milk was tested, enter its FAT, SNF and CLR - optional, and kept as a separate lab record.
         </DialogDescription>
       </DialogHeader>
 
@@ -538,6 +590,24 @@ function MilkBody({
                 <p className={`mt-1.5 text-[11px] ${short ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
                   {short ? `Only ${formatNumber(Math.max(left, 0), 1)} L left in this tank on ${date}` : `${formatNumber(Math.max(left, 0), 1)} L in the tank on ${date}`}
                 </p>
+              ) : null}
+
+              {l.tank_id ? (
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <span className="mb-2 text-[11px] font-semibold text-muted-foreground">Lab test <span className="font-normal">(optional)</span></span>
+                  {([["fat", "FAT %", "e.g. 4.5"], ["snf", "SNF %", "e.g. 8.5"], ["clr", "CLR", "e.g. 28"]] as const).map(([k, label, hint]) => {
+                    const v = val(l[k] ?? "");
+                    const bad = v !== null && (v < 0 || v > (k === "clr" ? 40 : 20));
+                    return (
+                      <label key={k} className="w-24">
+                        <span className="mb-1 block text-[11px] font-medium text-muted-foreground">{label}</span>
+                        <input inputMode="decimal" value={l[k] ?? ""} placeholder={hint} onChange={(e) => update(i, { [k]: e.target.value })}
+                          className={`h-9 w-full rounded-lg border bg-white px-2.5 text-right text-[13px] focus:outline-none ${bad ? "border-destructive" : "border-border focus:border-foreground/40"}`}
+                          aria-label={`Lab ${label}`} aria-invalid={bad || undefined} />
+                      </label>
+                    );
+                  })}
+                </div>
               ) : null}
 
               {b ? (
@@ -650,7 +720,7 @@ function MilkBody({
 
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={over || tooMuchBack} className="bg-foreground text-background hover:bg-foreground/85">Done</Button>
+        <Button type="submit" disabled={over || tooMuchBack || badLab} className="bg-foreground text-background hover:bg-foreground/85">Done</Button>
       </DialogFooter>
     </form>
   );
