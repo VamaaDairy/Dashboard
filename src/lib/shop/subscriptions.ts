@@ -237,6 +237,10 @@ export async function updateSubscription(
     vals.push(v);
     sets.push(`${col} = $${vals.length}`);
   };
+  if (patch.sku !== undefined) {
+    if (!(await pricesFor([patch.sku])).has(patch.sku)) return false;
+    put("sku_code", patch.sku);
+  }
   if (patch.qty !== undefined) put("qty", patch.qty);
   if (patch.frequency !== undefined) {
     put("frequency", patch.frequency);

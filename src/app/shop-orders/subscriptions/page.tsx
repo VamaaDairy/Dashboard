@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { ChevronRight, FileText } from "lucide-react";
-import { CreateOrdersButton } from "@/components/shop/SubscriptionAdmin";
+import { CreateOrdersButton, SubscriptionManager } from "@/components/shop/SubscriptionAdmin";
+import { setDayAction, setStatusAction, updatePlanAction, vacationAction } from "./actions";
 import { OrdersTable } from "@/components/shop/OrdersTable";
 import { query } from "@/lib/db";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { addDays, allSubscriptions, CUTOFF_HOUR, daySummary, frequencyLabel, todayIST, type SubscriptionRow } from "@/lib/shop/subscriptions";
+import { addDays, allSubscriptions, CUTOFF_HOUR, customerCalendar, daySummary, firstEditableDay, frequencyLabel, todayIST, type SubscriptionRow } from "@/lib/shop/subscriptions";
+import { listProducts } from "@/lib/shop/catalog";
 import { subscriptionOrders, subscriptionStats } from "@/lib/shop/order-board";
 import { toOrderRow } from "@/lib/shop/order-rows";
 import { isBilled } from "@/components/shop/D2cInvoice";
@@ -23,7 +25,7 @@ const monthName = (k: string) => new Date(`${k}-01T00:00:00Z`).toLocaleDateStrin
 /**
  * Subscriptions: customers' repeat deliveries from the Gaia app, one row per customer with what they subscribe to.
  * Click a customer to open every order their subscription has made (the same rows as D2C orders) and an invoice
- * for each month.
+ * for each month; with edit rights, also to change their plan, pause / resume / cancel, set a vacation or change a day.
  */
 export default async function SubscriptionsPage({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
   const { c } = await searchParams;
@@ -136,10 +138,12 @@ export default async function SubscriptionsPage({ searchParams }: { searchParams
 
 /** The open customer's subscription orders (same rows as D2C orders) and an invoice per month. */
 async function CustomerOrders({ customerId, phone, canEdit }: { customerId: number; phone: string; canEdit: boolean }) {
-  const [orders, labels, riders] = await Promise.all([
+  const [orders, labels, riders, calendar, products] = await Promise.all([
     subscriptionOrders(customerId, phone),
     productLabels(),
     query<{ id: number; name: string }>(`select id, name from shop_rider where active and kind = 'delivery' order by name`),
+    canEdit ? customerCalendar(customerId, firstEditableDay(), 14) : Promise.resolve(null),
+    canEdit ? listProducts() : Promise.resolve([]),
   ]);
   const now = new Date();
   const rows = orders.map((o) => toOrderRow(o, labels, now));
@@ -154,6 +158,16 @@ async function CustomerOrders({ customerId, phone, canEdit }: { customerId: numb
 
   return (
     <div className="pt-1">
+      {calendar && calendar.subscriptions.length ? (
+        <SubscriptionManager
+          customerId={customerId}
+          subscriptions={calendar.subscriptions}
+          days={calendar.days}
+          firstEditableDay={calendar.firstEditableDay}
+          products={products.map((p) => ({ sku: p.sku, name: p.name, price: p.price }))}
+          actions={{ updatePlan: updatePlanAction, setStatus: setStatusAction, vacation: vacationAction, setDay: setDayAction }}
+        />
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
         <span className="mr-1 text-[12px] font-medium text-foreground/75">Monthly invoices</span>
         {[...months].map(([k, m]) => (
