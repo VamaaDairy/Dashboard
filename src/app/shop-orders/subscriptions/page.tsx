@@ -87,7 +87,7 @@ export default async function SubscriptionsPage({ searchParams }: { searchParams
                 {list.map((x) => {
                   const st = stats.get(x.id);
                   const isOpen = open?.id === x.id;
-                  const active = x.subs.some((s) => s.status === "active");
+                  const active = x.subs.some((s) => s.status === "active" && !s.out_of_stock);
                   const since = x.subs.map((s) => s.start_date).sort()[0];
                   const href = isOpen ? "/shop-orders/subscriptions" : `/shop-orders/subscriptions?c=${x.id}`;
                   return [
@@ -103,9 +103,9 @@ export default async function SubscriptionsPage({ searchParams }: { searchParams
                       </td>
                       <td className="px-3 py-3">
                         {x.subs.map((s) => (
-                          <div key={s.id} className={cn("leading-relaxed", s.status !== "active" && "text-foreground/60")}>
+                          <div key={s.id} className={cn("leading-relaxed", (s.status !== "active" || s.out_of_stock) && "text-foreground/60")}>
                             <span className="text-foreground">{s.product}</span>
-                            <span className="text-foreground/75"> × {s.qty} · {frequencyLabel(s.frequency, s.weekdays, s.every_n)}{s.end_date ? ` · until ${short(s.end_date)}` : ""}{s.status !== "active" ? " · paused" : ""}</span>
+                            <span className="text-foreground/75"> × {s.qty} · {frequencyLabel(s.frequency, s.weekdays, s.every_n)}{s.end_date ? ` · until ${short(s.end_date)}` : ""}{s.status !== "active" ? " · paused" : ""}{s.out_of_stock ? " · out of stock, on hold" : ""}</span>
                           </div>
                         ))}
                       </td>

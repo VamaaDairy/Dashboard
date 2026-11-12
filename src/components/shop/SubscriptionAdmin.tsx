@@ -29,7 +29,7 @@ export function CreateOrdersButton({ day, label }: { day: string; label: string 
 // ---------------------------------------------------------------- the office managing one customer's subscriptions
 
 type Freq = "daily" | "alternate" | "weekdays" | "every_n" | "skip_n";
-type Sub = { id: number; sku: string; name: string; qty: number; frequency: Freq; weekdays: number[]; everyN: number | null; startDate: string; endDate: string | null; status: "active" | "paused" | "cancelled" };
+type Sub = { id: number; sku: string; name: string; qty: number; frequency: Freq; weekdays: number[]; everyN: number | null; startDate: string; endDate: string | null; status: "active" | "paused" | "cancelled"; outOfStock?: boolean };
 type Day = { day: string; items: { subscriptionId: number; name: string; qty: number; planQty: number; changed: boolean }[]; state: string; editable: boolean; orderNo?: string };
 type Result = { ok: true; message?: string } | { ok: false; error: string };
 
@@ -158,6 +158,7 @@ function PlanEditor({ sub, products, firstEditableDay, pending, onSave, onStatus
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-[13px] font-semibold text-foreground">
           {sub.name} <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${sub.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-foreground/[0.06] text-foreground/70"}`}>{sub.status === "active" ? "Active" : "Paused"}</span>
+          {sub.outOfStock ? <span className="ml-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">Out of stock: on hold until it is back</span> : null}
         </div>
         <div className="flex gap-2">
           {sub.status === "active"

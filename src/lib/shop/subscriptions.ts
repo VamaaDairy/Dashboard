@@ -2,7 +2,7 @@ import "server-only";
 import { required as autopayRequired } from "./autopay";
 import { query, tx } from "@/lib/db";
 import { notifyOrderStatus, notifySubscription } from "@/lib/push";
-import { pricesFor } from "./catalog";
+import { listProductsForDisplay, pricesFor } from "./catalog";
 import { deliveryRule } from "./orders";
 import { deliveryFor } from "./pricing";
 
@@ -12,7 +12,16 @@ import { deliveryFor } from "./pricing";
  * a day, generateOrders(day) turns everything due into one ordinary order per customer.
  *
  * Days are India dates as 'YYYY-MM-DD' strings throughout.
+ *
+ * Out of stock: a subscription whose product is switched off or hidden in Product Master (D2C) is held - no
+ * orders, no days on the calendar - and picks up again by itself the day the product is back on sale. Its own
+ * status (active / paused) is left alone, so a customer's own pause is never undone by a restock.
  */
+
+/** Name and photo of every D2C product, on sale or not: an out-of-stock product still needs its name on a subscription. */
+async function displayInfo(): Promise<Map<string, { name: string; image: string | null }>> {
+  return new Map((await listProductsForDisplay()).map((p) => [p.sku, { name: p.name, image: p.image }]));
+}
 
 export const FREQUENCIES = ["daily", "alternate", "weekdays", "every_n", "skip_n"] as const;
 export type Frequency = (typeof FREQUENCIES)[number];
@@ -164,6 +173,7 @@ export async function customerCalendar(customerId: number, from: string, count: 
     [customerId, from, to],
   );
   const products = await pricesFor([...new Set(subs.map((s) => s.sku_code))]);
+  const shown = subs.some((s) => !products.has(s.sku_code)) ? await displayInfo() : new Map<string, { name: string; image: string | null }>();
   const over = new Map(overrides.map((o) => [`${o.subscription_id}|${o.day}`, o.qty]));
   const ordered = new Map(orders.map((o) => [o.day, o]));
 
@@ -172,7 +182,9 @@ export async function customerCalendar(customerId: number, from: string, count: 
     const day = addDays(from, i);
     const items: CalendarItem[] = [];
     let anyPlanned = false, anyChanged = false;
+    const dayOrder = ordered.get(day);
     for (const s of subs) {
+      if (!dayOrder && !products.has(s.sku_code)) continue; // out of stock: held, nothing that day
       const plan = planned(s, day) ? s.qty : 0;
       const o = over.get(`${s.id}|${day}`);
       const qty = s.status === "active" && day >= s.start_date && (!s.end_date || day <= s.end_date) && o !== undefined ? o : plan;
@@ -183,7 +195,7 @@ export async function customerCalendar(customerId: number, from: string, count: 
         items.push({ subscriptionId: s.id, sku: s.sku_code, name: p?.name ?? s.sku_code, image: p?.image ?? null, qty, planQty: plan, changed: o !== undefined && o !== plan });
       }
     }
-    const o = ordered.get(day);
+    const o = dayOrder;
     const total = items.reduce((n, it) => n + it.qty, 0);
     days.push({
       day,
@@ -200,9 +212,12 @@ export async function customerCalendar(customerId: number, from: string, count: 
     cutoffHour: CUTOFF_HOUR,
     subscriptions: subs.map((s) => {
       const p = products.get(s.sku_code);
+      const d = shown.get(s.sku_code);
       return {
-        id: s.id, sku: s.sku_code, name: p?.name ?? s.sku_code, image: p?.image ?? null, price: p?.price ?? null, size: p?.size ?? null,
+        id: s.id, sku: s.sku_code, name: p?.name ?? d?.name ?? s.sku_code, image: p?.image ?? d?.image ?? null, price: p?.price ?? null, size: p?.size ?? null,
         qty: s.qty, frequency: s.frequency, weekdays: s.weekdays ?? [], everyN: s.every_n, startDate: s.start_date, endDate: s.end_date, status: s.status,
+        /** The product is out of stock: no deliveries until it is back on sale (then they start again by themselves). */
+        outOfStock: !p,
       };
     }),
     days,
@@ -334,7 +349,7 @@ export async function generateOrders(day: string): Promise<{ created: number; it
       if (planned(s, day)) skipped++;
       continue;
     }
-    if (!prices.has(s.sku_code)) continue; // no longer sold
+    if (!prices.has(s.sku_code)) continue; // out of stock (or no longer sold): held until it is back on sale
     byCustomer.set(s.customer_id, [...(byCustomer.get(s.customer_id) ?? []), { sub: s, qty }]);
   }
 
@@ -396,9 +411,11 @@ export async function daySummary(day: string): Promise<{ customers: number; item
   const over = new Map(
     (await query<{ subscription_id: number; qty: number }>(`select subscription_id, qty from shop_subscription_day where day = $1`, [day])).map((o) => [o.subscription_id, o.qty]),
   );
+  const onSale = await pricesFor([...new Set(subs.map((s) => s.sku_code))]);
   const who = new Set<number>();
   let items = 0, skipped = 0;
   for (const s of subs) {
+    if (!onSale.has(s.sku_code)) continue; // out of stock: held
     const qty = over.get(s.id) ?? (planned(s, day) ? s.qty : 0);
     if (qty > 0) {
       who.add(s.customer_id);
@@ -412,6 +429,8 @@ export async function daySummary(day: string): Promise<{ customers: number; item
 export interface SubscriptionRow {
   id: number; customer_id: number; customer: string; phone: string; product: string; qty: number; frequency: Frequency;
   weekdays: number[] | null; every_n: number | null; start_date: string; end_date: string | null; status: string; address: string;
+  /** The product is out of stock, so no deliveries until it is back. */
+  out_of_stock: boolean;
 }
 
 export async function allSubscriptions(): Promise<SubscriptionRow[]> {
@@ -422,8 +441,13 @@ export async function allSubscriptions(): Promise<SubscriptionRow[]> {
       where s.status <> 'cancelled'
       order by s.status, c.name, s.id`,
   );
-  const names = await pricesFor([...new Set(rows.map((r) => r.sku_code))]);
-  return rows.map((r) => ({ ...r, product: names.get(r.sku_code)?.name ?? r.sku_code }));
+  const onSale = await pricesFor([...new Set(rows.map((r) => r.sku_code))]);
+  const names = rows.some((r) => !onSale.has(r.sku_code)) ? await displayInfo() : new Map<string, { name: string }>();
+  return rows.map((r) => ({
+    ...r,
+    product: onSale.get(r.sku_code)?.name ?? names.get(r.sku_code)?.name ?? r.sku_code,
+    out_of_stock: !onSale.has(r.sku_code),
+  }));
 }
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
