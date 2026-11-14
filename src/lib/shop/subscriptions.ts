@@ -267,7 +267,11 @@ export async function updateSubscription(
   if (patch.status !== undefined) put("status", patch.status);
   if (!sets.length) return true;
   const r = await query(`update shop_subscription set ${sets.join(", ")}, updated_at = now() where id = $1 and customer_id = $2 and status <> 'cancelled' returning id`, vals);
-  if (r.length > 0 && patch.status) await notifySubscription(customerId, patch.status === "active" ? "resumed" : patch.status);
+  if (r.length > 0 && patch.status) {
+    // tomorrow's order may already be made (after the 9 PM cut-off): it follows the pause / resume at once
+    await refreshMadeOrders(customerId);
+    await notifySubscription(customerId, patch.status === "active" ? "resumed" : patch.status);
+  }
   return r.length > 0;
 }
 
@@ -398,6 +402,73 @@ export async function generateOrders(day: string): Promise<{ created: number; it
     }
   }
   return { created, items, skipped };
+}
+
+/** Marks a subscription order that was cancelled because its subscriptions were paused (resuming brings it back). */
+const PAUSED_NOTE = "Subscription paused";
+
+/**
+ * Orders already made for a coming day (after the 9 PM cut-off) but not yet with a rider follow the customer's
+ * subscriptions again: pausing or cancelling one takes it out of that order, and the order is cancelled when nothing
+ * is left; resuming puts it back. Today's order and anything already with a rider are left alone. Nothing is charged
+ * here: UPI Autopay only debits an order once it is delivered.
+ */
+export async function refreshMadeOrders(customerId: number): Promise<void> {
+  const orders = await query<{ id: number; day: string; status: string }>(
+    `select id, to_char(subscription_day, 'YYYY-MM-DD') as day, status from shop_order
+      where customer_id = $1 and subscription_day > $2 and rider_id is null
+        and (status in ('placed', 'confirmed') or (status = 'cancelled' and notes = $3))`,
+    [customerId, todayIST(), PAUSED_NOTE],
+  );
+  if (!orders.length) return;
+  const subs = await query<Subscription>(`select ${SUB_COLS} from shop_subscription where customer_id = $1 and status = 'active' order by id`, [customerId]);
+  const prices = await pricesFor([...new Set(subs.map((s) => s.sku_code))]);
+
+  for (const o of orders) {
+    const due = subs.filter((s) => s.start_date <= o.day && (!s.end_date || s.end_date >= o.day));
+    const over = new Map(
+      (await query<{ subscription_id: number; qty: number }>(
+        `select subscription_id, qty from shop_subscription_day where day = $1 and subscription_id = any($2)`,
+        [o.day, due.map((s) => s.id)],
+      )).map((x) => [x.subscription_id, x.qty]),
+    );
+    // the same lines generateOrders would make for that day now
+    const rows: { sku: string; name: string; image: string | null; qty: number; unit: number; total: number }[] = [];
+    for (const s of due) {
+      const qty = over.get(s.id) ?? (planned(s, o.day) ? s.qty : 0);
+      const p = prices.get(s.sku_code);
+      if (qty <= 0 || !p) continue;
+      rows.push({ sku: s.sku_code, name: p.name, image: p.image, qty, unit: p.price, total: Math.round(p.price * qty * 100) / 100 });
+    }
+
+    if (!rows.length) {
+      if (o.status === "cancelled") continue;
+      const done = await query(`update shop_order set status = 'cancelled', notes = $2, updated_at = now() where id = $1 and status in ('placed', 'confirmed') and rider_id is null returning id`, [o.id, PAUSED_NOTE]);
+      if (done.length) await notifyOrderStatus(o.id, "cancelled");
+      continue;
+    }
+    const subtotal = Math.round(rows.reduce((n, r) => n + r.total, 0) * 100) / 100;
+    const fee = deliveryFor(subtotal, deliveryRule);
+    const back = await tx(async (c) => {
+      const u = await c.query(
+        `update shop_order set subtotal = $2, delivery_fee = $3, total = $4, updated_at = now(),
+                status = case when status = 'cancelled' then 'confirmed' else status end, notes = 'Subscription delivery'
+          where id = $1 and rider_id is null and (status in ('placed', 'confirmed') or (status = 'cancelled' and notes = $5))
+          returning id`,
+        [o.id, subtotal, fee, subtotal + fee, PAUSED_NOTE],
+      );
+      if (!u.rows.length) return null;
+      await c.query(`delete from shop_order_item where order_id = $1`, [o.id]);
+      for (const r of rows) {
+        await c.query(
+          `insert into shop_order_item (order_id, sku_code, name, image_url, qty, unit_price, line_total) values ($1, $2, $3, $4, $5, $6, $7)`,
+          [o.id, r.sku, r.name, r.image, r.qty, r.unit, r.total],
+        );
+      }
+      return o.status === "cancelled";
+    });
+    if (back) await notifyOrderStatus(o.id, "subscription");
+  }
 }
 
 // ---- for the dashboard ----
