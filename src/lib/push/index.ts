@@ -76,7 +76,7 @@ export async function notifyTopic(topic: string, m: PushMessage): Promise<boolea
 const FOR_CUSTOMER: Record<string, (no: string, otp: string) => PushMessage> = {
   placed: (no) => ({ title: "Order placed", body: `We have your order ${no}. We will confirm it shortly.` }),
   confirmed: (no) => ({ title: "Order confirmed", body: `Your order ${no} is confirmed and being prepared.` }),
-  out_for_delivery: (no, otp) => ({ title: "On its way", body: `Your order ${no} is out for delivery. Delivery code: ${otp}` }),
+  out_for_delivery: (no, otp) => ({ title: "On its way", body: `Your order ${no} is out for delivery.${otp ? ` Delivery code: ${otp}` : ""}` }),
   delivered: (no) => ({ title: "Delivered", body: `Your order ${no} was delivered. Thank you for choosing Gaia!` }),
   cancelled: (no) => ({ title: "Order cancelled", body: `Your order ${no} was cancelled.` }),
   // made each day for a customer's subscription, already confirmed
@@ -88,8 +88,9 @@ export async function notifyOrderStatus(orderId: number, status: string): Promis
   const make = FOR_CUSTOMER[status];
   if (!make || !pushConfigured()) return;
   try {
+    // subscription orders are delivered without a code, so none is sent for them
     const o = await one<{ order_no: string; access_key: string; customer_id: number | null; delivery_otp: string }>(
-      `select order_no, access_key, customer_id, delivery_otp from shop_order where id = $1`,
+      `select order_no, access_key, customer_id, case when subscription_day is null then delivery_otp else '' end as delivery_otp from shop_order where id = $1`,
       [orderId],
     );
     if (o) await notify("customer", o.customer_id, { ...make(o.order_no, o.delivery_otp), data: { type: "order", status, orderKey: o.access_key } });

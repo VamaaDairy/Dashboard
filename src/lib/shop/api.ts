@@ -21,7 +21,9 @@ export function orderJson(o: ShopOrder) {
     notes: o.notes,
     lat: o.lat,
     lng: o.lng,
-    deliveryOtp: o.delivery_otp,
+    // subscription orders are handed over without a code; only one-time (cart) orders have one
+    deliveryOtp: o.subscription_day ? null : o.delivery_otp,
+    otpRequired: !o.subscription_day,
     deliveredAt: o.delivered_at ? new Date(o.delivered_at).toISOString() : null,
     riderRating: o.rider_rating ?? null,
     riderRatingNote: o.rider_rating_note ?? null,

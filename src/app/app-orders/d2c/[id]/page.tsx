@@ -125,7 +125,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
               <KV label="Map">{map ? <a href={map} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><MapPin className="size-3.5" /> Open pin in Google Maps</a> : "No map pin"}</KV>
               <KV label="Note">{o.notes}</KV>
               <KV label="Rider">{o.rider ? `${o.rider.name} · ${o.rider.phone}` : null}</KV>
-              <KV label="Delivery code" mono>{o.delivery_otp}</KV>
+              <KV label="Delivery code" mono>{o.subscription_day ? "Not needed (subscription)" : o.delivery_otp}</KV>
               <KV label="Assigned">{o.assigned_at ? when(o.assigned_at) : null}</KV>
               <KV label="Picked up">{o.picked_up_at ? when(o.picked_up_at) : null}</KV>
               <KV label="Delivered">{o.delivered_at ? when(o.delivered_at) : null}</KV>
