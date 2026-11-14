@@ -257,11 +257,17 @@ export async function rateDelivery(key: string, stars: number, note: string): Pr
   return { ok: false, status: 409, error: "This delivery can no longer be rated." };
 }
 
-/** Delivered only with the customer's OTP; cash on delivery is then marked paid. */
+/**
+ * Delivered with the customer's OTP for one-time (cart) orders; subscription orders need no code.
+ * Cash on delivery is then marked paid.
+ */
 export async function riderDeliver(riderId: number, id: number, otp: string): Promise<"ok" | "wrong_otp" | "not_found"> {
-  const o = await one<{ delivery_otp: string }>(`select delivery_otp from shop_order where id = $1 and rider_id = $2 and status = 'out_for_delivery'`, [id, riderId]);
+  const o = await one<{ delivery_otp: string; subscription: boolean }>(
+    `select delivery_otp, subscription_day is not null as subscription from shop_order where id = $1 and rider_id = $2 and status = 'out_for_delivery'`,
+    [id, riderId],
+  );
   if (!o) return "not_found";
-  if (o.delivery_otp !== otp) return "wrong_otp";
+  if (!o.subscription && o.delivery_otp !== otp) return "wrong_otp";
   // the rider's rate at the moment of handover is what this delivery earned them
   await query(
     `update shop_order set status = 'delivered', delivered_at = now(), updated_at = now(),
