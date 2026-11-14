@@ -1,6 +1,7 @@
 import "server-only";
 import { one, query } from "@/lib/db";
 import { labelJoin, syncProductLabels } from "@/lib/products/names";
+import { unitsText } from "@/lib/distributor/packs";
 
 /**
  * Every order placed from the Gaia app, in three kinds:
@@ -122,7 +123,8 @@ export interface TradeOrder extends TradeOrderRow {
   supplierCode: string | null;
   supplierCity: string | null;
   /** name / packQty / unit / image: the Product Master's one name for the product (product_label). */
-  lines: Array<{ sku: string; name: string; packQty: string | null; unit: string | null; qty: number; rate: number; mrp: number; amount: number; image: string | null }>;
+  /** split: the quantity as ordered in crates / boxes and pieces, e.g. "2 CRT + 5 PCS"; null when by the piece only. */
+  lines: Array<{ sku: string; name: string; packQty: string | null; unit: string | null; qty: number; rate: number; mrp: number; amount: number; image: string | null; split: string | null }>;
 }
 
 export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
@@ -145,13 +147,14 @@ export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
   );
   if (!o) return null;
   await syncProductLabels();
-  const lines = await query<TradeOrder["lines"][number]>(
+  const raw = await query<Omit<TradeOrder["lines"][number], "split"> & { units: unknown }>(
     `select p.sku_code as sku, coalesce(pl.name, p.sku_name) as name, pl.qty as "packQty", pl.unit,
-            i.quantity as qty, i.selling_price as rate, i.mrp, i.total_cost as amount, pl.image
+            i.quantity as qty, i.selling_price as rate, i.mrp, i.total_cost as amount, pl.image, i.units
      from fp_booking_order_item i join fp_product p on p.uid = i.product_uid left join ${labelJoin("p.sku_code")}
      where i.booking_order_uid = $1 order by i.order_item_number`,
     [uid],
   );
+  const lines = raw.map(({ units, ...l }) => ({ ...l, split: unitsText(units) }));
   const { retail, ...rest } = o;
   return { ...rest, kind: retail ? "retailers" : "distributors", lines };
 }
