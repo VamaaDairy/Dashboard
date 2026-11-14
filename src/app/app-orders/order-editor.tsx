@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { rupees } from "@/lib/shop/pricing";
 import { editOrderAction, reopenOrderAction } from "./edit-actions";
 
-type Line = { sku: string; name: string; qty: number; rate: number };
+/** split: as the buyer ordered it, e.g. "2 CRT + 5 PCS" (qty is always the total in pieces). */
+type Line = { sku: string; name: string; qty: number; rate: number; split?: string | null };
 
 /**
  * On a pending direct order: change quantities, remove products or add new ones (priced for this buyer).
@@ -57,6 +58,11 @@ export function OrderEditor({ uid, lines, products }: { uid: string; lines: Line
                   <td className="px-4 py-2">
                     <div className={r.qty === 0 ? "line-through" : ""}>{r.name}</div>
                     <div className="font-mono text-xs text-muted-foreground">{r.sku}{was === 0 ? " · added" : ""}</div>
+                    {r.split ? (
+                      <div className="text-[11px] font-semibold text-muted-foreground" title="Changing the quantity re-splits it into whole crates / boxes and loose pieces">
+                        Ordered as {r.split}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="num px-4 py-2 text-right text-muted-foreground">{was || "—"}</td>
                   <td className="px-4 py-2">

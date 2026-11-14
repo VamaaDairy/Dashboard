@@ -7,6 +7,8 @@ import { hashPin, pinMatches } from "@/lib/shop/rider";
 import { loadRecord, saveRecord } from "@/lib/masters/entity/service";
 import { MASTERS } from "@/lib/masters/schemas";
 import { issueInvoice } from "./invoice";
+import { packsFor, splitUnits, type Pack, type Units } from "./packs";
+import { markDemandsOrdered } from "./demands";
 
 export { hashPin };
 
@@ -142,14 +144,16 @@ export const partyChannel = (login: DistLogin, firm: Pick<DistFirm, "channelCode
   login.kind === "retailer" || (firm.channelCode ?? "").toUpperCase() === "RT" ? "retail" : "distributor";
 
 /** The catalogue the retail app shows, priced at this distributor's dealer price. */
-export async function catalogFor(login: DistLogin, firmUid: string | undefined): Promise<ShopProduct[] | null> {
+export async function catalogFor(login: DistLogin, firmUid: string | undefined): Promise<Array<ShopProduct & { pack: Pack | null }> | null> {
   const firm = await firmAllowed(login, firmUid);
   if (!firm) return null;
   // the Product Master list for this app (Retail or Distributors), each product they have a price for
   const [products, prices] = await Promise.all([listAllProducts(partyChannel(login, firm)), dealerPrices(firm.uid)]);
+  const packs = await packsFor(products.map((p) => p.sku));
   return products.flatMap((p) => {
     const dp = prices.get(p.sku);
-    return dp && dp > 0 ? [{ ...p, price: dp }] : [];
+    // pack: { unit: "CRT", per: 24, base: "PCS" } when it can be ordered by the crate / box as well as by the piece
+    return dp && dp > 0 ? [{ ...p, price: dp, pack: packs.get(p.sku) ?? null }] : [];
   });
 }
 
@@ -208,7 +212,18 @@ async function dealerPrices(firmUid: string, skus?: string[]): Promise<Map<strin
   return new Map((await firmPrices(firmUid, skus)).map((r) => [r.sku, r.price]));
 }
 
-export type PricedLine = { uid: string; sku: string; mrp: number; dp: number; qty: number };
+/** units: the split as ordered, e.g. { CRT: 2, PCS: 5 } (qty is always the total in pieces); null without a pack. */
+export type PricedLine = { uid: string; sku: string; mrp: number; dp: number; qty: number; units?: Units | null };
+
+/** Each line's split: [packs] (packs ordered, by SKU) where given, else whole packs that fit; none without a pack. */
+export async function withUnits(lines: PricedLine[], packs: Map<string, number>, keep?: Map<string, { qty: number; units: Units | null }>): Promise<PricedLine[]> {
+  const defs = await packsFor(lines.map((l) => l.sku));
+  return lines.map((l) => {
+    const old = keep?.get(l.sku);
+    const given = packs.has(l.sku) ? packs.get(l.sku)! : old && old.qty === l.qty && old.units ? (old.units[defs.get(l.sku)?.unit ?? ""] ?? null) : null;
+    return { ...l, units: splitUnits(l.qty, defs.get(l.sku), given) };
+  });
+}
 
 /**
  * Prices order lines server-side for one buyer: each SKU must be on that app's Product Master list and have a
@@ -239,20 +254,32 @@ export type PlaceResult = { ok: true; orderId: number; total: number } | { ok: f
 
 export async function placeDistOrder(
   login: DistLogin,
-  input: { firmUid?: string; lines: Array<{ sku: string; qty: number }>; notes?: string | null; visitId?: number | null },
+  input: {
+    firmUid?: string; lines: Array<{ sku: string; qty: number; packs?: number | null }>; notes?: string | null; visitId?: number | null;
+    /** the retailer requirements (db/100_retailer_demands.sql) this distributor order covers */
+    demandIds?: number[];
+  },
 ): Promise<PlaceResult> {
+  // a retailer sends its requirement to its distributor instead (src/lib/distributor/demands.ts). Until every retailer
+  // has the app version that can send one (Gaia Distributors 1.0.5), direct orders stay open: set
+  // RETAILER_DIRECT_ORDERS=off in .env to stop them.
+  if (login.kind === "retailer" && process.env.RETAILER_DIRECT_ORDERS === "off") return { ok: false, error: "Retailers send their requirement to their distributor. Please update the Gaia Distributors app." };
   const firm = await firmAllowed(login, input.firmUid);
   if (!firm) return { ok: false, error: "Choose the party this order is for." };
 
   const merged = new Map<string, number>();
-  for (const l of input.lines) merged.set(l.sku, (merged.get(l.sku) ?? 0) + l.qty);
+  const packsOrdered = new Map<string, number>();
+  for (const l of input.lines) {
+    merged.set(l.sku, (merged.get(l.sku) ?? 0) + l.qty);
+    if (l.packs !== undefined && l.packs !== null) packsOrdered.set(l.sku, (packsOrdered.get(l.sku) ?? 0) + l.packs);
+  }
   if (!merged.size) return { ok: false, error: "The cart is empty." };
   if (merged.size > MAX_LINES) return { ok: false, error: `At most ${MAX_LINES} products per order.` };
 
   const channel = partyChannel(login, firm);
   const priced = await priceDistLines(channel, firm.uid, merged);
   if (!priced.ok) return priced;
-  const lines = priced.lines;
+  const lines = await withUnits(priced.lines, packsOrdered);
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const total = Math.round(lines.reduce((s, l) => s + l.qty * l.dp, 0) * 100) / 100;
 
@@ -300,13 +327,16 @@ export async function placeDistOrder(
       `insert into dist_order_event (order_uid, action, actor, actor_kind) values ($1, 'placed', $2, 'app')`,
       [orderUid, `${login.name} (${login.kind})`],
     );
+    if (login.kind === "distributor" && input.demandIds?.length) {
+      await markDemandsOrdered(c, firm.uid, input.demandIds, orderUid, `${login.name} (${login.kind})`);
+    }
     let i = 0;
     for (const l of lines) {
       await c.query(
         `insert into fp_booking_order_item
-           (mrp, selling_price, dp, quantity, stock, total_cost, booking_order_uid, product_uid, order_item_number)
-         values ($1, $2, $2, $3, 0, $4, $5, $6, $7)`,
-        [l.mrp, l.dp, l.qty, Math.round(l.qty * l.dp * 100) / 100, orderUid, l.uid, ++i],
+           (mrp, selling_price, dp, quantity, stock, total_cost, booking_order_uid, product_uid, order_item_number, units)
+         values ($1, $2, $2, $3, 0, $4, $5, $6, $7, $8)`,
+        [l.mrp, l.dp, l.qty, Math.round(l.qty * l.dp * 100) / 100, orderUid, l.uid, ++i, l.units ? JSON.stringify(l.units) : null],
       );
     }
     // its GST invoice, numbered now; should that fail the order still stands and the invoice is issued when first opened
@@ -334,7 +364,8 @@ export interface DistOrderRow {
   reason: string | null;
   /** its GST invoice number, once issued */
   invoiceNo: string | null;
-  lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number }>;
+  /** units: the split as ordered, e.g. { CRT: 2, PCS: 5 }; null when ordered by the piece only */
+  lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number; units: Units | null }>;
   /** internal: the API adds the order's delivery date, edit window and history from it, then drops it */
   uid: string;
 }
@@ -360,8 +391,8 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
     [login.kind !== "salesman" ? login.firmUid : login.staffUid],
   );
   if (!rows.length) return [];
-  const items = await query<{ b: string; sku: string; name: string; qty: number; rate: number; amount: number }>(
-    `select i.booking_order_uid as b, p.sku_code as sku, p.sku_name as name, i.quantity as qty, i.selling_price as rate, i.total_cost as amount
+  const items = await query<{ b: string; sku: string; name: string; qty: number; rate: number; amount: number; units: Units | null }>(
+    `select i.booking_order_uid as b, p.sku_code as sku, p.sku_name as name, i.quantity as qty, i.selling_price as rate, i.total_cost as amount, i.units
      from fp_booking_order_item i join fp_product p on p.uid = i.product_uid
      where i.booking_order_uid = any($1) order by i.order_item_number`,
     [rows.map((r) => r.uid)],

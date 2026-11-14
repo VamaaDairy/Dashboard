@@ -160,7 +160,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
           <div className="min-w-0 space-y-5">
             {editable ? (
               <Panel title="Items" description="Pending: change quantities, remove or add products, then save. The buyer is told what changed." flush>
-                <OrderEditor uid={o.uid} lines={o.lines.map((l) => ({ sku: l.sku, name: l.name, qty: Number(l.qty), rate: Number(l.rate) }))} products={products} />
+                <OrderEditor uid={o.uid} lines={o.lines.map((l) => ({ sku: l.sku, name: l.name, qty: Number(l.qty), rate: Number(l.rate), split: l.split }))} products={products} />
               </Panel>
             ) : (
               <Panel title="Items" description={`${o.lines.length} product${o.lines.length === 1 ? "" : "s"} · ${qty(o.qty)} units`} flush>
@@ -185,7 +185,10 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                           </td>
                           <td className="num px-4 py-2.5">{l.packQty ?? "—"}</td>
                           <td className="px-4 py-2.5">{l.unit ?? "—"}</td>
-                          <td className="num px-4 py-2.5 text-right">{qty(l.qty)}</td>
+                          <td className="num px-4 py-2.5 text-right">
+                            {qty(l.qty)}
+                            {l.split ? <div className="text-[11px] font-semibold text-muted-foreground">{l.split}</div> : null}
+                          </td>
                           <td className="num px-4 py-2.5 text-right">{rupees(l.rate)}</td>
                           <td className="num px-4 py-2.5 text-right text-muted-foreground">{rupees(l.mrp)}</td>
                           <td className="num px-4 py-2.5 text-right font-medium">{rupees(l.amount)}</td>
