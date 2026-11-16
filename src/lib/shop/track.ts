@@ -50,7 +50,7 @@ export function toTrack(pings: Ping[]): Track {
   };
 }
 
-const pingsBetween = (riderId: number, from: Date | string, to: Date | string) =>
+export const pingsBetween = (riderId: number, from: Date | string, to: Date | string) =>
   query<Ping>(`select at, lat, lng from shop_rider_ping where rider_id = $1 and at >= $2 and at <= $3 order by at`, [riderId, from, to]);
 
 export interface OrderTrack {

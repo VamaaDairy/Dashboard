@@ -1,5 +1,6 @@
 import "server-only";
 import type { PoolClient } from "pg";
+import { syncOrderLedger } from "@/lib/books";
 import { one, tx } from "@/lib/db";
 import { labelJoin, syncProductLabels } from "@/lib/products/names";
 
@@ -163,6 +164,7 @@ export async function redraftInvoice(c: PoolClient, orderUid: string): Promise<v
   if (!d) return;
   const data: InvoiceData = { ...d, invoiceNo: had.data.invoiceNo, issuedAt: had.data.issuedAt };
   await c.query(`update dist_invoice set data = $2 where booking_order_uid = $1`, [orderUid, data]);
+  await syncOrderLedger(c, orderUid);
 }
 
 /** The order's invoice with its status now, issuing it first if the order has none yet. */
