@@ -1,31 +1,26 @@
 /**
- * Subscription orders create themselves: after the 9 PM cut-off (India) the next day's deliveries
- * become shop orders, and today's are caught up if the server was down at that time. Generating is
- * safe to repeat (a customer never gets two orders for one day), so this just checks every 10 minutes.
+ * Background jobs (src/lib/jobs.ts): subscription orders create themselves after the 9 PM cut-off (India) and today's
+ * are caught up if the server was down then; UPI Autopay notices and debits go out. Every 10 minutes.
+ *
+ * Each server process runs its own timer, but a run takes a database lock, so with several Dashboard copies only one
+ * does the work each round. Set BACKGROUND_JOBS=off in .env to stop the timer in this process - for example when an
+ * outside scheduler calls /api/cron/jobs instead, or on a copy that should only serve pages.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.BACKGROUND_JOBS === "off") {
+    console.log("[jobs] BACKGROUND_JOBS=off: this process does not run the background jobs");
+    return;
+  }
   const g = globalThis as { __subscriptionTimer?: NodeJS.Timeout };
   if (g.__subscriptionTimer) return;
 
   const tick = async () => {
     try {
-      const { addDays, CUTOFF_HOUR, generateOrders, todayIST } = await import("@/lib/shop/subscriptions");
-      const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false }));
-      const today = todayIST();
-      const made = await generateOrders(today);
-      const next = hour >= CUTOFF_HOUR ? await generateOrders(addDays(today, 1)) : { created: 0 };
-      if (made.created || next.created) console.log(`[subscriptions] created ${made.created} order(s) for today, ${next.created} for tomorrow`);
+      const { runJobs } = await import("@/lib/jobs");
+      await runJobs();
     } catch (e) {
-      console.error("[subscriptions] auto-create failed:", e instanceof Error ? e.message : e);
-    }
-    // UPI Autopay: read back what's waiting on Easebuzz; in the evening window, debit and send notices
-    try {
-      const { runAutopay } = await import("@/lib/shop/autopay");
-      const r = await runAutopay();
-      if (r.notified || r.debited) console.log(`[autopay] ${r.notified} notice(s) sent, ${r.debited} debit(s) raised, ${r.checked} checked`);
-    } catch (e) {
-      console.error("[autopay] run failed:", e instanceof Error ? e.message : e);
+      console.error("[jobs] run failed:", e instanceof Error ? e.message : e);
     }
   };
   g.__subscriptionTimer = setInterval(tick, 10 * 60 * 1000);
