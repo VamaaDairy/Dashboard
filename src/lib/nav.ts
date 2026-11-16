@@ -71,6 +71,8 @@ const distAppOrders: NavItem = {
   children: [
     { href: "/app-orders/distributors", key: "apporders", label: "Distributors" },
     { href: "/app-orders/retailers", key: "apporders", label: "Retailers" },
+    { href: "/app-orders/dispatch", key: "apporders", label: "Dispatch" },
+    { href: "/app-orders/new-customers", key: "apporders", label: "New customers" },
     { href: "/app-orders/notifications", key: "apporders", label: "Notifications" },
   ],
 };

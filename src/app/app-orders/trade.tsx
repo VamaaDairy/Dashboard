@@ -14,7 +14,7 @@ import { rupees } from "@/lib/shop/pricing";
 import { decideAppOrderAction } from "./actions";
 import { confirmSelectedAction } from "./edit-actions";
 import { BulkConfirm, OrderEditor, ReopenButton } from "./order-editor";
-import { cutoffFor, orderableProducts, orderEvents, type OrderEvent } from "@/lib/orders/direct";
+import { cutoffFor, orderableProducts, orderEvents } from "@/lib/orders/direct";
 import { Field, Filters, TradeStatus, dateOnly, placedVia, qty, when } from "./parts";
 
 /** The Retailers and Distributors pages are the same apart from who the buyer is. */
@@ -123,7 +123,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
   const direct = o.appKind === "distributor" || o.appKind === "retailer";
   const pending = o.status.toLowerCase() === "pending";
   const editable = decide && direct && pending;
-  const [history, products] = await Promise.all([direct ? orderEvents(o.uid) : Promise.resolve([] as OrderEvent[]), editable ? orderableProducts(o.uid) : Promise.resolve([])]);
+  const [history, products] = await Promise.all([orderEvents(o.uid), editable ? orderableProducts(o.uid) : Promise.resolve([])]);
   const t = TITLE[o.kind];
   const b = o.buyerProfile;
   const mrpValue = o.lines.reduce((s, l) => s + l.mrp * l.qty, 0);
@@ -221,14 +221,14 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
               </dl>
             </Panel>
 
-            {direct ? (
-              <Panel title="History" description="Every step of this order, oldest first." flush>
+            {direct || history.length ? (
+              <Panel title="History" description="Every step of this order, oldest first: from placing it to its delivery." flush>
                 <ol className="divide-y divide-border text-sm">
                   {history.map((e, i) => (
                     <li key={i} className="px-4 py-2.5">
                       <div className="flex flex-wrap items-baseline gap-2">
-                        <span className="font-medium capitalize">{e.action}</span>
-                        <span className="text-xs text-muted-foreground">by {e.actor}{e.actorKind === "app" ? " (app)" : ""} · {when(e.at)}</span>
+                        <span className="font-medium capitalize">{e.action.replace("_", " ")}</span>
+                        <span className="text-xs text-muted-foreground">by {e.actor}{e.actorKind === "app" ? " (app)" : e.actorKind === "transporter" ? " (transporter)" : ""} · {when(e.at)}</span>
                       </div>
                       {e.changes?.length ? (
                         <ul className="mt-1 space-y-0.5 text-xs">

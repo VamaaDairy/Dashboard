@@ -2,21 +2,27 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { distFromRequest, listDistOrders, MAX_LINE_QTY, placeDistOrder } from "@/lib/distributor";
 import { appOrderExtras } from "@/lib/orders/direct";
+import { trackingOf } from "@/lib/dispatch";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Orders this login placed (a distributor: its own; a salesman: the ones he booked). Each carries deliveryDate,
  * editableUntil (ISO time, or null when the buyer can no longer change it) and history (placed / edited by Gaia /
- * confirmed ..., with what changed).
+ * confirmed ..., with what changed) and tracking: { stage: placed | confirmed | dispatched | delivered | not_delivered |
+ * cancelled, trip: { route, vehicleNo, transporter, truck (live position while on the way), stopsBefore, stop } | null }.
  */
 export async function GET(req: NextRequest) {
   const login = await distFromRequest(req);
   if (!login) return fail(401, "Please sign in again.");
   const orders = await listDistOrders(login);
-  const extras = await appOrderExtras(orders.map((o) => o.uid));
+  const [extras, tracking] = await Promise.all([appOrderExtras(orders.map((o) => o.uid)), trackingOf(orders.map((o) => o.uid))]);
   return NextResponse.json({
-    orders: orders.map(({ uid, ...o }) => ({ ...o, ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }) })),
+    orders: orders.map(({ uid, ...o }) => ({
+      ...o,
+      ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }),
+      tracking: tracking.get(uid) ?? { stage: "placed", trip: null },
+    })),
   });
 }
 

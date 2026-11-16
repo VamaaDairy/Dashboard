@@ -1,5 +1,6 @@
 import "server-only";
 import { one, tx } from "@/lib/db";
+import { syncOrderLedger } from "@/lib/books";
 
 export type Decision = "confirm" | "cancel";
 export type DecisionResult = { ok: true; status: string } | { ok: false; error: string };
@@ -37,6 +38,8 @@ export async function decideOrder(uid: string, action: Decision, who: string, re
       `insert into master_audit (actor, slug, record_id, action, summary, before, after) values ($1, 'portalOrder', $2, 'update', $3, $4, $5)`,
       [who, uid, `${status} order ${o.order_id}${why ? ` - ${why}` : ""}`, JSON.stringify({ status: o.status }), JSON.stringify({ status })],
     );
+    // the invoice goes on the buyer's books when the order is confirmed, and off when it is cancelled
+    await syncOrderLedger(c, uid);
     return { ok: true, status };
   });
 }

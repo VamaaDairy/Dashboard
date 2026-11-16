@@ -5,6 +5,7 @@ import { firmPrices, priceDistLines, withUnits, type DistLogin } from "@/lib/dis
 import { unitsText, type Units } from "@/lib/distributor/packs";
 import { listAllProducts } from "@/lib/shop/catalog";
 import { redraftInvoice } from "@/lib/distributor/invoice";
+import { syncOrderLedger } from "@/lib/books";
 import { pushToRole } from "@/lib/push";
 import { CANCELLED, CONFIRMED, decideOrder } from "./primary";
 
@@ -109,9 +110,9 @@ export interface DeskLine {
 
 export interface OrderEvent {
   at: Date;
-  action: "placed" | "edited" | "confirmed" | "cancelled" | "reopened";
+  action: "placed" | "edited" | "confirmed" | "cancelled" | "reopened" | "dispatched" | "delivered" | "not_delivered";
   actor: string;
-  actorKind: "office" | "app";
+  actorKind: "office" | "app" | "transporter";
   note: string | null;
   changes: LineChange[] | null;
 }
@@ -280,11 +281,15 @@ export async function reopenOrder(uid: string, who: Actor, reason: string): Prom
     if (!o) return { ok: false, error: "That order no longer exists." };
     if (o.status !== CONFIRMED) return { ok: false, error: `Order ${o.order_id} is ${o.status.toLowerCase()}; only a confirmed order can be reopened.` };
     if (o.billed) return { ok: false, error: `Order ${o.order_id} is already billed. Cancel its bill in Route orders first.` };
+    if ((await c.query(`select 1 from dist_trip_stop where order_uid = $1`, [uid])).rows.length) {
+      return { ok: false, error: `Order ${o.order_id} is on a trip. Take it off the trip on the Dispatch page first.` };
+    }
     await c.query(
       `update fp_booking_order set status = $2, current_status = $2, accepted_quantity = null, modified_time = now(), updated_at = now() where uid = $1`,
       [uid, PENDING],
     );
     await event(c, uid, "reopened", who, why);
+    await syncOrderLedger(c, uid);
     return { ok: true };
   });
   return r;
@@ -315,7 +320,7 @@ export async function appOrderExtras(uids: string[]): Promise<Map<string, { deli
           // the buyer sees the office's actions by role, not by name
           history: events
             .filter((e) => e.uid === h.uid)
-            .map(({ uid: _u, at, ...e }) => ({ ...e, actor: e.actorKind === "office" ? "Gaia" : "You", at: new Date(at).toISOString() })),
+            .map(({ uid: _u, at, ...e }) => ({ ...e, actor: e.actorKind === "office" ? "Gaia" : e.actorKind === "transporter" ? e.actor : "You", at: new Date(at).toISOString() })),
         },
       ];
     }),
