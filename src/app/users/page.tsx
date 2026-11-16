@@ -3,11 +3,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { query } from "@/lib/db";
 import { cleanAccess } from "@/lib/access";
 import { UsersManager, type DepartmentOption, type UserRecord } from "./UsersManager";
+import { ApiKeys } from "./ApiKeys";
+import { listApiKeys } from "@/lib/api/keys";
 
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
-  const [rows, departments] = await Promise.all([
+  const [rows, departments, keys] = await Promise.all([
     query<{
       id: string; email: string; name: string; role: string; is_active: boolean; access: unknown;
       department_id: number | null; via_employee: number | null; employee: string | null; mobile: string | null;
@@ -18,6 +20,7 @@ export default async function UsersPage() {
         order by u.created_at`,
     ),
     query<{ id: number; name: string; active: boolean; access: unknown }>(`select id, name, active, access from department order by active desc, sort, name`),
+    listApiKeys(),
   ]);
   const users: UserRecord[] = rows.map((r) => ({
     id: r.id, email: r.email, name: r.name, role: r.role,
@@ -35,6 +38,10 @@ export default async function UsersPage() {
           subtitle="Add people who can sign in. What they can open comes from their department; give a person more only where they need it."
         />
         <UsersManager users={users} departments={depts} />
+        <ApiKeys
+          keys={keys.map((k) => ({ ...k, createdAt: new Date(k.createdAt).toISOString(), lastUsedAt: k.lastUsedAt && new Date(k.lastUsedAt).toISOString(), revokedAt: k.revokedAt && new Date(k.revokedAt).toISOString() }))}
+          users={users.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name || u.email, role: u.role }))}
+        />
       </div>
     </div>
   );

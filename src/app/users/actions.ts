@@ -90,3 +90,26 @@ export async function saveUser(input: UserInput): Promise<UserResult> {
   revalidatePath("/users");
   return { ok: true };
 }
+
+// ---- API keys (db/101_api_keys.sql): another system calls the Dashboard API as one user ----
+
+export type KeyResult = { ok: true; key: string } | { ok: false; error: string };
+
+/** Makes an API key that acts as [userId]; the key is returned once and cannot be shown again. */
+export async function createApiKeyAction(userId: string, name: string): Promise<KeyResult> {
+  const me = await requireOwner();
+  if (!me) return { ok: false, error: "Only an owner can make API keys." };
+  const { createApiKey } = await import("@/lib/api/keys");
+  const r = await createApiKey(userId, name, me.name || me.email);
+  if (r.ok) revalidatePath("/users");
+  return r;
+}
+
+export async function revokeApiKeyAction(id: number): Promise<UserResult> {
+  const me = await requireOwner();
+  if (!me) return fail("Only an owner can revoke API keys.");
+  const { revokeApiKey } = await import("@/lib/api/keys");
+  if (!(await revokeApiKey(id, me.name || me.email))) return fail("That key is already revoked.");
+  revalidatePath("/users");
+  return { ok: true };
+}
