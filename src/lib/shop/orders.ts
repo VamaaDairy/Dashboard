@@ -5,6 +5,7 @@ import { shop } from "@/lib/whatsapp/config";
 import { notifyOrderStatus, notifyRiderAssigned } from "@/lib/push";
 import { expireUnpaid } from "@/lib/payments/easebuzz";
 import { haversine } from "./route-plan";
+import { endSession, sessionAssigned, sessionDelivered, sessionPickedUp } from "./delivery-session";
 import { photoUrlOf, pricesFor } from "./catalog";
 import { priceCart } from "./offers";
 import { MAX_LINE_QTY, MAX_LINES, type DeliveryRule } from "./pricing";
@@ -197,6 +198,9 @@ export async function setOrderStatus(id: number, status: string): Promise<boolea
   );
   if (r[0]?.changed) await notifyOrderStatus(id, status);
   if (r[0]?.changed && status === "delivered") await chargeDelivered(id);
+  // the delivery session follows: marked delivered from the office (no code checked), or ended by a cancel
+  if (r[0]?.changed && status === "delivered") await sessionDelivered(id, null, false);
+  if (r[0]?.changed && status === "cancelled") await endSession(id, "cancelled");
   return r.length > 0;
 }
 
@@ -214,6 +218,8 @@ export async function assignRider(orderId: number, riderId: number | null): Prom
     [orderId, riderId],
   );
   if (r[0]) {
+    // a new delivery session for this rider (the previous rider's, if any, ends)
+    if (r[0].was_rider !== riderId) await sessionAssigned(orderId, riderId);
     if (riderId != null && r[0].was_rider !== riderId) await notifyRiderAssigned(orderId, riderId);
     if (r[0].status !== r[0].was_status) await notifyOrderStatus(orderId, r[0].status);
   }
@@ -235,6 +241,7 @@ export async function riderPickup(riderId: number, id: number): Promise<boolean>
     [id, riderId],
   );
   if (r[0]?.changed) await notifyOrderStatus(id, "out_for_delivery");
+  if (r.length) await sessionPickedUp(id, riderId);
   return r.length > 0;
 }
 
@@ -276,6 +283,7 @@ export async function riderDeliver(riderId: number, id: number, otp: string): Pr
       where id = $1`,
     [id, riderId],
   );
+  await sessionDelivered(id, riderId, !o.subscription);
   await notifyOrderStatus(id, "delivered");
   await chargeDelivered(id);
   return "ok";
