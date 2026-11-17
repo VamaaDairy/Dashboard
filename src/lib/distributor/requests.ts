@@ -2,18 +2,25 @@ import "server-only";
 import { one, query } from "@/lib/db";
 import { saveRecord } from "@/lib/masters/entity/service";
 import { MASTERS } from "@/lib/masters/schemas";
+import { consumeOtp } from "@/lib/employee";
+import { hashPin } from "@/lib/shop/rider";
 
 /**
  * New customers a sales officer proposes from the Sales app (db/104 dist_firm_request). Nothing is added to Customer
  * Masters until the office approves it; approving creates the customer - active, mapped to that officer - with the
  * code and channel the office gives it.
+ *
+ * Distributors and retailers can also ask for an account themselves in the Gaia Distributors app (source "app",
+ * db/105): approving that also switches on their app login with the PIN they chose.
  */
 
 export const REQUEST_KINDS = ["Distributor", "Super Stockist", "Retailer", "MFS", "Institution"] as const;
 
 export interface FirmRequest {
   id: number;
-  staffUid: string;
+  /** null for a party that signed up itself in the Gaia Distributors app */
+  staffUid: string | null;
+  source: "sales" | "app";
   officer: string | null;
   name: string;
   contactPerson: string | null;
@@ -38,7 +45,7 @@ export interface FirmRequest {
 }
 
 const SELECT = `
-  select r.id, r.staff_uid as "staffUid", nullif(trim(concat_ws(' ', s.first_name, s.last_name)), '') as officer, r.name,
+  select r.id, r.staff_uid as "staffUid", r.source, nullif(trim(concat_ws(' ', s.first_name, s.last_name)), '') as officer, r.name,
          r.contact_person as "contactPerson", r.phone, r.email, r.address, r.city, r.pincode, r.state, r.lat, r.lng, r.gstin, r.kind, r.notes,
          r.status, r.firm_uid as "firmUid", f.firm_code as "firmCode", r.reason, r.decided_by as "decidedBy",
          r.decided_at as "decidedAt", r.created_at as "createdAt"
@@ -98,6 +105,79 @@ export async function createFirmRequest(
   return { ok: true, request: iso((await one<FirmRequest>(`${SELECT} where r.id = $1`, [r!.id]))!) };
 }
 
+// ---------------------------------------------------------------- self sign-up (Gaia Distributors app)
+
+export type SelfKind = "distributor" | "retailer";
+type SignupResult = { ok: true } | { ok: false; status: number; error: string; fields?: Record<string, string> };
+
+/**
+ * Why this number cannot ask for an account, or null when it can: it already signs in, or it is already waiting.
+ * Checked before the SMS code is sent and again when the request is made.
+ */
+export async function selfSignupBlocked(phone: string): Promise<string | null> {
+  const login = await one(`select 1 from dist_login where phone = $1`, [phone]);
+  if (login) return "This number already has an account. Please sign in.";
+  const firm = await one<{ name: string }>(
+    `select name from fp_firm where right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = $1 limit 1`,
+    [phone],
+  );
+  if (firm) return `This number is already with Gaia (${firm.name}). Please ask Gaia for your PIN.`;
+  const waiting = await one(`select 1 from dist_firm_request where phone = $1 and status = 'pending'`, [phone]);
+  if (waiting) return "Your account request is already waiting for Gaia's approval.";
+  return null;
+}
+
+/**
+ * A distributor or retailer asks for an account: firm name, owner's name, mobile (proved with the SMS code), city and
+ * the PIN they will sign in with. It waits for the office on App orders > New customers.
+ */
+export async function createSelfSignup(b: Record<string, unknown>): Promise<SignupResult> {
+  const kind: SelfKind | null = b.kind === "distributor" || b.kind === "retailer" ? b.kind : null;
+  const name = text(b.firmName, 120);
+  const owner = text(b.ownerName, 80);
+  const city = text(b.city, 60);
+  const phone = text(b.phone, 20).replace(/\D/g, "").slice(-10);
+  const code = text(b.code, 10).replace(/\D/g, "");
+  const pin = text(b.pin, 10);
+  const fields: Record<string, string> = {};
+  if (!kind) return { ok: false, status: 400, error: "Choose Distributor or Retailer." };
+  if (name.length < 3) fields.firmName = kind === "retailer" ? "Enter your shop's name" : "Enter your firm's name";
+  if (owner.length < 2) fields.ownerName = "Enter the owner's name";
+  if (city.length < 2) fields.city = "Enter your city";
+  if (!/^[6-9]\d{9}$/.test(phone)) fields.phone = "Enter a valid 10-digit mobile number";
+  if (!/^\d{4,8}$/.test(pin)) fields.pin = "The PIN must be 4 to 8 digits";
+  if (Object.keys(fields).length) return { ok: false, status: 400, error: Object.values(fields)[0], fields };
+  if (code.length !== 6) return { ok: false, status: 400, error: "Enter the 6-digit code we sent by SMS." };
+
+  const blocked = await selfSignupBlocked(phone);
+  if (blocked) return { ok: false, status: 409, error: blocked };
+  if (!(await consumeOtp(phone, code))) return { ok: false, status: 401, error: "That code is wrong or has expired. Ask for a new one." };
+
+  await query(
+    `insert into dist_firm_request (source, name, contact_person, phone, city, kind, pin_hash)
+     values ('app', $1, $2, $3, $4, $5, $6)`,
+    [name, owner, phone, city, kind === "retailer" ? "Retailer" : "Distributor", hashPin(pin)],
+  );
+  return { ok: true };
+}
+
+/**
+ * What to tell someone signing in whose number has no login yet but did ask for one: still waiting, or not approved
+ * (with the office's reason). Null when there is nothing to say.
+ */
+export async function selfSignupNotice(phone: string): Promise<string | null> {
+  const r = await one<{ status: string; reason: string | null }>(
+    `select status, reason from dist_firm_request where phone = $1 and source = 'app' order by created_at desc limit 1`,
+    [phone],
+  );
+  if (r?.status === "pending") return "Your account is waiting for Gaia's approval. You can sign in once it is approved.";
+  if (r?.status === "rejected") {
+    const why = r.reason?.trim().replace(/[.!]*$/, "");
+    return `Your account request was not approved${why ? `: ${why}.` : "."} Please contact Gaia.`;
+  }
+  return null;
+}
+
 /** An officer's own proposals, newest first. */
 export const myFirmRequests = async (staffUid: string) =>
   (await query<FirmRequest>(`${SELECT} where r.staff_uid = $1 order by r.created_at desc limit 100`, [staffUid])).map(iso);
@@ -120,6 +200,9 @@ export async function approveFirmRequest(
   const r = await one<FirmRequest>(`${SELECT} where r.id = $1`, [id]);
   if (!r) return { ok: false, error: "That request no longer exists." };
   if (r.status !== "pending") return { ok: false, error: `It was already ${r.status}.` };
+  if (r.source === "app" && (await one(`select 1 from dist_login where phone = $1`, [r.phone]))) {
+    return { ok: false, error: `${r.phone} already signs in to the app. Reject this request, or switch that login off first.` };
+  }
   const f = new FormData();
   const put = (k: string, v: string | number | null | undefined) => { if (v !== null && v !== undefined && v !== "") f.set(k, String(v)); };
   put("firm_code", input.code.trim().toUpperCase());
@@ -147,6 +230,16 @@ export async function approveFirmRequest(
     return { ok: false, error: [saved.error, fe].filter(Boolean).join(" - ") || "Could not create the customer." };
   }
   await query(`update fp_firm set active = 1 where uid = $1`, [saved.id]);
+  // a party that signed up itself can now sign in to the Gaia Distributors app with the PIN it chose
+  if (r.source === "app") {
+    await query(
+      `insert into dist_login (kind, firm_uid, phone, pin_hash)
+       select case when kind = 'Retailer' then 'retailer' else 'distributor' end, $2, phone, pin_hash
+         from dist_firm_request where id = $1 and pin_hash is not null
+       on conflict do nothing`,
+      [id, saved.id],
+    );
+  }
   await query(
     `update dist_firm_request set status = 'approved', firm_uid = $2, decided_by = $3, decided_at = now() where id = $1 and status = 'pending'`,
     [id, saved.id, who],
@@ -156,7 +249,7 @@ export async function approveFirmRequest(
 
 export async function rejectFirmRequest(id: number, reason: string, who: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const why = reason.trim().slice(0, 300);
-  if (!why) return { ok: false, error: "Give a reason, so the officer knows." };
+  if (!why) return { ok: false, error: "Give a reason, so they know why." };
   const r = await one<{ id: number }>(
     `update dist_firm_request set status = 'rejected', reason = $2, decided_by = $3, decided_at = now() where id = $1 and status = 'pending' returning id`,
     [id, why, who],

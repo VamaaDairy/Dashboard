@@ -38,7 +38,8 @@ export function RequestCard({ r, channels, parents, beats, canEdit }: { r: FirmR
         <span className="font-semibold">{r.name}</span>
         <span className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{r.kind}</span>
         <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ring-1 ring-inset", status)}>{r.status}</span>
-        <span className="ml-auto text-[12px] text-muted-foreground">by {r.officer ?? "a sales officer"} · {when(r.createdAt)}</span>
+        {r.source === "app" ? <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[11px] text-sky-800 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-950/40 dark:text-sky-300">Signed up in the app</span> : null}
+        <span className="ml-auto text-[12px] text-muted-foreground">{r.source === "app" ? "self sign-up" : `by ${r.officer ?? "a sales officer"}`} · {when(r.createdAt)}</span>
       </div>
       <dl className="mt-2 grid gap-x-6 gap-y-1 text-[13px] sm:grid-cols-2">
         <div><dt className="inline text-muted-foreground">Contact: </dt><dd className="inline">{r.contactPerson ?? "-"} · {r.phone}{r.email ? ` · ${r.email}` : ""}</dd></div>
@@ -53,7 +54,7 @@ export function RequestCard({ r, channels, parents, beats, canEdit }: { r: FirmR
       {canEdit && r.status === "pending" ? (
         rejecting ? (
           <div className="mt-3 flex gap-2">
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why (the officer sees this)" className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm" />
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={r.source === "app" ? "Why (they see this when they try to sign in)" : "Why (the officer sees this)"} className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm" />
             <button type="button" disabled={pending} onClick={() => run(() => rejectRequestAction(r.id, reason))} className="h-9 rounded-lg border border-input px-3 text-sm text-red-600 hover:bg-muted">Reject</button>
             <button type="button" onClick={() => setRejecting(false)} className="h-9 rounded-lg border border-input px-3 text-sm hover:bg-muted">Back</button>
           </div>
@@ -69,6 +70,7 @@ export function RequestCard({ r, channels, parents, beats, canEdit }: { r: FirmR
             <label className="text-[12px] text-muted-foreground">Route (optional)
               <select value={beat} onChange={(e) => setBeat(e.target.value)} className={box}><option value="">-</option>{beats.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
             </label>
+            {r.source === "app" ? <p className="text-[12px] text-muted-foreground sm:col-span-4">Approving also switches on their Gaia Distributors app login: {r.phone} with the PIN they chose.</p> : null}
             <div className="flex gap-2 sm:col-span-4">
               <button type="button" disabled={pending || !code || !channel} onClick={() => run(() => approveRequestAction(r.id, { code, channelUid: channel, parentUid: parent || null, beatUid: beat || null }))}
                 className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">{pending ? "Saving…" : "Approve and create"}</button>

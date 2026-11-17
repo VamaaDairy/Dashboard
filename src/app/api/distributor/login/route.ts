@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { lockedMessage, pinCleared, pinFailed, pinLockedFor } from "@/lib/pin-guard";
 import { distLogin } from "@/lib/distributor";
+import { selfSignupNotice } from "@/lib/distributor/requests";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
   if (locked) return fail(429, lockedMessage(locked));
   const r = await distLogin(phone, pin, kind);
   if (!r) {
+    // asked for an account in the app and not approved yet (or turned down): say so instead of "wrong PIN"
+    const notice = await selfSignupNotice(phone);
+    if (notice) return fail(403, notice);
     await pinFailed("dist", phone);
     return fail(401, "Wrong number or PIN.");
   }
