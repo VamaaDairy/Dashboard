@@ -175,7 +175,7 @@ export function BulkConfirm({ formId }: { formId: string }) {
           window.alert("Tick the pending orders to confirm first.");
         } else if (!window.confirm(`Confirm ${n} order${n === 1 ? "" : "s"}? The buyers get a notification and the orders lock.`)) e.preventDefault();
       }}
-      className="h-8 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white hover:opacity-90"
+      className="h-8 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
     >
       Confirm selected
     </button>
