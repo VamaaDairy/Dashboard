@@ -54,7 +54,7 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
   }
 
   const weight = (l: DayLine) => l.qty * Number(l.product?.weight_kg ?? 0);
-  const rows = new Map<string, { key: string; name: string; route: string; routeSort: number; channel: string | null; pending: boolean; matched: boolean; qty: Map<string, number>; kg: number; value: number }>();
+  const rows = new Map<string, { key: string; name: string; route: string; routeSort: number; channel: string | null; pending: boolean; matched: boolean; qty: Map<string, number>; kg: number; value: number; orders: Map<string, { id: number; retail: boolean; status: string }> }>();
   const sortOf = new Map(routes.map((r) => [r.name, r.sort]));
   const totals = new Map<string, number>();
   for (const l of lines) {
@@ -62,9 +62,10 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
     let r = rows.get(key);
     if (!r) {
       const rt = l.routeName ?? "No route";
-      r = { key, name: l.party?.name ?? l.firmName, route: rt, routeSort: sortOf.get(rt) ?? 999, channel: l.party?.channel ?? null, pending: false, matched: !!l.party, qty: new Map(), kg: 0, value: 0 };
+      r = { key, name: l.party?.name ?? l.firmName, route: rt, routeSort: sortOf.get(rt) ?? 999, channel: l.party?.channel ?? null, pending: false, matched: !!l.party, qty: new Map(), kg: 0, value: 0, orders: new Map() };
       rows.set(key, r);
     }
+    r.orders.set(l.orderUid, { id: l.orderId, retail: l.retail, status: l.status });
     r.qty.set(skuKey(l), (r.qty.get(skuKey(l)) ?? 0) + l.qty);
     totals.set(skuKey(l), (totals.get(skuKey(l)) ?? 0) + l.qty);
     r.kg += weight(l);
@@ -136,7 +137,21 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
                   {table.filter((r) => r.route === g).map((r) => (
                     <tr key={r.key} className="border-t border-border hover:bg-muted/40">
                       <td className="sticky left-0 z-10 bg-background px-3 py-2">
-                        <div className="font-medium">{r.name}</div>
+                        {/* the customer's name opens its order (the first, when it has several); each order number opens that order */}
+                        {(() => {
+                          const href = (uid: string, o: { retail: boolean }) => `/app-orders/${o.retail ? "retailers" : "distributors"}/${uid}`;
+                          const list = [...r.orders.entries()];
+                          return (
+                            <>
+                              <Link href={href(list[0][0], list[0][1])} className="font-medium hover:text-primary hover:underline">{r.name}</Link>
+                              <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs">
+                                {list.map(([uid, o]) => (
+                                  <Link key={uid} href={href(uid, o)} className="font-mono text-primary hover:underline" title={`Open order #${o.id} (${o.status})`}>#{o.id}</Link>
+                                ))}
+                              </div>
+                            </>
+                          );
+                        })()}
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {r.channel ? <Pill dot={false}>{r.channel}</Pill> : null}
                           {r.pending ? <Pill tone="warning">Pending</Pill> : null}

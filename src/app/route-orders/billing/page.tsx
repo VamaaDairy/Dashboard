@@ -71,7 +71,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <PageHeader icon={ReceiptText} title="Billing" subtitle="Make the day's sales bills from confirmed orders and download them for Tally." />
         <form action="/route-orders/billing" className="flex items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground">Delivery date</span>
-          <input type="date" name="date" defaultValue={date} aria-label="Delivery date" className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
+          <input key={date} type="date" name="date" defaultValue={date} aria-label="Delivery date" className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
           <button className="h-9 rounded-lg border border-border px-3 text-sm hover:bg-muted">Show</button>
         </form>
 
