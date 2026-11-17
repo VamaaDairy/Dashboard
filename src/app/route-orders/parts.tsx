@@ -44,7 +44,7 @@ export function DayFilters({ base, date, buyer, route, confirmed }: { base: stri
       <div className="flex flex-wrap items-center gap-3">
         <form action={base} className="flex items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground">Delivery date</span>
-          <input type="date" name="date" defaultValue={date} aria-label="Delivery date" className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
+          <input key={date} type="date" name="date" defaultValue={date} aria-label="Delivery date" className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
           {buyer !== "all" ? <input type="hidden" name="buyer" value={buyer} /> : null}
           {route ? <input type="hidden" name="route" value={route} /> : null}
           {confirmed ? <input type="hidden" name="confirmed" value="1" /> : null}
