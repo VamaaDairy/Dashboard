@@ -10,7 +10,7 @@ import { RequestCard } from "./request-card";
 
 export const dynamic = "force-dynamic";
 
-/** New customers sales officers proposed from the Sales app, waiting for the office: approve (creates the customer) or reject. */
+/** New customers sales officers proposed from the Sales app, or that signed up in the Gaia Distributors app, waiting for the office: approve (creates the customer) or reject. */
 export default async function NewCustomersPage() {
   const [requests, channels, parents, beats, me] = await Promise.all([
     firmRequests(),
@@ -26,7 +26,7 @@ export default async function NewCustomersPage() {
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="mx-auto w-full max-w-5xl space-y-4">
-        <PageHeader icon={UserPlus} title="New customers" subtitle="Distributors and other parties a sales officer added in the Sales app. Approving creates the customer in Customer Masters, mapped to that officer." />
+        <PageHeader icon={UserPlus} title="New customers" subtitle="Parties a sales officer added in the Sales app, and distributors and retailers who signed up in the Gaia Distributors app. Approving creates the customer in Customer Masters (and, for an app sign-up, switches on their login)." />
         <h2 className="text-[15px] font-semibold">Waiting for approval ({pending.length})</h2>
         {pending.length ? pending.map((r) => <RequestCard key={r.id} r={r} channels={channels} parents={parents} beats={beats} canEdit={canEdit} />)
           : <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">Nothing waiting.</div>}
