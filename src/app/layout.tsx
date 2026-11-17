@@ -8,7 +8,7 @@ import type { SidebarClass } from "@/components/app-sidebar";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Gaia Costing",
+  title: "Gaia",
   description: "Product costing workspace",
 };
 
