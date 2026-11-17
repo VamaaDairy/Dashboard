@@ -27,10 +27,22 @@ export function TradeStatus({ status }: { status: string }) {
 }
 
 /** "Retailer app" / "Distributor app" / "Sales officer <name>": how a trade order came in. */
+/** Who put the order in: the buyer itself (in its app), a sales officer (named), or the office (portal). */
 export function placedVia(o: { appKind: string | null; bookedBy: string | null }) {
   if (!o.appKind) return "Portal";
   if (o.appKind === "salesman") return `Sales officer${o.bookedBy ? ` ${o.bookedBy}` : ""}`;
-  return o.appKind === "retailer" ? "Retailer app" : "Distributor app";
+  return o.appKind === "retailer" ? "Retailer (own app)" : "Distributor (own app)";
+}
+
+/** "Vamaa Dairy Pvt Ltd" for the company's own, else the super stockist / distributor's name with its type. */
+export function ManagedBy({ o }: { o: { managedBy: string | null; managedByType: string | null } }) {
+  if (!o.managedBy) return <span className="whitespace-nowrap font-medium text-primary">Vamaa Dairy Pvt Ltd</span>;
+  return (
+    <span>
+      <span className="font-medium">{o.managedBy}</span>
+      {o.managedByType ? <span className="block text-xs text-muted-foreground">{o.managedByType}</span> : null}
+    </span>
+  );
 }
 
 /** Status chips (links) plus a search box; both keep each other in the URL. */

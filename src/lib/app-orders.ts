@@ -25,7 +25,31 @@ const TRADE_FROM = `fp_booking_order b
   left join fp_staff sc on sc.uid = f.sales_contact_uid
   left join fp_beat bt on bt.uid = f.beat_uid
   left join fp_firm par on par.uid = f.parent_firm_uid
-  left join dist_login dl on dl.id = b.app_login_id`;
+  left join fp_channel supch on supch.uid = sup.channel_uid
+  left join fp_channel parch on parch.uid = par.channel_uid
+  left join dist_login dl on dl.id = b.app_login_id
+  left join lateral (
+    -- the route the Route sheet puts this party on (Route orders > Customers & products), as there
+    select r.name from route_order_party x join route_order_route r on r.id = x.route_id
+     where x.active and (x.firm_uid = f.uid or x.name_key = regexp_replace(lower(f.name), '[^a-z0-9]', '', 'g'))
+     order by (x.firm_uid is not distinct from f.uid) desc limit 1
+  ) rop on true`;
+
+/**
+ * Who stands behind the buyer for this order: the firm it is placed on (a super stockist or a distributor), or the
+ * buyer's parent in Customer Masters when the order names none - and Vamaa Dairy itself when that is the company
+ * (no supplier, or the company channel CO), as the Route sheet counts "ours".
+ */
+// the company itself: channel CO (as the Route sheet), the top channel level, or a firm typed Company
+const isCompany = (firm: string, ch: string) => `(coalesce(${ch}.channel_code, '') = 'CO' or coalesce(${ch}.level, 9) <= 1 or lower(coalesce(${firm}.firm_type, '')) = 'company')`;
+const MANAGER = `case
+    when sup.uid is not null and not ${isCompany("sup", "supch")} then sup.name
+    when sup.uid is null and par.uid is not null and not ${isCompany("par", "parch")} then par.name
+  end`;
+const MANAGER_TYPE = `case
+    when sup.uid is not null and not ${isCompany("sup", "supch")} then coalesce(nullif(sup.firm_type, ''), supch.channel)
+    when sup.uid is null and par.uid is not null and not ${isCompany("par", "parch")} then coalesce(nullif(par.firm_type, ''), parch.channel)
+  end`;
 
 // the day an app order is for (db/098): set when placed, else the day after
 const DELIVERY = `coalesce(b.delivery_date, (b.booking_time at time zone 'Asia/Kolkata')::date + 1)`;
@@ -56,13 +80,20 @@ export interface TradeOrderRow {
   bookedBy: string | null;
   /** app orders only: the day it is for (db/098) */
   deliveryDate: string | null;
+  /** the super stockist / distributor this buyer is managed by for this order; null = Vamaa Dairy Private Limited */
+  managedBy: string | null;
+  /** its type (Super Stockist, Distributor, ...) when managedBy is set */
+  managedByType: string | null;
+  /** the Route sheet's route for this party, else its beat in Customer Masters */
+  route: string | null;
 }
 
 const TRADE_ROW = `b.uid, b.order_id as "orderId", b.booking_time as "placedAt", b.status, b.rejection_reason as reason,
   b.total_item as items, b.total_quantity as qty, b.total_cost as total, b.app_kind as "appKind", b.app_notes as notes,
   f.name as buyer, f.firm_code as "buyerCode", f.city, f.state_state as state, coalesce(f.phone, dl.phone) as phone, f.gstin,
   sup.name as supplier, ${person("so")} as "bookedBy",
-  case when b.app_kind is not null then ${DELIVERY}::text end as "deliveryDate"`;
+  case when b.app_kind is not null then ${DELIVERY}::text end as "deliveryDate",
+  ${MANAGER} as "managedBy", ${MANAGER_TYPE} as "managedByType", coalesce(rop.name, bt.beat_name) as route`;
 
 export async function listTradeOrders(kind: TradeKind, opts: { status?: string; q?: string; date?: string } = {}): Promise<TradeOrderRow[]> {
   const params: unknown[] = [];
@@ -138,7 +169,7 @@ export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
               'channel', ch.channel, 'type', f.firm_type, 'class', f.firm_class, 'active', f.active = 1,
               'contactPerson', f.contact_person, 'email', f.email, 'address', f.address, 'area', f.place,
               'district', f.district, 'pincode', f.pincode, 'lat', f.latitude, 'lng', f.longitude, 'pan', f.pan,
-              'licenceNo', f.license_no, 'erpCode', f.erp_code, 'creditLimit', f.credit_limit, 'route', bt.beat_name,
+              'licenceNo', f.license_no, 'erpCode', f.erp_code, 'creditLimit', f.credit_limit, 'route', coalesce(rop.name, bt.beat_name),
               'servedBy', par.name, 'salesContact', ${person("sc")}, 'salesContactPhone', sc.phone
             ) as "buyerProfile",
             sup.firm_code as "supplierCode", sup.city as "supplierCity"
