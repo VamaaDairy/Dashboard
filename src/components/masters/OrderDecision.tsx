@@ -36,7 +36,7 @@ export function OrderDecision({ id, orderId, decide = decideOrderAction, size = 
   return (
     <div className="flex items-center justify-end gap-1.5">
       {error ? <span className="max-w-48 text-xs text-destructive">{error}</span> : null}
-      <button type="button" disabled={pending} onClick={() => run("confirm")} className={`${btn} bg-emerald-600 text-white hover:opacity-90`}>
+      <button type="button" disabled={pending} onClick={() => run("confirm")} className={`${btn} bg-primary text-primary-foreground hover:opacity-90`}>
         Confirm
       </button>
       <button type="button" disabled={pending} onClick={() => run("cancel")} className={`${btn} border border-destructive/40 text-destructive hover:bg-destructive/10`}>
