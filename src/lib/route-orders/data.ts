@@ -43,7 +43,7 @@ const PARTY_OF_FIRM = `left join lateral (
 
 const PRODUCT_OF_SKU = `left join route_order_product rp on rp.active and rp.sku_no::text = regexp_replace(p.sku_code, '\\D', '', 'g')`;
 
-/** Every order line booked on [date] (India time), cancelled ones aside: all trade orders, whoever placed them. */
+/** Every order line for delivery on [date], cancelled ones aside: all trade orders, whoever placed them. */
 export async function dayLines(date: string): Promise<DayLine[]> {
   return query<DayLine>(
     `select b.uid as "orderUid", b.order_id as "orderId", b.status, f.uid as "firmUid", f.name as "firmName",
@@ -68,7 +68,8 @@ export async function dayLines(date: string): Promise<DayLine[]> {
        from route_order_bill_order bo join route_order_bill x on x.id = bo.bill_id where bo.order_uid = b.uid
      ) bill on true
      where (b.app_kind is not null or b.order_type = 'PRIMARY')
-       and (b.booking_time at time zone 'Asia/Kolkata')::date = $1
+       -- the day the goods go out: the delivery date the order was placed for (db/098), else the day after it was booked
+       and coalesce(b.delivery_date, (b.booking_time at time zone 'Asia/Kolkata')::date + 1) = $1::date
        and lower(b.status) not in ('cancelled', 'rejected')
      order by i.order_item_number`,
     [date],
