@@ -364,31 +364,46 @@ export interface DistOrderRow {
   reason: string | null;
   /** its GST invoice number, once issued */
   invoiceNo: string | null;
+  /** who put it in: "Distributor", "Retailer", "Sales officer <name>" or "Gaia" (the office) */
+  placedBy: string;
   /** units: the split as ordered, e.g. { CRT: 2, PCS: 5 }; null when ordered by the piece only */
   lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number; units: Units | null }>;
   /** internal: the API adds the order's delivery date, edit window and history from it, then drops it */
   uid: string;
 }
 
+/**
+ * Which orders a login sees - one history per party, the same whoever placed them: a distributor or retailer every
+ * order of its own firm (its own and those a sales officer booked for it), a sales officer every order of the parties
+ * they are the sales contact of (whoever placed it) plus any they booked themselves.
+ */
+const visibleTo = (login: DistLogin) =>
+  login.kind !== "salesman"
+    ? { where: "b.from_firm_uid = $1", arg: login.firmUid }
+    : { where: "(b.staff_uid = $1 or b.from_firm_uid in (select uid from fp_firm where sales_contact_uid = $1 and active = 1))", arg: login.staffUid };
+
 /** The order's uid when this login may see it (as on its Orders list), else null. */
 export async function distOrderUid(login: DistLogin, orderId: number): Promise<string | null> {
-  const r = await one<{ uid: string }>(
-    `select b.uid from fp_booking_order b where b.order_id = $2 and ${login.kind !== "salesman" ? "b.from_firm_uid = $1" : "b.staff_uid = $1"}`,
-    [login.kind !== "salesman" ? login.firmUid : login.staffUid, orderId],
-  );
+  const v = visibleTo(login);
+  const r = await one<{ uid: string }>(`select b.uid from fp_booking_order b where b.order_id = $2 and ${v.where}`, [v.arg, orderId]);
   return r?.uid ?? null;
 }
 
 export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> {
+  const v = visibleTo(login);
   const rows = await query<Omit<DistOrderRow, "lines"> & { uid: string }>(
     `select b.uid, b.order_id as "orderId", b.booking_time as date, f.name as distributor, b.status,
             b.total_item as items, b.total_quantity as qty, b.total_cost as total,
             nullif(trim(b.rejection_reason), '') as reason,
-            (select v.invoice_no from dist_invoice v where v.booking_order_uid = b.uid) as "invoiceNo"
+            (select v.invoice_no from dist_invoice v where v.booking_order_uid = b.uid) as "invoiceNo",
+            case b.app_kind when 'distributor' then 'Distributor' when 'retailer' then 'Retailer'
+                 when 'salesman' then 'Sales officer' || coalesce(' ' || nullif(trim(so.first_name || ' ' || coalesce(so.last_name, '')), ''), '')
+                 else 'Gaia' end as "placedBy"
      from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid
-     where ${login.kind !== "salesman" ? "b.from_firm_uid = $1" : "b.staff_uid = $1"}
-     order by b.booking_time desc limit 100`,
-    [login.kind !== "salesman" ? login.firmUid : login.staffUid],
+     left join fp_staff so on so.uid = b.staff_uid
+     where ${v.where}
+     order by b.booking_time desc limit 200`,
+    [v.arg],
   );
   if (!rows.length) return [];
   const items = await query<{ b: string; sku: string; name: string; qty: number; rate: number; amount: number; units: Units | null }>(

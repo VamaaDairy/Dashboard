@@ -15,7 +15,7 @@ import { decideAppOrderAction } from "./actions";
 import { confirmSelectedAction } from "./edit-actions";
 import { BulkConfirm, OrderEditor, ReopenButton } from "./order-editor";
 import { cutoffFor, orderableProducts, orderEvents } from "@/lib/orders/direct";
-import { Field, Filters, TradeStatus, dateOnly, placedVia, qty, when } from "./parts";
+import { Field, Filters, ManagedBy, TradeStatus, dateOnly, placedVia, qty, when } from "./parts";
 
 /** The Retailers and Distributors pages are the same apart from who the buyer is. */
 
@@ -76,7 +76,7 @@ export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; s
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
               <tr>
-                {["", "Order", "Placed", "Delivery", t.buyer, "Location", "GSTIN", "Placed via", "Items", "Value", "Status", ""].map((h, i) => (
+                {["", "Order", "Placed", "Delivery", t.buyer, kind === "retailers" ? "Served by" : "Managed by", "Route", "Location", "GSTIN", "Placed by", "Items", "Value", "Status", ""].map((h, i) => (
                   <th key={i} className={`whitespace-nowrap px-3 py-2 font-semibold ${h === "Items" || h === "Value" ? "text-right" : ""}`}>{h}</th>
                 ))}
               </tr>
@@ -96,9 +96,11 @@ export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; s
                     <Link href={`/app-orders/${kind}/${o.uid}`} className="font-medium hover:underline">{o.buyer}</Link>
                     <div className="font-mono text-xs text-muted-foreground">{o.buyerCode}{o.phone ? ` · ${o.phone}` : ""}</div>
                   </td>
+                  <td className="min-w-40 px-3 py-2"><ManagedBy o={o} /></td>
+                  <td className="whitespace-nowrap px-3 py-2">{o.route ?? <span className="text-muted-foreground">No route</span>}</td>
                   <td className="px-3 py-2 text-muted-foreground">{[o.city, o.state].filter(Boolean).join(", ") || "-"}</td>
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{o.gstin || <span className="text-muted-foreground">-</span>}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{placedVia(o)}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{placedVia(o)}</td>
                   <td className="num whitespace-nowrap px-3 py-2 text-right">{o.items}<div className="text-xs text-muted-foreground">{qty(o.qty)} units</div></td>
                   <td className="num whitespace-nowrap px-3 py-2 text-right font-medium">{rupees(o.total)}</td>
                   <td className="px-3 py-2"><TradeStatus status={o.status} />{o.reason ? <div className="mt-1 max-w-48 text-xs text-muted-foreground">{o.reason}</div> : null}</td>
@@ -106,7 +108,7 @@ export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; s
                 </tr>
               ))}
               {orders.length === 0 ? (
-                <tr><td colSpan={12} className="px-3 py-10 text-center text-muted-foreground">{q || status ? "No orders match." : `No ${t.one.toLowerCase()} orders from the app yet.`}</td></tr>
+                <tr><td colSpan={14} className="px-3 py-10 text-center text-muted-foreground">{q || status ? "No orders match." : `No ${t.one.toLowerCase()} orders from the app yet.`}</td></tr>
               ) : null}
             </tbody>
           </table>
@@ -273,6 +275,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                 <Field label="Credit limit">{b.creditLimit ? rupees(b.creditLimit) : null}</Field>
                 <Field label="Route">{b.route}</Field>
                 <Field label="Served by">{b.servedBy}</Field>
+                <Field label={o.kind === "retailers" ? "This order served by" : "Managed by"}><ManagedBy o={o} /></Field>
                 <Field label="Sales contact">{b.salesContact ? `${b.salesContact}${b.salesContactPhone ? ` · ${b.salesContactPhone}` : ""}` : null}</Field>
               </dl>
             </Panel>
@@ -285,7 +288,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
               </dl>
             </Panel>
 
-            <Panel title="Placed via" flush>
+            <Panel title="Placed by" flush>
               <dl className="divide-y divide-border">
                 <Field label="From">{placedVia(o)}</Field>
                 <Field label="App login" mono>{o.login?.phone}</Field>
