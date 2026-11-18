@@ -3,7 +3,10 @@ import { Copy } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pill } from "@/components/cn/ui";
 import { CustomerTabs } from "@/components/customers/CustomerTabs";
+import { cookies } from "next/headers";
 import { CUSTOMER_KINDS, customerCounts, duplicates, profileHref } from "@/lib/customers";
+import { userFromToken } from "@/lib/access-server";
+import { levelFor } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +15,10 @@ export const dynamic = "force-dynamic";
  * D2C app. Open each record to merge or correct it.
  */
 export default async function CustomerDuplicatesPage() {
-  const [counts, groups] = await Promise.all([customerCounts(), duplicates()]);
+  const [counts, all, me] = await Promise.all([customerCounts(), duplicates(), userFromToken((await cookies()).get("session")?.value)]);
+  // the Gaia app's shoppers only for those with the D2C business's access; a number then only counts as twice on the rest
+  const showD2c = !!me && levelFor(me, "d2c.customers") !== "none";
+  const groups = showD2c ? all : all.map((g) => ({ ...g, records: g.records.filter((r) => r.kind !== "d2c") })).filter((g) => g.records.length > 1);
   const one = (k: string) => CUSTOMER_KINDS.find((c) => c.key === k)?.one ?? k;
   const crossList = groups.filter((g) => new Set(g.records.map((r) => r.kind)).size > 1).length;
 
@@ -24,7 +30,7 @@ export default async function CustomerDuplicatesPage() {
           title="Customer Master · Same mobile twice"
           subtitle="Mobile numbers that are on more than one customer record. Within one list it is usually the same shop entered twice; across lists it is one person who is, say, a retailer and also a D2C customer."
         />
-        <CustomerTabs on="duplicates" counts={counts} duplicates={groups.length} />
+        <CustomerTabs on="duplicates" counts={counts} duplicates={groups.length} showD2c={showD2c} />
         <p className="text-sm text-muted-foreground">{groups.length} mobile number{groups.length === 1 ? "" : "s"} repeat · {crossList} across lists</p>
         <div className="space-y-3">
           {groups.map((g) => (
