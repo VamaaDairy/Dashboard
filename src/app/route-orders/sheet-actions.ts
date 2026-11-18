@@ -44,12 +44,12 @@ export async function confirmRowsAction(uids: string[]) {
 }
 
 /** Takes one product off every order shown on the sheet (that day, those filters). */
-export async function removeProductAction(uids: string[], sku: string) {
+export async function removeProductAction(uids: string[], sku: string, reason?: string) {
   const who = await actor();
   if (!who) return NO;
   const list = (Array.isArray(uids) ? uids : []).filter(uidOk).slice(0, 1000);
   if (!list.length || typeof sku !== "string" || !sku) return { ok: false as const, error: "Nothing to change." };
-  const r = await removeProductFromOrders(list, sku, who);
+  const r = await removeProductFromOrders(list, sku, who, typeof reason === "string" ? reason : null);
   refresh();
   return { ok: true as const, ...r };
 }

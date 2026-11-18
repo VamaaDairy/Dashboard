@@ -8,7 +8,7 @@ import { cookies } from "next/headers";
 import { dayLines, filterLines, listRoutes, readDateBy, validDate, type DayLine } from "@/lib/route-orders/data";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { AutoRefresh, ConfirmButton, QtyCell, RemoveProduct } from "./sheet";
+import { AutoRefresh, CancelProductButton, ConfirmButton, QtyCell, type CancelProduct } from "./sheet";
 import { CategorySummary } from "./category-summary";
 import { Chip, DayFilters, Notice, cases, inr, kg } from "./parts";
 import { labelOf, productLabels, type ProductLabel } from "@/lib/products/names";
@@ -96,12 +96,26 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
   const totalValue = lines.reduce((s, l) => s + l.amount, 0);
   const unmatched = table.filter((r) => !r.matched).length;
   const unknownSkus = new Set(lines.filter((l) => !l.product).map((l) => l.sku)).size;
-  // every order on the sheet, and the pending ones the office can still confirm
-  const shownUids = [...new Set(lines.map((l) => l.orderUid))];
+  // the pending orders the office can still confirm
   const pendingUids = [...new Set(lines.filter((l) => l.status.toLowerCase() === "pending" && !l.voucherNo).map((l) => l.orderUid))];
   // the real SKU behind a column (a product-master column may be keyed by its number)
   const skuOf = new Map(lines.map((l) => [skuKey(l), l.sku]));
-  const ordersWith = (k: string) => new Set(lines.filter((l) => skuKey(l) === k).map((l) => l.orderUid)).size;
+  // the "Cancel a product" review: each product on the sheet with the orders it is on
+  const linesPerOrder = new Map<string, number>();
+  for (const l of lines) linesPerOrder.set(l.orderUid, (linesPerOrder.get(l.orderUid) ?? 0) + 1);
+  const cancelable: CancelProduct[] = cols.map((c) => {
+    const byOrder = new Map<string, CancelProduct["orders"][number]>();
+    for (const l of lines.filter((x) => skuKey(x) === c.sku)) {
+      const o = byOrder.get(l.orderUid) ?? {
+        uid: l.orderUid, orderId: l.orderId, customer: l.party?.name ?? l.firmName, route: l.routeName ?? "No route", qty: 0,
+        confirmed: l.status.toLowerCase() === "confirmed", only: (linesPerOrder.get(l.orderUid) ?? 0) === 1,
+        locked: l.voucherNo ? "Billed" : l.onTrip ? "On a trip" : null,
+      };
+      o.qty += l.qty;
+      byOrder.set(l.orderUid, o);
+    }
+    return { sku: skuOf.get(c.sku) ?? c.sku, name: c.name, image: c.label.image ?? null, pack: c.pack, orders: [...byOrder.values()].sort((a, b) => a.route.localeCompare(b.route) || a.customer.localeCompare(b.customer)) };
+  });
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
@@ -112,7 +126,7 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
           subtitle={canEdit
             ? "The day's orders route by route, unconfirmed ones tinted. Click a quantity to change it; the order, the app and the invoice follow."
             : "The day's orders from the apps and portal, route by route; unconfirmed ones are tinted."}
-          actions={<div className="flex items-center gap-3"><AutoRefresh />{canEdit ? <ConfirmButton big uids={pendingUids} label={`Confirm all pending (${pendingUids.length})`} /> : null}</div>}
+          actions={<div className="flex flex-wrap items-center gap-2"><AutoRefresh />{canEdit ? <CancelProductButton products={cancelable} /> : null}{canEdit ? <ConfirmButton big uids={pendingUids} label={`Confirm all pending (${pendingUids.length})`} /> : null}</div>}
         />
         <DayFilters base="/route-orders" date={date} buyer={buyer} route={route === "all" ? undefined : route} confirmed={confirmed} by={by} />
 
@@ -159,7 +173,6 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
                     {c.name.replace(/^Gaia /, "")}
                     <div className="font-normal text-muted-foreground">{[c.label.qty, c.label.unit].filter(Boolean).join(" ") || "—"}</div>
                     <div className="font-normal text-tertiary-foreground">{c.pack > 1 ? `case of ${c.pack} + pcs` : "pcs"}</div>
-                    {canEdit ? <RemoveProduct uids={shownUids} sku={skuOf.get(c.sku) ?? c.sku} name={c.name} orders={ordersWith(c.sku)} /> : null}
                   </th>
                 ))}
               </tr>

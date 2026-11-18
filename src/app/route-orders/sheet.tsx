@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, PackageX, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { confirmRowsAction, removeProductAction, setCellAction } from "./sheet-actions";
 
@@ -146,28 +147,164 @@ export function ConfirmButton({ uids, label = "Confirm", big = false }: { uids: 
   );
 }
 
-/** A product column's "take it off every order shown" control. */
-export function RemoveProduct({ uids, sku, name, orders }: { uids: string[]; sku: string; name: string; orders: number }) {
+export interface CancelProduct {
+  sku: string;
+  name: string;
+  image: string | null;
+  pack: number;
+  orders: Array<{
+    uid: string; orderId: number; customer: string; route: string; qty: number; confirmed: boolean;
+    /** the only product on it: taking it off cancels the order */
+    only: boolean;
+    /** why it cannot be changed here (billed, on a trip); null when it can */
+    locked: string | null;
+  }>;
+}
+
+/**
+ * "Cancel a product": one button on top of the sheet. It opens a review: pick the product, see every order of the day
+ * it is on (untick any to keep it there; billed or on-trip orders are shown but locked), give a reason, confirm - and
+ * see what was done.
+ */
+export function CancelProductButton({ products }: { products: CancelProduct[] }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [sku, setSku] = useState<string | null>(null);
+  const [off, setOff] = useState<Set<string>>(new Set());
+  const [reason, setReason] = useState("");
+  const [result, setResult] = useState<{ changed: number; cancelled: number; errors: string[] } | null>(null);
+  const [error, setError] = useState("");
   const [pending, start] = useTransition();
-  if (!orders) return null;
+  const p = products.find((x) => x.sku === sku) ?? null;
+  const chosen = p ? p.orders.filter((o) => !o.locked && !off.has(o.uid)) : [];
+  const cancels = chosen.filter((o) => o.only).length;
+  const qty = chosen.reduce((s, o) => s + o.qty, 0);
+
+  const reset = () => { setSku(null); setOff(new Set()); setReason(""); setResult(null); setError(""); };
+  const close = (o: boolean) => {
+    setOpen(o);
+    if (o) { editing++; return; }
+    editing = Math.max(0, editing - 1);
+    if (result) router.refresh();
+    reset();
+  };
+  const go = () =>
+    start(async () => {
+      if (!p) return;
+      const r = await removeProductAction(chosen.map((o) => o.uid), p.sku, reason);
+      if (!r.ok) return setError(r.error);
+      setResult({ changed: r.changed, cancelled: r.cancelled, errors: r.errors });
+    });
+
+  if (!products.length) return null;
   return (
-    <button
-      type="button"
-      disabled={pending}
-      title={`Take ${name} off all ${orders} orders shown`}
-      onClick={() => {
-        if (!window.confirm(`Take ${name} off all ${orders} order${orders === 1 ? "" : "s"} on this sheet?\n\nEach order is changed (an order with nothing else is cancelled) and the buyers see it in the app. Billed orders and orders on a trip are left as they are.`)) return;
-        start(async () => {
-          const r = await removeProductAction(uids, sku);
-          if (!r.ok) window.alert(r.error);
-          else window.alert(`${name}: taken off ${r.changed} order${r.changed === 1 ? "" : "s"}${r.cancelled ? `, ${r.cancelled} cancelled (it was all they had)` : ""}.${r.errors.length ? `\nNot changed: ${r.errors.join("; ")}` : ""}`);
-          router.refresh();
-        });
-      }}
-      className="mt-1 inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-normal text-destructive hover:bg-destructive/10 disabled:opacity-60"
-    >
-      {pending ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />} Cancel for day
-    </button>
+    <Dialog open={open} onOpenChange={close}>
+      <button type="button" onClick={() => close(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-medium shadow-xs hover:bg-muted">
+        <PackageX className="size-4 text-muted-foreground" /> Cancel a product
+      </button>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{result ? "Done" : p ? `Cancel ${p.name}` : "Cancel a product for the day"}</DialogTitle>
+          <DialogDescription>
+            {result ? "The orders are changed; buyers see it in the app."
+              : p ? "It is taken off every ticked order. An order with nothing else on it is cancelled."
+                : "Pick the product. You will see every order it is on before anything changes."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {result ? (
+          <div className="space-y-3 px-5 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-border bg-secondary px-4 py-3"><div className="text-[12px] text-muted-foreground">Orders changed</div><div className="num text-xl font-semibold">{result.changed}</div></div>
+              <div className="rounded-lg border border-border bg-secondary px-4 py-3"><div className="text-[12px] text-muted-foreground">Orders cancelled</div><div className="num text-xl font-semibold">{result.cancelled}</div></div>
+            </div>
+            {result.errors.length ? (
+              <div className="rounded-lg border border-border bg-secondary px-4 py-3 text-[13px]">
+                <div className="mb-1 font-medium">Not changed</div>
+                <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">{result.errors.map((e) => <li key={e}>{e}</li>)}</ul>
+              </div>
+            ) : null}
+          </div>
+        ) : !p ? (
+          <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto px-2 py-2">
+            {products.map((x) => (
+              <li key={x.sku}>
+                <button type="button" onClick={() => setSku(x.sku)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-muted">
+                  <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-secondary">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {x.image ? <img src={x.image} alt="" className="size-9 object-contain" /> : null}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{x.name}</span>
+                    <span className="block font-mono text-[11px] text-muted-foreground">{x.sku}</span>
+                  </span>
+                  <span className="text-right text-[12px] text-muted-foreground">
+                    <span className="num block font-semibold text-foreground">{fmt(x.orders.reduce((s, o) => s + o.qty, 0), x.pack)}</span>
+                    {x.orders.length} {x.orders.length === 1 ? "order" : "orders"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="space-y-3 px-5 py-4">
+            <div className="max-h-[46vh] overflow-y-auto rounded-lg border border-border">
+              <table className="w-full text-[13px]">
+                <thead className="sticky top-0 bg-secondary text-left text-[11px] text-muted-foreground">
+                  <tr>
+                    <th className="w-8 px-3 py-2"><input type="checkbox" aria-label="All" className="size-4 accent-primary"
+                      checked={p.orders.filter((o) => !o.locked).every((o) => !off.has(o.uid))}
+                      onChange={(e) => setOff(e.target.checked ? new Set() : new Set(p.orders.map((o) => o.uid)))} /></th>
+                    <th className="px-2 py-2 font-medium">Customer</th>
+                    <th className="px-2 py-2 font-medium">Order</th>
+                    <th className="px-2 py-2 text-right font-medium">Qty</th>
+                    <th className="px-3 py-2 font-medium">Then</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {p.orders.map((o) => {
+                    const on = !o.locked && !off.has(o.uid);
+                    return (
+                      <tr key={o.uid} className={o.locked ? "text-muted-foreground" : ""}>
+                        <td className="px-3 py-2"><input type="checkbox" disabled={!!o.locked} checked={on} aria-label={o.customer} className="size-4 accent-primary"
+                          onChange={() => setOff((s) => { const n = new Set(s); if (n.has(o.uid)) n.delete(o.uid); else n.add(o.uid); return n; })} /></td>
+                        <td className="px-2 py-2"><div className="font-medium">{o.customer}</div><div className="text-[11px] text-muted-foreground">{o.route}</div></td>
+                        <td className="px-2 py-2 font-mono text-[12px]">#{o.orderId}<div className="font-sans text-[11px] text-muted-foreground">{o.confirmed ? "Confirmed" : "Pending"}</div></td>
+                        <td className="num px-2 py-2 text-right">{fmt(o.qty, p.pack)}</td>
+                        <td className="px-3 py-2 text-[12px] text-muted-foreground">{o.locked ?? (!on ? "Kept" : o.only ? "Order cancelled" : "Product removed")}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <label className="block text-[12px] text-muted-foreground">Reason (optional, the buyer sees it)
+              <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} placeholder="e.g. Not produced today" className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
+            </label>
+            <div className="rounded-lg border border-border bg-secondary px-4 py-2.5 text-[13px] shadow-[inset_3px_0_0_var(--primary)]">
+              {chosen.length
+                ? <>Removes <b className="num">{fmt(qty, p.pack)}</b> of {p.name} from <b>{chosen.length}</b> {chosen.length === 1 ? "order" : "orders"}{cancels ? <>; <b>{cancels}</b> {cancels === 1 ? "order is" : "orders are"} cancelled (it is all they have)</> : null}.</>
+                : "Nothing ticked."}
+            </div>
+            {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
+          </div>
+        )}
+
+        <DialogFooter>
+          {result ? (
+            <button type="button" onClick={() => close(false)} className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground">Close</button>
+          ) : p ? (
+            <>
+              <button type="button" onClick={() => { setSku(null); setOff(new Set()); setError(""); }} className="h-9 rounded-lg border border-border px-4 text-sm hover:bg-muted">Back</button>
+              <button type="button" disabled={pending || !chosen.length} onClick={go} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-destructive px-4 text-sm font-medium text-white disabled:opacity-50">
+                {pending ? <Loader2 className="size-4 animate-spin" /> : null} Cancel on {chosen.length} {chosen.length === 1 ? "order" : "orders"}
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => close(false)} className="h-9 rounded-lg border border-border px-4 text-sm hover:bg-muted">Close</button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
