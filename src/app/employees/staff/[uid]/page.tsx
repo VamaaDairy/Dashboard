@@ -1,130 +1,364 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { ArrowLeft, Pencil, Phone, UserRound } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Panel, Pill } from "@/components/cn/ui";
-import { Field } from "@/app/app-orders/parts";
 import { EmployeeAdmin } from "@/components/employees/EmployeeAdmin";
+import {
+  A, Account, Avatar, Breakdown, Card, Chain, Details, Empty, Facts, Header, History, Layout, MonthBars, Stats, Table, Tabs, Tag,
+  ago, day, rs, rsShort, td, tdNum, when,
+} from "@/components/profile/parts";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { one } from "@/lib/db";
 import { employeeProfile, listDepartments, unlinkedUsers, wingLabel } from "@/lib/employees";
+import { employeeExtras, employeeMore, type OrderLine } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
 
-const day = (d: Date | string | null) =>
-  d ? new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : null;
-const when = (d: Date | string | null) =>
-  d ? new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+const TABS = ["overview", "team", "customers", "hr", "access", "activity"] as const;
+type Tab = (typeof TABS)[number];
+const time = (d: Date | string) => new Date(d).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
 
-/** One employee's profile: personal, job, their own details from the Employee app, the apps they use, and HR's settings. */
-export default async function EmployeeProfilePage({ params }: { params: Promise<{ uid: string }> }) {
+/**
+ * One employee, laid out like a detail page: header and key numbers, then activity in tabs (overview, team,
+ * customers and sales, logins and access, history) beside a column with their personal and job details.
+ */
+export default async function EmployeeProfilePage({ params, searchParams }: { params: Promise<{ uid: string }>; searchParams: Promise<{ tab?: string }> }) {
   const { uid } = await params;
+  const sp = await searchParams;
+  const tab: Tab = (TABS as readonly string[]).includes(sp.tab ?? "") ? (sp.tab as Tab) : "overview";
   const e = await employeeProfile(uid);
   if (!e) notFound();
   const me = await userFromToken((await cookies()).get("session")?.value);
   const canEdit = !!me && atLeast(levelFor(me, "employees"), "edit");
-  const [departments, free, linked] = await Promise.all([
-    listDepartments(),
-    canEdit ? unlinkedUsers() : Promise.resolve([]),
-    e.dashboardUserId ? one<{ id: string; email: string; name: string }>(`select id, email, name from app_user where id = $1`, [e.dashboardUserId]) : Promise.resolve(null),
+  const isOwner = me?.role === "owner";
+  const [x, departments, free, linked] = await Promise.all([
+    employeeExtras(uid),
+    tab === "access" && canEdit ? listDepartments() : Promise.resolve([]),
+    tab === "access" && canEdit ? unlinkedUsers() : Promise.resolve([]),
+    tab === "access" && e.dashboardUserId ? one<{ id: string; email: string; name: string }>(`select id, email, name from app_user where id = $1`, [e.dashboardUserId]) : Promise.resolve(null),
   ]);
   const users = linked ? [linked, ...free] : free;
+  const more = await employeeMore(uid, x.accounts.dashboard?.name ?? null);
+  const first = e.name.split(" ")[0];
+  const base = `/employees/staff/${e.uid}`;
+  const logins = [x.accounts.employeeApp, x.accounts.dashboard, ...x.accounts.salesforce].filter(Boolean).length;
+  const chain = x.chain.map((p) => ({ href: `/employees/staff/${p.uid}`, name: p.name, sub: p.designation }));
+
+  const main = (
+    <>
+      <Tabs base={base} on={tab} tabs={[
+        { key: "overview", label: "Overview" },
+        { key: "team", label: "Team", count: x.team.total },
+        { key: "customers", label: "Customers & sales", count: x.customers.total },
+        { key: "hr", label: "Leave & pay" },
+        { key: "access", label: "Logins & access", count: logins },
+        { key: "activity", label: "Activity", count: x.history.length + (isOwner ? more.dashboardActions.total : 0) },
+      ]} />
+
+      {tab === "overview" ? (
+        <>
+          <Card title="Orders" note={`Last 12 months, from the customers ${first} looks after`}><MonthBars months={x.monthly} /></Card>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Reporting line"><Chain above={chain} self={{ name: e.name, sub: e.designation }} empty="Reports to no one." /></Card>
+            <Card title="Direct reports" note={x.team.total > x.team.direct ? `${x.team.total} in the whole team` : undefined}>
+              <People people={e.reports} limit={6} />
+              {e.reports.length > 6 ? <A href={`${base}?tab=team`} className="mt-2 inline-block text-[13px]">All {e.reports.length} →</A> : null}
+            </Card>
+          </div>
+          {more.peers.length ? (
+            <Card title="Works alongside" note={`Others who report to ${e.manager ?? "the same manager"}`}><People people={more.peers} columns /></Card>
+          ) : null}
+          <RecentOrders orders={x.recent.slice(0, 5)} />
+        </>
+      ) : null}
+
+      {tab === "team" ? (
+        <>
+          <Card title="Direct reports" note={`${e.reports.length} people whose reporting manager is ${first}`}><People people={e.reports} columns /></Card>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Whole team" note={`${x.team.total} active people at every level below ${first}`}>
+              {x.team.byDesignation.length ? <Breakdown rows={x.team.byDesignation.map((d) => ({ label: d.designation, n: d.n }))} total={x.team.total} /> : <Empty>No team yet.</Empty>}
+            </Card>
+            <Card title="Reporting line"><Chain above={chain} self={{ name: e.name, sub: e.designation }} empty="Reports to no one." /></Card>
+          </div>
+          {isOwner ? <p className="text-[13px] text-tertiary-foreground">The full chart is in <A href="/hierarchy">Admin › Hierarchy</A>.</p> : null}
+        </>
+      ) : null}
+
+      {tab === "customers" ? (
+        <>
+          <Card title="Orders by month" note="Orders they took, and orders from the customers they look after"><MonthBars months={x.monthly} /></Card>
+          <Card title="Customers they look after" note={x.customers.total > x.customers.top.length ? `Top ${x.customers.top.length} of ${x.customers.total.toLocaleString("en-IN")} by order value` : "Customers whose sales officer is set to them"}>
+            {x.customers.top.length ? (
+              <Table head={["Customer", "Channel", "City", "Orders", "Value"]} right={[3, 4]}>
+                {x.customers.top.map((c) => (
+                  <tr key={c.uid}>
+                    <td className={td}><A href={`/customers/firm/${c.uid}`}>{c.name}</A>{c.active ? null : <span className="ml-2 text-tertiary-foreground">inactive</span>}</td>
+                    <td className={`${td} text-foreground/70`}>{c.kind}</td>
+                    <td className={`${td} text-foreground/70`}>{c.city ?? "—"}</td>
+                    <td className={tdNum}>{c.orders || "—"}</td>
+                    <td className={tdNum}>{c.value ? rs(c.value) : "—"}</td>
+                  </tr>
+                ))}
+              </Table>
+            ) : <Empty>No customer has {first} as their sales officer.</Empty>}
+          </Card>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Sales">
+              <Facts rows={[
+                ["Orders they took", more.taken.orders ? `${more.taken.orders.toLocaleString("en-IN")} · ${rs(more.taken.value)}` : "None in the Salesforce app"],
+                ["From their customers", `${x.stats.orders.toLocaleString("en-IN")} · ${rs(x.stats.value)}`],
+                ["Last 90 days", `${x.stats.orders90} · ${rs(x.stats.value90)}`],
+                ["Average order", x.stats.orders ? rs(x.stats.value / x.stats.orders) : null],
+                ["Last order", x.stats.last ? `${day(x.stats.last)} (${ago(x.stats.last)})` : null],
+              ]} />
+            </Card>
+            <Card title="By channel">{x.customers.byKind.length ? <Breakdown rows={x.customers.byKind.map((k) => ({ label: k.kind, n: k.n }))} total={x.customers.total} /> : <Empty>None yet.</Empty>}</Card>
+            <Card title="Beats">
+              {x.beats.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {x.beats.map((b) => <li key={`${b.name}${b.code}`} className="flex justify-between gap-3 py-2.5"><span className="truncate">{b.name}</span><span className="text-tertiary-foreground">{[b.day, b.city].filter(Boolean).join(" · ")}</span></li>)}
+                </ul>
+              ) : <Empty>No beat is assigned.</Empty>}
+            </Card>
+          </div>
+          <RecentOrders orders={x.recent} />
+        </>
+      ) : null}
+
+      {tab === "access" ? (
+        <>
+          <Card title="Logins" note="Every app login that is this employee">
+            <Account title="Employee app" id={x.accounts.employeeApp?.phone ?? "No login"}
+              status={x.accounts.employeeApp ? (x.accounts.employeeApp.active ? "On" : "Off") : undefined}
+              meta={x.accounts.employeeApp ? [x.accounts.employeeApp.lastLogin ? `Last signed in ${when(x.accounts.employeeApp.lastLogin)}` : "Never signed in", x.accounts.employeeApp.device].filter(Boolean).join(" · ") : "Attendance, leave, claims and payslips"} />
+            {x.accounts.salesforce.length ? x.accounts.salesforce.map((s) => (
+              <Account key={s.phone} title="Salesforce app" id={s.phone} status={s.active ? "On" : "Off"} meta={s.since ? `Sales officer login since ${day(s.since)}` : undefined} />
+            )) : <Account title="Salesforce app" id="No login" meta="Taking orders in the field" />}
+            <Account title="Dashboard" id={x.accounts.dashboard?.email ?? "No login"}
+              status={x.accounts.dashboard ? (!x.accounts.dashboard.active ? "Off" : x.accounts.dashboard.role === "owner" ? "Owner" : "On") : undefined}
+              meta={x.accounts.dashboard ? [x.accounts.dashboard.mobile, x.accounts.dashboard.since ? `since ${day(x.accounts.dashboard.since)}` : null].filter(Boolean).join(" · ") || undefined : "Link one under HR settings to give office access"}
+              href={isOwner && x.accounts.dashboard ? "/users" : undefined} />
+          </Card>
+
+          <Card title="Dashboard access"
+            note={!isOwner ? "Visible to owners only" : x.access ? `${x.access.role === "owner" ? "Owner" : `${x.access.rows.length} areas`}${x.access.department ? ` · from the ${x.access.department} department and personal grants` : ""}` : undefined}
+            action={isOwner && x.access ? <Link href="/users" className={buttonVariants({ variant: "outline", size: "sm" })}>Change</Link> : null}>
+            {!isOwner ? <Empty>Only owners can see what a login can open.</Empty>
+              : !x.access ? <Empty>No dashboard login, so no dashboard access.</Empty>
+              : x.access.role === "owner" ? <Empty>Owners can open and change everything.</Empty>
+              : x.access.rows.length ? <AccessList rows={x.access.rows} />
+              : <Empty>Nothing is opened up for this login yet.</Empty>}
+          </Card>
+
+          {canEdit ? (
+            <Card title="HR settings" note="Group, department and the dashboard login that is them">
+              <div className="-mx-4"><EmployeeAdmin uid={e.uid} wing={e.wingSet ? e.wing : null} departmentId={e.departmentId} departments={departments} dashboardUserId={e.dashboardUserId} users={users} /></div>
+            </Card>
+          ) : null}
+
+          <Card title="Recent working days" note="Salesforce day start and end, and Employee app attendance">
+            {x.days.length ? (
+              <ul className="divide-y divide-border text-[13px]">
+                {x.days.map((d) => (
+                  <li key={d.date} className="flex justify-between gap-3 py-2.5">
+                    <span>{day(d.date)}</span>
+                    <span className="tabular-nums text-tertiary-foreground">{d.start ? `${time(d.start)}${d.end ? ` – ${time(d.end)}` : ""}` : "present"}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <Empty>No attendance recorded yet.</Empty>}
+          </Card>
+        </>
+      ) : null}
+
+      {tab === "hr" ? (
+        <>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Leave" note={`${more.leaves.daysThisYear} days taken this year${more.leaves.pending ? ` · ${more.leaves.pending} waiting for approval` : ""}`}>
+              {more.leaves.rows.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.leaves.rows.map((l, i) => (
+                    <li key={i} className="flex justify-between gap-3 py-2.5">
+                      <span className="min-w-0"><span className="text-foreground">{l.type}</span><span className="text-tertiary-foreground"> · {day(l.from)}{l.to !== l.from ? ` – ${day(l.to)}` : ""} · {l.days} day{l.days === 1 ? "" : "s"}</span>{l.reason ? <div className="truncate text-[12px] text-tertiary-foreground">{l.reason}</div> : null}</span>
+                      <span className="shrink-0 capitalize text-tertiary-foreground">{l.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No leave requested through the Employee app.</Empty>}
+            </Card>
+            <Card title="Reimbursements" note={`${rs(more.claims.pending)} waiting · ${rs(more.claims.approved)} approved · ${rs(more.claims.paid)} paid`}>
+              {more.claims.rows.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.claims.rows.map((c, i) => (
+                    <li key={i} className="flex justify-between gap-3 py-2.5">
+                      <span className="min-w-0 truncate">{c.category ?? "Claim"}<span className="text-tertiary-foreground"> · {day(c.spentOn)}</span></span>
+                      <span className="shrink-0 tabular-nums">{rs(c.amount)} <span className="ml-2 capitalize text-tertiary-foreground">{c.status}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No claims yet.</Empty>}
+            </Card>
+          </div>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Salary slips">
+              {more.payslips.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.payslips.map((p) => (
+                    <li key={p.month} className="flex justify-between gap-3 py-2.5">
+                      <span>{new Date(`${p.month.slice(0, 7)}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</span>
+                      <span className="tabular-nums">{rs(p.net)}<span className="ml-2 text-tertiary-foreground">{p.published ? "published" : "draft"}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No salary slips yet.</Empty>}
+            </Card>
+            <Card title="Requests to HR">
+              {more.requests.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.requests.map((r, i) => (
+                    <li key={i} className="flex justify-between gap-3 py-2.5">
+                      <span className="min-w-0 truncate">{r.subject ?? r.kind ?? "Request"}<span className="text-tertiary-foreground"> · {day(r.at)}</span></span>
+                      <span className="shrink-0 capitalize text-tertiary-foreground">{r.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No requests yet.</Empty>}
+            </Card>
+          </div>
+        </>
+      ) : null}
+
+      {tab === "activity" ? (
+        <>
+          {isOwner && x.accounts.dashboard ? (
+            <Card title="What they did in the dashboard" note={more.dashboardActions.total ? `${more.dashboardActions.total.toLocaleString("en-IN")} changes made with their login · latest ${more.dashboardActions.rows.length}` : "Changes made with their dashboard login"}>
+              <History rows={more.dashboardActions.rows} />
+            </Card>
+          ) : null}
+          <Card title="Changes to their record" note="Edits made in the dashboard, newest first"><History rows={x.history} /></Card>
+        </>
+      ) : null}
+    </>
+  );
+
+  const side = (
+    <Details groups={[
+      { title: "Job", rows: [
+        ["Group", e.wing && !e.wingSet ? `${wingLabel(e.wing)} (from designation)` : wingLabel(e.wing)],
+        ["Department", e.department],
+        ["Designation", e.designation],
+        ["Employee code", e.code, true],
+        ["Reports to", e.managerUid && e.manager ? <A href={`/employees/staff/${e.managerUid}`}>{e.manager}</A> : null],
+        ["Joined", e.joined ? `${day(e.joined)} (${ago(e.joined)})` : null],
+        ["Grade", e.grade],
+        ["Territory / route", [e.territory, e.route].filter(Boolean).join(" / ")],
+        ["Works for", e.firm],
+        ["This month", e.month && (e.month.present || e.month.leaves) ? `${e.month.present} days present · ${e.month.leaves} on leave` : null],
+        ["Resigned", day(e.resignedOn)],
+        ["Left on", day(e.leftOn)],
+      ] },
+      { title: "Contact", rows: [
+        ["Mobile", e.phone ? <a href={`tel:${e.phone}`} className="hover:underline">{e.phone}</a> : null],
+        ["Email", e.email ? <a href={`mailto:${e.email}`} className="hover:underline">{e.email}</a> : null],
+        ["Address", [e.address, e.city, e.state, e.pincode].filter(Boolean).join(", ")],
+        ["Emergency contact", e.own?.emergencyName ? `${e.own.emergencyName}${e.own.emergencyRel ? ` (${e.own.emergencyRel})` : ""}${e.own.emergencyPhone ? `, ${e.own.emergencyPhone}` : ""}` : null],
+      ] },
+      { title: "Personal", rows: [
+        ["Gender", e.gender],
+        ["Birthday", day(e.birthday)],
+        ["Blood group", e.own?.bloodGroup],
+        ["Aadhaar", e.aadhaar, true],
+        ["PAN", e.pan, true],
+        ["Bank", e.own?.bankName ? [e.own.bankName, e.own.accountNo, e.own.ifsc].filter(Boolean).join(" · ") : null],
+      ] },
+    ]} />
+  );
 
   return (
-    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
-      <div className="w-full space-y-5">
-        <PageHeader
-          icon={UserRound}
-          title={e.name}
-          subtitle={
-            <span className="flex flex-wrap items-center gap-2">
-              {e.hasPhoto ? (
-                // eslint-disable-next-line @next/next/no-img-element -- employee photo from our own route
-                <img src={`/api/employees/photo/${e.uid}`} alt="" className="size-10 rounded-full border border-border object-cover" />
-              ) : null}
-              <Pill tone="brand">{wingLabel(e.wing)}</Pill>
-              {e.department ? <Pill dot={false}>{e.department}</Pill> : null}
-              {e.designation ? <span>{e.designation}</span> : null}
-              {e.code ? <span className="font-mono text-xs">{e.code}</span> : null}
-              {e.active ? <Pill tone="success">Active</Pill> : <Pill>Left</Pill>}
-            </span>
-          }
-          actions={
-            <div className="flex gap-2">
-              <Link href={`/employees/${e.wing ?? "unset"}`} className={buttonVariants({ variant: "outline" })}><ArrowLeft className="size-4" /> {wingLabel(e.wing)}</Link>
-              <Link href={`/orders/staffs/${e.uid}`} className={buttonVariants({ variant: "outline" })}><Pencil className="size-4" /> Edit record</Link>
-            </div>
-          }
+    <div className="flex flex-1 flex-col bg-background px-4 py-6 md:px-10 md:py-8">
+      <div className="mx-auto w-full max-w-[1280px] space-y-8">
+        <Header
+          back={{ href: `/employees/${e.wing ?? "unset"}`, label: `Employee Master · ${wingLabel(e.wing)}` }}
+          name={e.name}
+          photo={e.hasPhoto ? `/api/employees/photo/${e.uid}` : null}
+          tags={<><Tag strong>{e.active ? "Active" : "Left"}</Tag><Tag>{wingLabel(e.wing)}</Tag></>}
+          line={[e.designation, e.department, e.code, e.phone]}
+          actions={<>
+            {isOwner ? <Link href="/hierarchy" className={buttonVariants({ variant: "outline" })}>Hierarchy</Link> : null}
+            <Link href={`/orders/staffs/${e.uid}`} className={buttonVariants({ variant: "outline" })}>Edit</Link>
+          </>}
         />
-
-        <div className="grid items-start gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-          <Panel title="Personal" flush>
-            <dl className="divide-y divide-border">
-              <Field label="Mobile">{e.phone ? <a href={`tel:${e.phone}`} className="inline-flex items-center gap-1 text-primary hover:underline"><Phone className="size-3.5" /> {e.phone}</a> : null}</Field>
-              <Field label="Email">{e.email}</Field>
-              <Field label="Gender">{e.gender}</Field>
-              <Field label="Birthday">{day(e.birthday)}</Field>
-              <Field label="Address">{[e.address, e.city, e.state, e.pincode].filter(Boolean).join(", ") || null}</Field>
-              <Field label="Aadhaar" mono>{e.aadhaar}</Field>
-              <Field label="PAN" mono>{e.pan}</Field>
-              <Field label="Blood group">{e.own?.bloodGroup}</Field>
-              <Field label="Emergency contact">{e.own?.emergencyName ? `${e.own.emergencyName}${e.own.emergencyRel ? ` (${e.own.emergencyRel})` : ""}${e.own.emergencyPhone ? ` · ${e.own.emergencyPhone}` : ""}` : null}</Field>
-              <Field label="Bank">{e.own?.bankName ? `${e.own.bankName}${e.own.accountNo ? ` · ${e.own.accountNo}` : ""}${e.own.ifsc ? ` · ${e.own.ifsc}` : ""}` : null}</Field>
-            </dl>
-          </Panel>
-
-          <Panel title="Job" flush>
-            <dl className="divide-y divide-border">
-              <Field label="Group">{wingLabel(e.wing)}{e.wing && !e.wingSet ? <span className="ml-1 text-xs text-amber-600">(by designation - confirm)</span> : null}</Field>
-              <Field label="Department">{e.department}</Field>
-              <Field label="Designation">{e.designation}</Field>
-              <Field label="Employee code" mono>{e.code}</Field>
-              <Field label="Reports to">{e.managerUid && e.manager ? <Link href={`/employees/staff/${e.managerUid}`} className="text-primary hover:underline">{e.manager}</Link> : null}</Field>
-              <Field label="Joined">{day(e.joined)}</Field>
-              <Field label="Grade">{e.grade}</Field>
-              <Field label="Territory / route">{[e.territory, e.route].filter(Boolean).join(" / ") || null}</Field>
-              <Field label="Works for">{e.firm}</Field>
-              <Field label="Resigned">{day(e.resignedOn)}</Field>
-              <Field label="Left on">{day(e.leftOn)}</Field>
-              <Field label="This month">{e.month ? `${e.month.present} day${e.month.present === 1 ? "" : "s"} present · ${e.month.leaves} leave${e.month.leaves === 1 ? "" : "s"}` : null}</Field>
-            </dl>
-          </Panel>
-
-          <Panel title="Apps & access" flush>
-            <dl className="divide-y divide-border">
-              <Field label="Employee app">{e.employeeLogin ? `${e.employeeLogin.phone}${e.employeeLogin.active ? "" : " (off)"}${e.employeeLogin.lastLogin ? ` · last in ${when(e.employeeLogin.lastLogin)}` : ""}` : "No login"}</Field>
-              <Field label="Salesforce app">{e.salesforceLogin ? `${e.salesforceLogin.phone}${e.salesforceLogin.active ? "" : " (off)"}` : "No login"}</Field>
-              <Field label="Dashboard">
-                {e.dashboard ? (
-                  <span>{e.dashboard.email} · <span className="capitalize">{e.dashboard.role}</span>{e.dashboard.active ? "" : " (off)"}{me?.role === "owner" ? <> · <Link href="/users" className="text-primary hover:underline">access</Link></> : null}</span>
-                ) : "No dashboard login"}
-              </Field>
-            </dl>
-            {canEdit ? (
-              <div className="border-t border-border">
-                <EmployeeAdmin uid={e.uid} wing={e.wingSet ? e.wing : null} departmentId={e.departmentId} departments={departments}
-                  dashboardUserId={e.dashboardUserId} users={users} />
-              </div>
-            ) : null}
-          </Panel>
-        </div>
-
-        {e.reports.length ? (
-          <Panel title={`Reports to ${e.name.split(" ")[0]} · ${e.reports.length}`} flush>
-            <ul className="divide-y divide-border text-sm">
-              {e.reports.map((r) => (
-                <li key={r.uid} className="flex items-center justify-between px-4 py-2">
-                  <Link href={`/employees/staff/${r.uid}`} className="font-medium text-primary hover:underline">{r.name}</Link>
-                  <span className="text-xs text-muted-foreground">{r.designation}</span>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        ) : null}
+        <Stats items={[
+          { label: "Team", value: x.team.total.toLocaleString("en-IN"), note: `${x.team.direct} direct` },
+          { label: "Customers handled", value: x.customers.total.toLocaleString("en-IN"), note: `${x.customers.active.toLocaleString("en-IN")} active` },
+          { label: "Orders, 90 days", value: rsShort(x.stats.value90), note: `${x.stats.orders90} orders` },
+          { label: "Orders, all time", value: rsShort(x.stats.value), note: x.stats.last ? `last ${ago(x.stats.last)}` : "none yet" },
+          { label: "Logins", value: String(logins), note: [x.accounts.employeeApp && "Employee", x.accounts.salesforce.length && "Salesforce", x.accounts.dashboard && "Dashboard"].filter(Boolean).join(", ") || "none" },
+        ]} />
+        <Layout main={main} side={side} />
       </div>
     </div>
+  );
+}
+
+function People({ people, limit, columns }: { people: Array<{ uid: string; name: string; designation: string | null }>; limit?: number; columns?: boolean }) {
+  if (!people.length) return <Empty>No one reports to them.</Empty>;
+  return (
+    <ul className={columns ? "grid gap-x-10 sm:grid-cols-2" : ""}>
+      {people.slice(0, limit ?? people.length).map((r) => (
+        <li key={r.uid} className="border-b border-border last:border-b-0">
+          <Link href={`/employees/staff/${r.uid}`} className="group flex items-center gap-3 py-2.5">
+            <Avatar name={r.name} size={28} />
+            <span className="min-w-0 flex-1 truncate text-[13px] text-foreground group-hover:underline">{r.name}</span>
+            <span className="truncate text-[12px] text-tertiary-foreground">{r.designation}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AccessList({ rows }: { rows: Array<{ group: string; label: string; level: string }> }) {
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) groups.set(r.group, [...(groups.get(r.group) ?? []), r]);
+  return (
+    <div className="grid gap-x-12 pt-2 md:grid-cols-2">
+      {[...groups].map(([g, list]) => (
+        <div key={g} className="mb-5">
+          <div className="mb-1.5 text-[12px] text-tertiary-foreground">{g}</div>
+          <ul className="divide-y divide-border">
+            {list.map((r) => (
+              <li key={r.label} className="flex justify-between gap-3 py-1.5 text-[13px]">
+                <span className="truncate text-foreground">{r.label}</span>
+                <span className="shrink-0 text-tertiary-foreground">{r.level === "edit" ? "Can change" : "View only"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RecentOrders({ orders }: { orders: OrderLine[] }) {
+  return (
+    <Card title="Latest orders">
+      {orders.length ? (
+        <Table head={["Order", "Placed", "Customer", "Items", "Value", "Status"]} right={[3, 4]}>
+          {orders.map((o) => (
+            <tr key={o.uid}>
+              <td className={td}><A href={`/app-orders/${o.kind === "Retailer" ? "retailers" : "distributors"}/${o.uid}`} className="font-mono text-[12px]">{o.orderId ?? o.uid.slice(0, 8)}</A></td>
+              <td className={`${td} whitespace-nowrap text-foreground/70`}>{when(o.at)}</td>
+              <td className={td}>{o.firmUid ? <A href={`/customers/firm/${o.firmUid}`}>{o.firm}</A> : "—"}</td>
+              <td className={tdNum}>{o.items}</td>
+              <td className={tdNum}>{rs(o.total)}</td>
+              <td className={`${td} text-foreground/70`}>{o.status}</td>
+            </tr>
+          ))}
+        </Table>
+      ) : <Empty>No orders yet.</Empty>}
+    </Card>
   );
 }
