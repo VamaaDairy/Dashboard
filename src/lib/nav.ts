@@ -505,6 +505,7 @@ const WORKING: NavSection[] = [
         items: [
           { href: "/product-names", key: "productnames", label: "Product names check", icon: Tags },
           { href: "/audit", key: "audit", label: "Change log", icon: FileClock },
+          { href: "/hierarchy", key: "", label: "Hierarchy (employees & customers)", icon: Network, ownerOnly: true },
           { href: "/users", key: "", label: "Users", icon: UserPlus, ownerOnly: true },
         ],
       },
