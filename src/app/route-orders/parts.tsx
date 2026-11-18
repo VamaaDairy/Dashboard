@@ -32,7 +32,11 @@ export function Chip({ href, on, children }: { href: string; on: boolean; childr
 }
 
 /** The date, who's buying, and confirmed-only. All of them stay in the URL. */
-export function DayFilters({ base, date, buyer, route, confirmed }: { base: string; date: string; buyer: string; route?: string; confirmed: boolean }) {
+export function DayFilters({ base, date, buyer, route, confirmed, distributorsOnly = false }: {
+  base: string; date: string; buyer: string; route?: string; confirmed: boolean;
+  /** the demand sheet: retailers' orders never count, so there is no Retailers choice */
+  distributorsOnly?: boolean;
+}) {
   const href = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const all = { date, buyer, route, confirmed: confirmed ? "1" : undefined, ...over };
@@ -53,7 +57,7 @@ export function DayFilters({ base, date, buyer, route, confirmed }: { base: stri
         <Chip href={href({ confirmed: confirmed ? undefined : "1" })} on={confirmed}>Confirmed only</Chip>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {BUYERS.map((b) => <Chip key={b.value} href={href({ buyer: b.value })} on={buyer === b.value}>{b.label}</Chip>)}
+        {BUYERS.filter((b) => !distributorsOnly || (b.value !== "retailers" && b.value !== "distributors")).map((b) => <Chip key={b.value} href={href({ buyer: b.value })} on={buyer === b.value}>{b.label}</Chip>)}
       </div>
     </div>
   );

@@ -8,14 +8,17 @@ import { ProductCell } from "@/components/products/Product";
 
 export const dynamic = "force-dynamic";
 
-/** What to make and load for the day: each product's quantity by route. */
+/**
+ * The demand sheet - what to make and load for the day: each product's quantity by route. Only distributors' (and
+ * other direct customers') orders count: a retailer's order is on its distributor, whose own order already covers it.
+ */
 export default async function ProductTotalsPage({ searchParams }: { searchParams: Promise<{ date?: string; buyer?: string; confirmed?: string }> }) {
   const sp = await searchParams;
   const date = validDate(sp.date);
   const buyer = sp.buyer || "all";
   const confirmed = sp.confirmed === "1";
   const [all, routes, labels] = await Promise.all([dayLines(date), listRoutes(), productLabels()]);
-  const lines = filterLines(all, { buyer, confirmed });
+  const lines = filterLines(all, { buyer: buyer === "retailers" ? "all" : buyer, confirmed }).filter((l) => !l.retail);
 
   const rows = new Map<string, { label: ProductLabel; name: string; category: string; pack: number; sort: number; byRoute: Map<string, number>; qty: number; kg: number; value: number }>();
   for (const l of lines) {
@@ -40,8 +43,8 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="w-full space-y-4">
-        <PageHeader icon={Boxes} title="Product totals" subtitle="Each product's quantity by route, for production and loading. Quantities are cases + pieces." />
-        <DayFilters base="/route-orders/products" date={date} buyer={buyer} confirmed={confirmed} />
+        <PageHeader icon={Boxes} title="Product totals" subtitle="The demand sheet: each product's quantity by route, for production and loading - distributors' orders only (retailers' orders are covered by their distributor's). Quantities are cases + pieces." />
+        <DayFilters base="/route-orders/products" date={date} buyer={buyer} confirmed={confirmed} distributorsOnly />
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full border-collapse text-sm">
             <thead className="bg-muted text-xs text-muted-foreground">
