@@ -39,7 +39,7 @@ export default async function BannersPage() {
   const stateOf = (b: BannerRow) =>
     !b.active ? ["Off", "bg-muted text-muted-foreground ring-foreground/10"]
       : b.endsAt && b.endsAt < today ? ["Ended", "bg-muted text-muted-foreground ring-foreground/10"]
-        : b.startsAt && b.startsAt > today ? ["Scheduled", "bg-info/10 text-info ring-border-info"]
+        : b.startsAt && b.startsAt > today ? ["Scheduled", "bg-muted text-muted-foreground ring-border"]
           : ["Live", "bg-primary/10 text-primary ring-border-brand"];
 
   return (

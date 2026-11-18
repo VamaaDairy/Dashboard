@@ -12,10 +12,10 @@ export const dynamic = "force-dynamic";
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const STATE: Record<OfferState, { label: string; cls: string }> = {
   live: { label: "Live", cls: "bg-primary/10 text-primary ring-border-brand" },
-  scheduled: { label: "Scheduled", cls: "bg-info/10 text-info ring-border-info" },
+  scheduled: { label: "Scheduled", cls: "bg-muted text-muted-foreground ring-border" },
   paused: { label: "Paused", cls: "bg-muted text-muted-foreground ring-foreground/10" },
   ended: { label: "Ended", cls: "bg-muted text-muted-foreground ring-foreground/10" },
-  used_up: { label: "Used up", cls: "bg-warning/12 text-warning-foreground ring-border-warning" },
+  used_up: { label: "Used up", cls: "bg-muted text-foreground ring-border" },
 };
 const ORDER: OfferState[] = ["live", "scheduled", "used_up", "paused", "ended"];
 const when = (iso: string | null) =>

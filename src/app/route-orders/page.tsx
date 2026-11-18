@@ -169,8 +169,8 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
                 <Fragment key={g}>
                   {route === "all" ? <tr className="border-t border-border bg-muted/40"><td colSpan={cols.length + 3} className="sticky left-0 px-3 py-1.5 text-xs font-semibold">{g}</td></tr> : null}
                   {table.filter((r) => r.route === g).map((r) => (
-                    <tr key={r.key} className={`border-t border-border ${r.pending ? "bg-warning/12 hover:bg-warning/20" : "hover:bg-muted/40"}`}>
-                      <td className={`sticky left-0 z-10 px-3 py-2 ${r.pending ? `bg-background bg-[linear-gradient(color-mix(in_oklab,var(--warning)_12%,transparent),color-mix(in_oklab,var(--warning)_12%,transparent))]` : "bg-background"}`}>
+                    <tr key={r.key} className={`border-t border-border ${r.pending ? "bg-secondary hover:bg-muted" : "hover:bg-muted/40"}`}>
+                      <td className={`sticky left-0 z-10 px-3 py-2 ${r.pending ? "bg-secondary shadow-[inset_3px_0_0_var(--primary)]" : "bg-background"}`}>
                         {/* the customer's name opens its order (the first, when it has several); each order number opens that order */}
                         {(() => {
                           const href = (uid: string, o: { retail: boolean }) => `/app-orders/${o.retail ? "retailers" : "distributors"}/${uid}`;
@@ -191,7 +191,7 @@ export default async function RouteSheetPage({ searchParams }: { searchParams: P
                         })()}
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {r.channel ? <Pill dot={false}>{r.channel}</Pill> : null}
-                          {r.pending ? <Pill tone="warning">Pending</Pill> : null}
+                          {r.pending ? <Pill>Pending</Pill> : null}
                           {r.pending && canEdit ? <ConfirmButton uids={[...r.orders].filter(([, o]) => o.status.toLowerCase() === "pending" && !o.locked).map(([u]) => u)} /> : null}
                           {!r.matched ? <Pill tone="danger">Not matched</Pill> : null}
                         </div>

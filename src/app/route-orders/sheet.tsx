@@ -26,7 +26,8 @@ export function AutoRefresh({ seconds = 30 }: { seconds?: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground" title={`Refreshes every ${seconds} s`}>
       <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-50" /><span className="relative inline-flex size-2 rounded-full bg-primary" /></span>
-      Live · {at.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+      {/* a clock: the server's second and the browser's differ, which is expected */}
+      <span suppressHydrationWarning>Live · {at.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" })}</span>
     </span>
   );
 }
@@ -138,7 +139,7 @@ export function ConfirmButton({ uids, label = "Confirm", big = false }: { uids: 
         router.refresh();
       })}
       className={cn("inline-flex items-center gap-1 rounded-md font-medium disabled:opacity-60",
-        big ? "h-8 bg-primary px-3 text-sm text-primary-foreground" : "h-6 border border-border-warning bg-background px-2 text-[11px] text-warning-foreground hover:bg-warning/15")}
+        big ? "h-8 bg-primary px-3 text-sm text-primary-foreground" : "h-6 border border-border bg-background px-2 text-[11px] text-foreground shadow-xs hover:bg-muted")}
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />} {label}
     </button>
