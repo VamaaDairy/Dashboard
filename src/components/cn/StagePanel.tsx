@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  assignDepartment, closeComplaint, decideCn, misVerify, postCn, reassignDepartment, recommendCn, reviewCapa, submitRca, verifyReturn,
+  assignDepartment, closeComplaint, decideCn, misVerify, postCn, reassignDepartment, recommendCn, recordRefund, reviewCapa, submitRca, verifyReturn,
   type CnResult,
 } from "@/app/cn/actions";
 import { AlertCircle, Clock } from "lucide-react";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Check, Pick } from "@/components/cn/fields";
 import { Field, Panel } from "@/components/cn/ui";
-import { DEPARTMENTS, levelNames, rupees } from "@/lib/cn/sop";
+import { DEPARTMENTS, REFUND_MODES, levelNames, rupees } from "@/lib/cn/sop";
 import type { Complaint } from "@/lib/cn/data";
 
 const ctl = "border-border-control-hover bg-card";
@@ -161,6 +161,16 @@ export function StagePanel({ c, can, today }: { c: Complaint; can: Can; today: s
       ]);
 
     case "approved":
+      if (c.source === "d2c") {
+        if (!can.finance) return wait("Finance to refund the customer");
+        return panel("Refund the customer", `Pay the approved ${rupees(c.approved_value)} back to the customer (from the Easebuzz dashboard for an online payment, or by UPI, bank or cash), then record it here. The customer sees it in the Gaia app.`, <>
+          {text("Refund amount (₹)", "value", { d: String(c.approved_value ?? "") })}
+          <Field label="Paid by"><Pick value={val("mode", REFUND_MODES[0])} onChange={(x) => put("mode", x)} options={REFUND_MODES} /></Field>
+          {text("Reference", "ref", { ph: "UTR, Easebuzz refund id or receipt no." })}
+          {text("Refunded on", "date", { type: "date", d: today })}
+          {note("Remark", "remark")}
+        </>, [B("Record refund", () => recordRefund(c.id, val("value", String(c.approved_value ?? "")), val("mode", REFUND_MODES[0]), val("ref"), val("date", today), val("remark")))]);
+      }
       if (!can.finance) return wait("Finance to post the credit note");
       return panel("Finance posting", `Post the credit note in the books. The value must be exactly the approved ${rupees(c.approved_value)}.`, <>
         {text("CN number", "no")}

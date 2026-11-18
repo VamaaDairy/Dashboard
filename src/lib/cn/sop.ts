@@ -24,7 +24,10 @@ export const stageLabel = (s: string) =>
 
 export const OPEN_STAGES: Stage[] = ["registered", "logged", "assigned", "rca_done", "recommended", "approved", "posted"];
 
-export const CUSTOMER_TYPES = ["Retailer", "Dealer", "Café / HoReCa", "Distributor", "Modern Trade / MFS", "Other"];
+export const CUSTOMER_TYPES = ["Retailer", "Dealer", "Café / HoReCa", "Distributor", "Modern Trade / MFS", "D2C customer", "Other"];
+
+/** How a D2C refund was paid out, recorded by finance once it is done. */
+export const REFUND_MODES = ["Easebuzz (to the original payment)", "UPI", "Bank transfer", "Cash"];
 
 export const CATEGORIES = [
   "Product quality", "Damaged / leaking pack", "Short quantity", "Wrong item delivered",

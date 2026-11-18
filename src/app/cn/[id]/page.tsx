@@ -16,6 +16,7 @@ import { today } from "@/lib/dates";
 export const dynamic = "force-dynamic";
 
 const by = (name: string | null, on: string | null) => (name ? `${name} (${dmy(on)})` : "");
+const SOURCE: Record<string, string> = { dashboard: "Dashboard", d2c: "Gaia app (D2C)", distributor: "Gaia Distributors app", salesforce: "Gaia Salesforce app" };
 const stamp = (at: string) =>
   new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -88,11 +89,34 @@ export default async function ComplaintPage({ params }: PageProps<"/cn/[id]">) {
                 <Row label="Quantity affected" value={`${c.qty_affected} ${c.qty_unit}`} />
                 <Row label="Complaint type" value={c.category} />
                 <Row label="Description" value={c.description} />
-                <Row label="Photo / video" value={
-                  <a href={c.evidence_url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1.5 text-info underline-offset-2 hover:underline">
-                    <span className="truncate">{c.evidence_url}</span><ExternalLink className="size-3.5 shrink-0" />
-                  </a>
-                } />
+                {c.items?.length ? (
+                  <Row label="Items" value={
+                    <ul className="space-y-0.5">{c.items.map((l) => <li key={l.sku}>{l.name} × {l.qty} <span className="text-tertiary-foreground">({rupees(l.value)})</span></li>)}</ul>
+                  } />
+                ) : null}
+                {c.evidence_url ? (
+                  <Row label="Photo / video" value={
+                    <a href={c.evidence_url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1.5 text-info underline-offset-2 hover:underline">
+                      <span className="truncate">{c.evidence_url}</span><ExternalLink className="size-3.5 shrink-0" />
+                    </a>
+                  } />
+                ) : null}
+                {c.photo_ids.length ? (
+                  <Row label="Photos" value={
+                    <div className="flex flex-wrap gap-2">
+                      {c.photo_ids.map((p) => (
+                        <a key={p} href={`/api/cn/photo/${p}`} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- photo from our own route */}
+                          <img src={`/api/cn/photo/${p}`} alt="Complaint photo" className="size-24 rounded-md border border-border object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  } />
+                ) : null}
+                <Row label="Raised from" value={SOURCE[c.source] ?? c.source} />
+                {c.shop_order_no ? <Row label="Order" value={<Link href={`/app-orders/d2c/${c.shop_order_id}`} className="underline-offset-2 hover:underline">D2C order {c.shop_order_no}</Link>} /> : null}
+                {c.booking_order_uid ? <Row label="Order" value={<Link href={`/app-orders/distributors/${c.booking_order_uid}`} className="underline-offset-2 hover:underline">Order {c.booking_order_id ?? c.booking_order_uid.slice(0, 8)}</Link>} /> : null}
+                {c.firm_uid ? <Row label="Customer profile" value={<Link href={`/customers/firm/${c.firm_uid}`} className="underline-offset-2 hover:underline">{c.customer_name}</Link>} /> : null}
                 <Row label="Registered by" value={c.registered_by} />
               </Rows>
             </Panel>
@@ -126,8 +150,8 @@ export default async function ComplaintPage({ params }: PageProps<"/cn/[id]">) {
               </Panel>
             ) : null}
 
-            {c.recommended_on || c.approved_on || c.cn_number ? (
-              <Panel title="Credit note" flush>
+            {c.recommended_on || c.approved_on || c.cn_number || c.refund_value !== null ? (
+              <Panel title={c.source === "d2c" ? "Refund" : "Credit note"} flush>
                 <Rows>
                   <Row label="Recommended" value={c.recommended_value !== null ? `${rupees(c.recommended_value)} - ${by(c.recommended_by, c.recommended_on)}` : c.outcome === "no_cn" ? `No credit note - ${by(c.recommended_by, c.recommended_on)}` : ""} />
                   <Row label="Remark" value={c.recommend_remark} />
@@ -135,6 +159,7 @@ export default async function ComplaintPage({ params }: PageProps<"/cn/[id]">) {
                   <Row label="Decision" value={c.approved_on ? `${c.approved_value !== null ? `${rupees(c.approved_value)} approved as ${c.approver_level}` : "Rejected"} - ${by(c.approved_by, c.approved_on)}` : ""} />
                   <Row label="Approval remark" value={c.approval_remark} />
                   <Row label="CN posted" value={c.cn_number ? `${c.cn_number} · ${dmy(c.cn_date)} · ${rupees(c.cn_value)} - ${by(c.finance_by, c.finance_on)}` : ""} />
+                  <Row label="Refunded" value={c.refund_value !== null ? `${rupees(c.refund_value)} by ${c.refund_mode} · ref ${c.refund_ref} · ${dmy(c.refund_on)} - ${c.refund_by}` : ""} />
                   <Row label="Return material" value={c.return_required ? (c.return_verified_on ? `Verified - ${by(c.return_verified_by, c.return_verified_on)} - ${c.return_remark}` : "To be returned and verified") : ""} />
                   <Row label="Closed" value={c.closed_on ? `${by(c.closed_by, c.closed_on)}${c.closure_remark ? ` - ${c.closure_remark}` : ""}` : ""} />
                 </Rows>
@@ -150,12 +175,13 @@ export default async function ComplaintPage({ params }: PageProps<"/cn/[id]">) {
                 {c.recommended_value !== null ? <Line label="Recommended">{rupees(c.recommended_value)}</Line> : null}
                 {c.approved_value !== null ? <Line label="Approved">{rupees(c.approved_value)}</Line> : null}
                 {c.cn_number ? <Line label={`CN ${c.cn_number}`}>{rupees(c.cn_value)}</Line> : null}
+                {c.refund_value !== null ? <Line label="Refunded">{rupees(c.refund_value)}</Line> : null}
                 <Line label="Customer">{c.customer_name}</Line>
                 {c.department ? <Line label="Department">{c.department}</Line> : null}
                 {c.outcome ? (
                   <div className="flex items-center justify-between gap-3">
                     <dt className="text-tertiary-foreground">Outcome</dt>
-                    <dd><Pill tone={c.outcome === "cn_issued" ? "success" : "neutral"}>{c.outcome === "cn_issued" ? "CN issued" : "No CN"}</Pill></dd>
+                    <dd><Pill tone={c.outcome === "cn_issued" || c.outcome === "refunded" ? "success" : "neutral"}>{c.outcome === "cn_issued" ? "CN issued" : c.outcome === "refunded" ? "Refunded" : c.outcome === "rejected" ? "Rejected" : "No CN"}</Pill></dd>
                   </div>
                 ) : null}
               </dl>

@@ -35,6 +35,13 @@ export interface Complaint {
   return_verified_by: string | null; return_verified_on: string | null; return_remark: string | null;
   closed_by: string | null; closed_on: string | null; closure_remark: string | null;
   capa_effective: boolean | null; capa_review_by: string | null; capa_review_on: string | null; capa_review_remark: string | null;
+  /** where it was raised (dashboard, d2c, distributor, salesforce) and the order it is about */
+  source: "dashboard" | "d2c" | "distributor" | "salesforce";
+  shop_order_id: number | null; shop_order_no: string | null; booking_order_uid: string | null; booking_order_id: number | null; firm_uid: string | null;
+  items: Array<{ sku: string; name: string; qty: number; unitPrice: number; value: number }> | null;
+  photo_ids: number[];
+  /** D2C complaints end with a refund instead of a credit note */
+  refund_value: number | null; refund_mode: string | null; refund_ref: string | null; refund_on: string | null; refund_by: string | null;
 }
 
 export interface CnEvent { id: string; at: string; by_name: string; action: string; remark: string | null }
@@ -42,7 +49,7 @@ export interface CnEvent { id: string; at: string; by_name: string; action: stri
 /** Date columns come back as YYYY-MM-DD text (the app's calendar), not JS Dates. */
 const DATES = [
   "stage_on", "complaint_date", "invoice_date", "mis_on", "assigned_on", "tat_due", "capa_target_date", "rca_on",
-  "recommended_on", "approved_on", "cn_date", "finance_on", "return_verified_on", "closed_on", "capa_review_on",
+  "recommended_on", "approved_on", "cn_date", "finance_on", "return_verified_on", "closed_on", "capa_review_on", "refund_on",
 ];
 const PLAIN = [
   "id", "complaint_no", "stage", "outcome", "customer_name", "customer_type", "region", "contact_no", "invoice_no", "product_name",
@@ -51,11 +58,15 @@ const PLAIN = [
   "capa_owner", "rca_by", "recommended_value", "return_required", "recommend_remark", "recommended_by", "approval_level",
   "approver_level", "approved_value", "approved_by", "approval_remark", "cn_number", "cn_value", "finance_by",
   "return_verified_by", "return_remark", "closed_by", "closure_remark", "capa_effective", "capa_review_by", "capa_review_remark",
+  "source", "shop_order_id", "booking_order_uid", "firm_uid", "items", "refund_value", "refund_mode", "refund_ref", "refund_by",
 ];
 const COLUMNS = [
   ...PLAIN.map((c) => `c.${c}`),
   ...DATES.map((c) => `to_char(c.${c}, 'YYYY-MM-DD') as ${c}`),
   "c.created_at::text as created_at",
+  "(select o.order_no from shop_order o where o.id = c.shop_order_id) as shop_order_no",
+  "(select b.order_id from fp_booking_order b where b.uid = c.booking_order_uid) as booking_order_id",
+  "coalesce((select array_agg(p.id order by p.id) from cn_photo p where p.complaint_id = c.id), '{}') as photo_ids",
 ].join(", ");
 
 export const listComplaints = () =>
