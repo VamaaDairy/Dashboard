@@ -476,8 +476,7 @@ const WORKING: NavSection[] = [
   {
     id: "mis", label: "MIS", icon: BarChart3,
     groups: [
-      { label: "Plant", items: [dash.milkIn, dash.tanks, dash.production, dash.byProduct, dash.fuel] },
-      { label: "Sales", items: items(dash.d2cSales, dash.distSales, dash.fieldActivity, dash.kpi) },
+      { label: "Sales", items: items(dash.distSales, dash.fieldActivity, dash.kpi) },
       {
         label: "Orders",
         items: [
