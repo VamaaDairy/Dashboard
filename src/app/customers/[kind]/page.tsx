@@ -63,7 +63,7 @@ export default async function CustomerListPage({ params, searchParams }: { param
             : `${info.about} Contact, who serves them, sales officer, price list, app login and orders; open one for the full profile.`}
           actions={canAdd ? <Link href="/orders/distribution/new" className={buttonVariants({ variant: "primary" })}><Plus className="size-4" /> Add {info.one.toLowerCase()}</Link> : null}
         />
-        <CustomerTabs on={kind} counts={counts} />
+        <CustomerTabs on={kind} counts={counts} showD2c={!!me && levelFor(me, "d2c.customers") !== "none"} />
         {kind !== "d2c" ? (
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-input p-0.5">

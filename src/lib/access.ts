@@ -111,6 +111,8 @@ export type Match = { kind: "open" } | { kind: "owner" } | { kind: "resource"; k
  */
 const PATH_ALIASES: Array<{ key: string; path: string }> = [
   { key: "shop", path: "/app-orders/d2c" },
+  // the Gaia app's shoppers are the D2C business's, not the trade side's Customer Master
+  { key: "d2c.customers", path: "/customers/d2c" },
 ];
 
 export function matchPath(pathname: string): Match {

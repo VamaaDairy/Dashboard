@@ -450,7 +450,7 @@ const WORKING: NavSection[] = [
               { href: "/customers/retailers", key: "customers", label: "Retailers" },
             ],
           },
-          { href: "/customers/d2c", key: "customers", label: "D2C customers", icon: Contact },
+          { href: "/customers/d2c", key: "d2c.customers", label: "D2C customers", icon: Contact },
           { href: "/customers/duplicates", key: "customers", label: "Same mobile twice", icon: ClipboardCheck },
           distCustomers && { ...distCustomers, label: "Customer setup (all fields)" },
           { href: "/route-orders/masters", key: "routeorders.masters", label: "Route customers & products", icon: Route },
