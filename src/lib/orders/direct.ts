@@ -365,7 +365,8 @@ export type SheetResult = { ok: true; cancelled?: boolean } | { ok: false; error
  * 0 takes the product off; an order left with nothing is cancelled. A confirmed order is reopened, changed and
  * confirmed again (each step in its history); a billed order, or one already on a trip, is not changed here.
  */
-export async function setLineFromSheet(uid: string, sku: string, qty: number, who: Actor, packs: number | null = null): Promise<SheetResult> {
+export async function setLineFromSheet(uid: string, sku: string, qty: number, who: Actor, packs: number | null = null, reason?: string | null): Promise<SheetResult> {
+  const why = reason?.trim().slice(0, 200) || null;
   if (!/^[0-9a-f-]{36}$/i.test(uid)) return { ok: false, error: "That order no longer exists." };
   if (!Number.isInteger(qty) || qty < 0 || qty > MAX_DESK_QTY) return { ok: false, error: "Check the quantity." };
   const o = await one<{ orderId: number; status: string; billed: boolean; trip: boolean }>(
@@ -389,18 +390,18 @@ export async function setLineFromSheet(uid: string, sku: string, qty: number, wh
   // nothing left on it: the order is cancelled instead
   if (!left) {
     if (confirmed) {
-      const re = await reopenOrder(uid, who, "Last product taken off on the route sheet");
+      const re = await reopenOrder(uid, who, why ?? "Last product taken off on the route sheet");
       if (!re.ok) return re;
     }
-    const r = await cancelOrder(uid, who, "Its products were taken off on the route sheet");
+    const r = await cancelOrder(uid, who, why ?? "Its products were taken off on the route sheet");
     return r.ok ? { ok: true, cancelled: true } : r;
   }
 
   if (confirmed) {
-    const re = await reopenOrder(uid, who, "Changed on the route sheet");
+    const re = await reopenOrder(uid, who, why ?? "Changed on the route sheet");
     if (!re.ok) return re;
   }
-  const r = await editOrder(uid, lines, who, "Changed on the route sheet", packs === null ? new Map() : new Map([[sku, packs]]));
+  const r = await editOrder(uid, lines, who, why ?? "Changed on the route sheet", packs === null ? new Map() : new Map([[sku, packs]]));
   if (confirmed) await confirmOrders([uid], who); // back to confirmed, changed or not
   return r.ok ? { ok: true } : r;
 }
@@ -409,7 +410,7 @@ export async function setLineFromSheet(uid: string, sku: string, qty: number, wh
  * Takes one product off every order in [uids] that has it (the route sheet's "cancel this product for the day").
  * Returns how many orders were changed, how many were cancelled (it was all they had) and what could not be done.
  */
-export async function removeProductFromOrders(uids: string[], sku: string, who: Actor): Promise<{ changed: number; cancelled: number; errors: string[] }> {
+export async function removeProductFromOrders(uids: string[], sku: string, who: Actor, reason?: string | null): Promise<{ changed: number; cancelled: number; errors: string[] }> {
   const out = { changed: 0, cancelled: 0, errors: [] as string[] };
   const having = await query<{ uid: string }>(
     `select distinct i.booking_order_uid as uid from fp_booking_order_item i join fp_product p on p.uid = i.product_uid
@@ -417,7 +418,7 @@ export async function removeProductFromOrders(uids: string[], sku: string, who: 
     [uids, sku],
   );
   for (const h of having) {
-    const r = await setLineFromSheet(h.uid, sku, 0, who);
+    const r = await setLineFromSheet(h.uid, sku, 0, who, null, reason);
     if (!r.ok) out.errors.push(r.error);
     else if (r.cancelled) out.cancelled++;
     else out.changed++;
