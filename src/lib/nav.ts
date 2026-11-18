@@ -81,7 +81,9 @@ const distAppOrders: NavItem = {
 const salesStock = orders("Sales & stock", Truck, ["fpsalesview", "fpsecondarysalesview", "stockView", "fpsalesreturnview", "collections", "task"]);
 const distCustomers = orders("Customers", Contact, ["distribution", "customerTarget", "customerTypeMaster", "customerRouteMapping"]);
 const distProducts = orders("Product Management", Package, ["fpproducts", "fpfocusproduct", "fpproductinventory", "displayPlanogram", "greenCallTargets"]);
-const salesTeam = orders("Sales team", Users, ["staffs", "employeecustomermaster", "employeefaceregistration", "attendance", "leave", "employeeTarget", "catalogue", "lms"]);
+// The old staff list (employeecustomermaster), attendance and leave pages are replaced by the Employee Master and
+// the Employee app's Attendance and Leave, so they are left out (they show under "Not in use").
+const salesTeam = orders("Sales team", Users, ["staffs", "employeefaceregistration", "employeeTarget", "catalogue", "lms"]);
 const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
 // Pricing
 const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Prices", icon: Tags };
@@ -450,7 +452,7 @@ const WORKING: NavSection[] = [
               { href: "/customers/retailers", key: "customers", label: "Retailers" },
             ],
           },
-          { href: "/customers/d2c", key: "d2c.customers", label: "D2C customers", icon: Contact },
+          { href: "/d2c/customers", key: "d2c.customers", label: "D2C customers", icon: Contact },
           { href: "/customers/duplicates", key: "customers", label: "Same mobile twice", icon: ClipboardCheck },
           distCustomers && { ...distCustomers, label: "Customer setup (all fields)" },
           { href: "/route-orders/masters", key: "routeorders.masters", label: "Route customers & products", icon: Route },
