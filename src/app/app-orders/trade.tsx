@@ -34,9 +34,10 @@ async function canDecide() {
   return !!me && (atLeast(levelFor(me, "apporders"), "edit") || atLeast(levelFor(me, "fp.portalOrder"), "edit"));
 }
 
-export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; searchParams: Promise<{ status?: string; q?: string; date?: string }> }) {
-  const { status, q, date } = await searchParams;
-  const [orders, statuses, decide] = await Promise.all([listTradeOrders(kind, { status, q, date }), tradeStatuses(kind), canDecide()]);
+export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; searchParams: Promise<{ status?: string; q?: string; date?: string; by?: string }> }) {
+  const { status, q, date, by: rawBy } = await searchParams;
+  const by = rawBy === "order" ? "order" : "delivery";
+  const [orders, statuses, decide] = await Promise.all([listTradeOrders(kind, { status, q, date, by }), tradeStatuses(kind), canDecide()]);
   // direct app orders (the buyer's own sign-in) that are still pending can be ticked and confirmed together
   const tickable = (o: (typeof orders)[number]) => decide && o.status.toLowerCase() === "pending" && (o.appKind === "distributor" || o.appKind === "retailer");
   const anyTickable = orders.some(tickable);
@@ -56,7 +57,10 @@ export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; s
 
         <div className="flex flex-wrap items-center gap-2">
           <form action={`/app-orders/${kind}`} className="flex items-center gap-1.5 text-xs">
-            <span className="font-semibold text-muted-foreground">Delivery date</span>
+            <select name="by" defaultValue={by} aria-label="Which date" className="h-8 rounded-md border border-border bg-background px-1.5 font-semibold text-muted-foreground">
+              <option value="delivery">Delivery date</option>
+              <option value="order">Order date</option>
+            </select>
             <input type="date" name="date" defaultValue={date} className="h-8 rounded-md border border-border bg-background px-2" />
             {status ? <input type="hidden" name="status" value={status} /> : null}
             {q ? <input type="hidden" name="q" value={q} /> : null}

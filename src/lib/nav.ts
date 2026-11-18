@@ -248,7 +248,7 @@ const WORKING: NavSection[] = [
             href: "/route-orders", key: "routeorders", label: "Route orders", icon: Route,
             children: [
               { href: "/route-orders", key: "routeorders", label: "Route sheet", exact: true },
-              { href: "/route-orders/products", key: "routeorders", label: "Product totals" },
+              { href: "/route-orders/products", key: "routeorders", label: "Demand sheet" },
               { href: "/route-orders/billing", key: "routeorders.billing", label: "Billing" },
               { href: "/route-orders/masters", key: "routeorders.masters", label: "Customers & products" },
             ],
@@ -478,6 +478,13 @@ const WORKING: NavSection[] = [
     groups: [
       { label: "Plant", items: [dash.milkIn, dash.tanks, dash.production, dash.byProduct, dash.fuel] },
       { label: "Sales", items: items(dash.d2cSales, dash.distSales, dash.fieldActivity, dash.kpi) },
+      {
+        label: "Orders",
+        items: [
+          { href: "/route-orders/products", key: "routeorders", label: "Demand sheet", icon: Boxes },
+          { href: "/route-orders", key: "routeorders", label: "Route sheet", icon: Route, exact: true },
+        ],
+      },
       { label: "Accounts", items: [dash.creditNotes, dash.cn] },
       { label: "Distributor & retail orders", items: items(distAppOrders, salesStock) },
       { label: "Distributor & retail masters", items: items(distCustomers, distProducts, salesMasters) },

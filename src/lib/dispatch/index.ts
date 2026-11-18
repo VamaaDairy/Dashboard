@@ -57,6 +57,9 @@ export interface DispatchOrder {
   total: number;
   /** the trip it is on, if any */
   tripId: number | null;
+  /** the day it was ordered and the day it goes out (YYYY-MM-DD) */
+  orderDate: string;
+  deliveryDate: string;
 }
 
 /** The confirmed trade orders for [date], with the trip each is on. */
@@ -64,7 +67,8 @@ export async function dispatchOrders(date: string): Promise<DispatchOrder[]> {
   return query<DispatchOrder>(
     `select b.uid, b.order_id as "orderId", f.name as buyer, f.firm_code as "buyerCode", f.phone, f.address, f.city,
             f.latitude::float as lat, f.longitude::float as lng, rr.id as "routeId", ${ROUTE_NAME} as route,
-            b.total_item::int as items, b.total_quantity::float as qty, b.total_cost::float as total, s.trip_id as "tripId"
+            b.total_item::int as items, b.total_quantity::float as qty, b.total_cost::float as total, s.trip_id as "tripId",
+            to_char(b.booking_time at time zone 'Asia/Kolkata', 'YYYY-MM-DD') as "orderDate", to_char(${DELIVERY}, 'YYYY-MM-DD') as "deliveryDate"
        from fp_booking_order b
        join fp_firm f on f.uid = b.from_firm_uid
        ${ROUTE_JOIN}

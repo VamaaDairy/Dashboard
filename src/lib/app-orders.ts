@@ -95,12 +95,15 @@ const TRADE_ROW = `b.uid, b.order_id as "orderId", b.booking_time as "placedAt",
   case when b.app_kind is not null then ${DELIVERY}::text end as "deliveryDate",
   ${MANAGER} as "managedBy", ${MANAGER_TYPE} as "managedByType", coalesce(rop.name, bt.beat_name) as route`;
 
-export async function listTradeOrders(kind: TradeKind, opts: { status?: string; q?: string; date?: string } = {}): Promise<TradeOrderRow[]> {
+/** [opts.by]: whether [opts.date] is the delivery date (default) or the date the order was placed. */
+export async function listTradeOrders(kind: TradeKind, opts: { status?: string; q?: string; date?: string; by?: "delivery" | "order" } = {}): Promise<TradeOrderRow[]> {
   const params: unknown[] = [];
   const where = [tradeWhere(kind)];
   if (opts.date && /^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
     params.push(opts.date);
-    where.push(`b.app_kind is not null and ${DELIVERY} = $${params.length}::date`);
+    where.push(opts.by === "order"
+      ? `(b.booking_time at time zone 'Asia/Kolkata')::date = $${params.length}::date`
+      : `b.app_kind is not null and ${DELIVERY} = $${params.length}::date`);
   }
   if (opts.status) {
     params.push(opts.status.toLowerCase());

@@ -11,11 +11,11 @@ export const dynamic = "force-dynamic";
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const STATE: Record<OfferState, { label: string; cls: string }> = {
-  live: { label: "Live", cls: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300" },
-  scheduled: { label: "Scheduled", cls: "bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-950/40 dark:text-sky-300" },
+  live: { label: "Live", cls: "bg-primary/10 text-primary ring-border-brand" },
+  scheduled: { label: "Scheduled", cls: "bg-info/10 text-info ring-border-info" },
   paused: { label: "Paused", cls: "bg-muted text-muted-foreground ring-foreground/10" },
   ended: { label: "Ended", cls: "bg-muted text-muted-foreground ring-foreground/10" },
-  used_up: { label: "Used up", cls: "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300" },
+  used_up: { label: "Used up", cls: "bg-warning/12 text-warning-foreground ring-border-warning" },
 };
 const ORDER: OfferState[] = ["live", "scheduled", "used_up", "paused", "ended"];
 const when = (iso: string | null) =>
@@ -109,7 +109,7 @@ export default async function OffersPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Link href={canEdit ? `/shop-orders/offers/${o.id}` : "#"} className="font-semibold hover:underline">{o.title}</Link>
                         <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset", STATE[state].cls)}>{STATE[state].label}</span>
-                        {o.badge ? <span className="rounded bg-[#C1DCFE] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-[#2F3992]">{o.badge}</span> : null}
+                        {o.badge ? <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-primary">{o.badge}</span> : null}
                         {o.code ? <span className="inline-flex items-center gap-1 rounded border border-dashed border-foreground/30 px-1.5 py-0.5 font-mono text-[11px]"><Ticket className="size-3" />{o.code}</span> : null}
                       </div>
                       <div className="mt-0.5 text-sm text-muted-foreground">{summaryOf(o)}</div>

@@ -31,7 +31,18 @@ export interface DayLine extends BillInputLine {
   voucherNo: string | null;
   party: (BillParty & { route_id: number | null }) | null;
   product: (BillProduct & { category: string; weight_kg: number }) | null;
+  /** the day it was ordered (India time) and the day it goes out, YYYY-MM-DD */
+  orderDate: string;
+  deliveryDate: string;
+  /** on a trip on the Dispatch page: no longer changed from the sheet */
+  onTrip: boolean;
 }
+
+/** Which of an order's two dates a day's sheet goes by. */
+export type DateBy = "delivery" | "order";
+export const readDateBy = (v: string | undefined): DateBy => (v === "order" ? "order" : "delivery");
+const DELIVERY_DAY = `coalesce(b.delivery_date, (b.booking_time at time zone 'Asia/Kolkata')::date + 1)`;
+const ORDER_DAY = `(b.booking_time at time zone 'Asia/Kolkata')::date`;
 
 const KEY = (sql: string) => `regexp_replace(lower(${sql}), '[^a-z0-9]', '', 'g')`;
 
@@ -43,10 +54,15 @@ const PARTY_OF_FIRM = `left join lateral (
 
 const PRODUCT_OF_SKU = `left join route_order_product rp on rp.active and rp.sku_no::text = regexp_replace(p.sku_code, '\\D', '', 'g')`;
 
-/** Every order line for delivery on [date], cancelled ones aside: all trade orders, whoever placed them. */
-export async function dayLines(date: string): Promise<DayLine[]> {
+/**
+ * Every order line for [date], cancelled ones aside: all trade orders, whoever placed them. By default the day is the
+ * delivery date (the day the goods go out); with by = "order", the day they were ordered.
+ */
+export async function dayLines(date: string, by: DateBy = "delivery"): Promise<DayLine[]> {
   return query<DayLine>(
     `select b.uid as "orderUid", b.order_id as "orderId", b.status, f.uid as "firmUid", f.name as "firmName",
+            to_char(${ORDER_DAY}, 'YYYY-MM-DD') as "orderDate", to_char(${DELIVERY_DAY}, 'YYYY-MM-DD') as "deliveryDate",
+            exists (select 1 from dist_trip_stop ts where ts.order_uid = b.uid) as "onTrip",
             (b.app_kind = 'retailer' or coalesce(ch.channel_code, '') = 'RT') as retail,
             (sup.uid is null or coalesce(sc.channel_code, '') = 'CO') as ours,
             p.sku_code as sku, p.sku_name as "skuName", i.quantity::float as qty, i.selling_price::float as rate, i.total_cost::float as amount,
@@ -68,8 +84,9 @@ export async function dayLines(date: string): Promise<DayLine[]> {
        from route_order_bill_order bo join route_order_bill x on x.id = bo.bill_id where bo.order_uid = b.uid
      ) bill on true
      where (b.app_kind is not null or b.order_type = 'PRIMARY')
-       -- the day the goods go out: the delivery date the order was placed for (db/098), else the day after it was booked
-       and coalesce(b.delivery_date, (b.booking_time at time zone 'Asia/Kolkata')::date + 1) = $1::date
+       -- the day the goods go out: the delivery date the order was placed for (db/098), else the day after it was booked;
+       -- or the day it was ordered
+       and ${by === "order" ? ORDER_DAY : DELIVERY_DAY} = $1::date
        and lower(b.status) not in ('cancelled', 'rejected')
      order by i.order_item_number`,
     [date],

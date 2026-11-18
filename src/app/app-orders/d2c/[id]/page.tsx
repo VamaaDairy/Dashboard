@@ -95,10 +95,10 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                         <td className="px-3 py-2.5 text-foreground"><PackQty p={l} /></td>
                         <td className="px-3 py-2.5 text-foreground"><PackUnit p={l} /></td>
                         <td className="px-3 py-2.5 text-right font-medium text-foreground">{i.qty}</td>
-                        <td className="px-3 py-2.5 text-right text-foreground">{i.free ? <span className="rounded bg-[#C1DCFE] px-1.5 py-0.5 text-[10px] font-bold text-[#2F3992]">FREE</span> : rupees(i.unit_price)}</td>
+                        <td className="px-3 py-2.5 text-right text-foreground">{i.free ? <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">FREE</span> : rupees(i.unit_price)}</td>
                         <td className="px-4 py-2.5 text-right font-medium text-foreground">
                           {rupees(i.line_total)}
-                          {Number(i.discount) ? <div className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400">−{rupees(i.discount)} offer</div> : null}
+                          {Number(i.discount) ? <div className="text-[11px] font-normal text-primary">−{rupees(i.discount)} offer</div> : null}
                         </td>
                       </tr>
                     );
@@ -108,7 +108,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
               <dl className="ml-auto w-72 space-y-1 px-4 py-3 text-[13px] tabular-nums">
                 <div className="flex justify-between"><dt className="text-foreground/75">Item total</dt><dd className="text-foreground">{rupees(o.subtotal)}</dd></div>
                 {Number(o.discount) ? (
-                  <div className="flex justify-between gap-3 text-emerald-700 dark:text-emerald-400"><dt>Offer discount{o.coupon_code ? ` · ${o.coupon_code}` : ""}</dt><dd className="whitespace-nowrap">−{rupees(o.discount)}</dd></div>
+                  <div className="flex justify-between gap-3 text-primary"><dt>Offer discount{o.coupon_code ? ` · ${o.coupon_code}` : ""}</dt><dd className="whitespace-nowrap">−{rupees(o.discount)}</dd></div>
                 ) : null}
                 {o.offers?.length ? <div className="text-[11px] text-foreground/60">{o.offers.map((x) => x.title).join(" · ")}</div> : null}
                 <div className="flex justify-between"><dt className="text-foreground/75">Delivery fee</dt><dd className="text-foreground">{Number(o.delivery_fee) ? rupees(o.delivery_fee) : "Free"}</dd></div>
@@ -161,7 +161,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                         <div className="truncate font-mono text-foreground">{p.txnid}</div>
                         <div className="text-foreground/75">{when(p.updated_at)}{p.mode ? ` · ${p.mode}` : ""}</div>
                       </div>
-                      <span className={p.status === "success" ? "font-medium text-emerald-700" : p.status === "initiated" ? "text-foreground/75" : "font-medium text-destructive"}>{p.status}</span>
+                      <span className={p.status === "success" ? "font-medium text-primary" : p.status === "initiated" ? "text-foreground/75" : "font-medium text-destructive"}>{p.status}</span>
                     </div>
                   ))}
                 </div>

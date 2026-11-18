@@ -178,7 +178,7 @@ export function BannerForm({ targets, banner, onDone }: { targets: BannerTargets
               Remove poster
             </button>
           ) : null}
-          {error ? <span className="text-sm text-red-600">{error}</span> : null}
+          {error ? <span className="text-sm text-destructive">{error}</span> : null}
         </div>
       </div>
       <div>
@@ -209,7 +209,7 @@ export function BannerActions({ banner, targets }: { banner: BannerRow; targets:
         <button
           disabled={pending}
           onClick={() => { if (window.confirm("Delete this banner?")) run(() => deleteBannerAction(banner.id)); }}
-          className={`${btn} text-red-600`}
+          className={`${btn} text-destructive`}
         >
           Delete
         </button>

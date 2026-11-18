@@ -51,7 +51,7 @@ export const RESOURCES: Resource[] = [
   { key: "whatsapp", label: "WhatsApp shop", group: "Everyday", path: "/whatsapp" },
   { key: "shop", label: "Online shop orders", group: "Everyday", path: "/shop-orders" },
   { key: "apporders", label: "App orders (D2C, retailers, distributors)", group: "Everyday", path: "/app-orders" },
-  { key: "routeorders", label: "Route sheet & product totals", group: "Route orders", path: "/route-orders" },
+  { key: "routeorders", label: "Route sheet & demand sheet", group: "Route orders", path: "/route-orders" },
   { key: "routeorders.billing", label: "Billing & Tally file", group: "Route orders", path: "/route-orders/billing" },
   { key: "routeorders.masters", label: "Customers & products", group: "Route orders", path: "/route-orders/masters" },
   { key: "pricelist", label: "Price list (customer prices)", group: "Everyday", path: "/price-list" },

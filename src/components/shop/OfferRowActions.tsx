@@ -23,7 +23,7 @@ export function OfferRowActions({ id, active, canEdit }: { id: number; active: b
         className={`${btn} ${active ? "" : "border-primary/40 text-primary"}`}>{active ? "Pause" : "Turn on"}</button>
       <Link href={`/shop-orders/offers/${id}`} className={`${btn} inline-flex items-center`}>Edit</Link>
       <button type="button" disabled={pending} onClick={() => run(() => duplicateOfferAction(id), (n) => n && router.push(`/shop-orders/offers/${n}`))} className={btn}>Duplicate</button>
-      <button type="button" disabled={pending} onClick={() => { if (window.confirm("Delete this offer?")) run(() => deleteOfferAction(id)); }} className={`${btn} text-red-600`}>Delete</button>
+      <button type="button" disabled={pending} onClick={() => { if (window.confirm("Delete this offer?")) run(() => deleteOfferAction(id)); }} className={`${btn} text-destructive`}>Delete</button>
     </div>
   );
 }

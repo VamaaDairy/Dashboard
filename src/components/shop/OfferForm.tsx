@@ -268,7 +268,7 @@ export function OfferForm({ id, initial, products, categories }: { id: number | 
           </button>
           <button type="button" onClick={() => router.push("/shop-orders/offers")} className="h-10 rounded-lg border border-input px-4 text-sm hover:bg-muted">Cancel</button>
         </div>
-        {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
+        {error ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
       </aside>
     </div>
   );
