@@ -14,8 +14,8 @@ const day = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en
 const time = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }) : null);
 
 export const TRIP_STATUS: Record<Trip["status"], { label: string; cls: string }> = {
-  planned: { label: "Planned", cls: "bg-info/10 text-info ring-border-info" },
-  on_the_way: { label: "On the way", cls: "bg-warning/12 text-warning-foreground ring-border-warning" },
+  planned: { label: "Planned", cls: "bg-muted text-muted-foreground ring-border" },
+  on_the_way: { label: "On the way", cls: "bg-muted text-foreground ring-border" },
   completed: { label: "Completed", cls: "bg-primary/10 text-primary ring-border-brand" },
   cancelled: { label: "Cancelled", cls: "bg-muted text-muted-foreground ring-foreground/10" },
 };
@@ -111,7 +111,7 @@ export function DispatchBoard({ date, orders, trips, transporters, canEdit }: { 
                           <span className="block truncate font-medium">{o.buyer}</span>
                           <span className="block truncate text-[12px] text-muted-foreground">#{o.orderId} · ordered {day(o.orderDate)} · for {day(o.deliveryDate)}{o.buyerCode ? ` · ${o.buyerCode}` : ""}{o.address ? ` · ${o.address}` : ""}</span>
                         </span>
-                        {o.lat === null ? <span title="No map pin for this customer" className="text-warning-foreground"><MapPinOff className="size-4" /></span> : null}
+                        {o.lat === null ? <span title="No map pin for this customer" className="text-muted-foreground"><MapPinOff className="size-4" /></span> : null}
                         <span className="num w-16 text-right text-[12px] text-muted-foreground">{num(o.qty)} pcs</span>
                         <span className="num w-20 text-right font-medium">{inr(o.total)}</span>
                       </label>
@@ -161,7 +161,7 @@ export function DispatchBoard({ date, orders, trips, transporters, canEdit }: { 
                   <span className="ml-auto num text-sm font-medium">{inr(t.total)}</span>
                 </div>
                 <div className="mt-1 text-[13px] text-muted-foreground">
-                  {t.transporter ? <>{t.transporter.name} · {t.transporter.phone}</> : <span className="text-warning-foreground">No transporter yet</span>}
+                  {t.transporter ? <>{t.transporter.name} · {t.transporter.phone}</> : <span className="text-muted-foreground">No transporter yet</span>}
                   {t.vehicleNo ? <> · <span className="font-mono">{t.vehicleNo}</span></> : null}
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">

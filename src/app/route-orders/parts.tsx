@@ -77,6 +77,6 @@ export const Notice = ({ tone, children }: { tone: "ok" | "error" | "warn"; chil
     "rounded-lg border px-3 py-2 text-sm",
     tone === "ok" && "border-emerald-600/25 bg-emerald-500/10 text-emerald-700",
     tone === "error" && "border-border-destructive bg-destructive/10 text-destructive",
-    tone === "warn" && "border-border-warning bg-warning/12 text-amber-700",
+    tone === "warn" && "border-border bg-secondary text-foreground shadow-[inset_3px_0_0_var(--primary)]",
   )}>{children}</div>
 );

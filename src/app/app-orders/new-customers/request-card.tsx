@@ -30,7 +30,7 @@ export function RequestCard({ r, channels, parents, beats, canEdit }: { r: FirmR
       router.refresh();
     });
   const status = r.status === "approved" ? "bg-primary/10 text-primary ring-border-brand"
-    : r.status === "rejected" ? "bg-muted text-muted-foreground ring-foreground/10" : "bg-warning/12 text-warning-foreground ring-border-warning";
+    : r.status === "rejected" ? "bg-muted text-muted-foreground ring-foreground/10" : "bg-muted text-foreground ring-border";
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
@@ -38,14 +38,14 @@ export function RequestCard({ r, channels, parents, beats, canEdit }: { r: FirmR
         <span className="font-semibold">{r.name}</span>
         <span className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{r.kind}</span>
         <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ring-1 ring-inset", status)}>{r.status}</span>
-        {r.source === "app" ? <span className="rounded bg-info/10 px-1.5 py-0.5 text-[11px] text-info ring-1 ring-inset ring-border-info">Signed up in the app</span> : null}
+        {r.source === "app" ? <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground ring-1 ring-inset ring-border">Signed up in the app</span> : null}
         <span className="ml-auto text-[12px] text-muted-foreground">{r.source === "app" ? "self sign-up" : `by ${r.officer ?? "a sales officer"}`} · {when(r.createdAt)}</span>
       </div>
       <dl className="mt-2 grid gap-x-6 gap-y-1 text-[13px] sm:grid-cols-2">
         <div><dt className="inline text-muted-foreground">Contact: </dt><dd className="inline">{r.contactPerson ?? "-"} · {r.phone}{r.email ? ` · ${r.email}` : ""}</dd></div>
         <div><dt className="inline text-muted-foreground">GSTIN: </dt><dd className="inline font-mono">{r.gstin ?? "-"}</dd></div>
         <div className="sm:col-span-2"><dt className="inline text-muted-foreground">Address: </dt><dd className="inline">{[r.address, r.city, r.state, r.pincode].filter(Boolean).join(", ")}
-          {r.lat !== null && r.lng !== null ? <a className="ml-2 text-primary hover:underline" href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer">Map pin</a> : <span className="ml-2 text-warning-foreground">no pin</span>}</dd></div>
+          {r.lat !== null && r.lng !== null ? <a className="ml-2 text-primary hover:underline" href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer">Map pin</a> : <span className="ml-2 text-muted-foreground">no pin</span>}</dd></div>
         {r.notes ? <div className="sm:col-span-2"><dt className="inline text-muted-foreground">Note: </dt><dd className="inline">{r.notes}</dd></div> : null}
         {r.status === "approved" ? <div className="sm:col-span-2 text-primary">Created as <Link className="font-mono hover:underline" href={`/customers/firm/${r.firmUid}`}>{r.firmCode}</Link> by {r.decidedBy}</div> : null}
         {r.status === "rejected" ? <div className="sm:col-span-2 text-muted-foreground">Rejected by {r.decidedBy}: {r.reason}</div> : null}

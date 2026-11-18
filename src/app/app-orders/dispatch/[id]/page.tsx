@@ -64,7 +64,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <RouteMap track={track.segments} markers={markers} live={t.status === "on_the_way"} height="420px" plain />
-          {noPin ? <div className="border-t border-border px-4 py-2 text-[12px] text-warning-foreground">{noPin} {noPin === 1 ? "stop has" : "stops have"} no map pin; set it on the customer in Customer Masters.</div> : null}
+          {noPin ? <div className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground">{noPin} {noPin === 1 ? "stop has" : "stops have"} no map pin; set it on the customer in Customer Masters.</div> : null}
         </div>
 
         {canEdit && t.status === "planned" ? (
@@ -83,7 +83,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
                     <td className="px-3 py-2.5"><Link href={`/app-orders/distributors/${s.orderUid}`} className="hover:underline">#{s.orderId}</Link><div className="text-[12px] text-muted-foreground">{s.items} items · {s.qty} pcs</div></td>
                     <td className="num px-3 py-2.5">{inr(s.total)}</td>
                     <td className="px-3 py-2.5">
-                      <span className={s.status === "delivered" ? "font-medium text-primary" : s.status === "not_delivered" ? "font-medium text-warning-foreground" : "text-muted-foreground"}>
+                      <span className={s.status === "delivered" ? "font-medium text-primary" : s.status === "not_delivered" ? "font-medium text-muted-foreground" : "text-muted-foreground"}>
                         {s.status === "delivered" ? "Delivered" : s.status === "not_delivered" ? "Not delivered" : t.status === "on_the_way" ? "On the way" : "Waiting"}
                       </span>
                     </td>
@@ -91,7 +91,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
                     <td className="px-3 py-2.5 text-[12px] text-muted-foreground">
                       {s.receivedBy ? <div>Received by {s.receivedBy}</div> : null}
                       {s.note ? <div>{s.note}</div> : null}
-                      {s.gapM !== null ? <div className={s.gapM > 300 ? "text-warning-foreground" : ""}>{metres(s.gapM)} from the pin</div> : null}
+                      {s.gapM !== null ? <div className={s.gapM > 300 ? "text-muted-foreground" : ""}>{metres(s.gapM)} from the pin</div> : null}
                     </td>
                   </tr>
                 ))}
