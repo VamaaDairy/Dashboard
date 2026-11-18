@@ -322,3 +322,147 @@ export async function firmExtras(uid: string, f: { name: string; phone: string |
     history,
   };
 }
+
+// ---------------------------------------------------------------- more detail, per tab
+
+export interface TimelineItem { at: Date; kind: string; text: string; actor: string | null; href: string | null }
+
+export interface FirmMore {
+  prices: Array<{ sku: string; name: string; mrp: number | null; price: number; source: "list" | "channel" | "product"; list: string | null }>;
+  pattern: {
+    avgGapDays: number | null; perMonth: number | null; topWeekday: string | null; daysSinceLast: number | null;
+    statuses: Array<{ label: string; n: number }>; via: Array<{ label: string; n: number }>;
+  };
+  timeline: TimelineItem[];
+}
+
+const VIA = `case bo.app_kind when 'distributor' then 'Distributor app' when 'retailer' then 'Retailer app' when 'salesman' then 'Sales officer' else 'Portal' end`;
+
+export async function firmMore(uid: string, name: string): Promise<FirmMore> {
+  const { firmPrices } = await import("@/lib/distributor");
+  const [prices, gap, statuses, via, timeline] = await Promise.all([
+    firmPrices(uid).catch(() => []),
+    one<{ avg: number | null; months: number | null; weekday: string | null; since: number | null }>(
+      `with o as (select booking_time as t from fp_booking_order where from_firm_uid = $1)
+       select (select avg(extract(epoch from d) / 86400)::float from (select t - lag(t) over (order by t) as d from o) g where d is not null) as avg,
+              (select case when count(*) = 0 then null else count(*)::float / greatest(1, ceil(extract(epoch from now() - min(t)) / (86400 * 30.4))) end from o) as months,
+              (select trim(to_char(t at time zone 'Asia/Kolkata', 'Day')) from o group by 1 order by count(*) desc limit 1) as weekday,
+              (select floor(extract(epoch from now() - max(t)) / 86400)::int from o) as since`,
+      [uid],
+    ),
+    query<{ label: string; n: number }>(
+      `select initcap(coalesce(current_status, status, 'unknown')) as label, count(*)::int as n from fp_booking_order where from_firm_uid = $1 group by 1 order by 2 desc`,
+      [uid],
+    ),
+    query<{ label: string; n: number }>(`select ${VIA} as label, count(*)::int as n from fp_booking_order bo where bo.from_firm_uid = $1 group by 1 order by 2 desc`, [uid]),
+    query<TimelineItem>(
+      `select * from (
+         select bo.booking_time as at, 'order' as kind,
+                'Order ' || coalesce(bo.order_id::text, left(bo.uid::text, 8)) || ' placed · ₹' || to_char(round(coalesce(bo.total_cost, 0)), 'FM99,99,99,999') as text,
+                ${VIA} as actor, '/app-orders/distributors/' || bo.uid as href
+           from fp_booking_order bo where bo.from_firm_uid = $1
+         union all
+         select e.at, 'order', 'Order ' || coalesce(bo.order_id::text, left(bo.uid::text, 8)) || ' ' || e.action || coalesce(' · ' || nullif(e.note, ''), ''), e.actor,
+                '/app-orders/distributors/' || bo.uid
+           from dist_order_event e join fp_booking_order bo on bo.uid = e.order_uid where bo.from_firm_uid = $1 and e.action <> 'placed'
+         union all
+         select a.at, 'record', coalesce(a.summary, initcap(a.action) || ' record'), a.actor, null from master_audit a where a.record_id = $1::text
+         union all
+         select a.at, 'self', coalesce(a.summary, initcap(a.action)), a.actor, null from master_audit a where a.actor like $2 and a.record_id <> $1::text
+         union all
+         select c.created_at, 'complaint', 'Complaint ' || coalesce(c.complaint_no, '') || coalesce(' · ' || c.product_name, ''), c.registered_by, '/cn/' || c.id
+           from cn_complaint c where lower(trim(c.customer_name)) = lower(trim($3))
+         union all
+         select c.created_at, 'credit note', 'Credit note ' || coalesce(c.challan_no, '') || coalesce(' · ' || c.status, ''), c.created_by, '/credit-note/' || c.id
+           from credit_note c where lower(trim(c.customer_name)) = lower(trim($3))
+       ) t order by at desc limit 80`,
+      [uid, `${name} (%`, name],
+    ),
+  ]);
+  const skus = prices.map((p) => p.sku);
+  const products = skus.length
+    ? await query<{ sku: string; name: string; mrp: number | null }>(`select sku_code as sku, sku_name as name, mrp::float as mrp from fp_product where sku_code = any($1::text[])`, [skus])
+    : [];
+  const bySku = new Map(products.map((p) => [p.sku, p]));
+  return {
+    prices: prices
+      .map((p) => ({ ...p, name: bySku.get(p.sku)?.name ?? p.sku, mrp: bySku.get(p.sku)?.mrp ?? null }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    pattern: {
+      avgGapDays: gap?.avg ?? null, perMonth: gap?.months ?? null, topWeekday: gap?.weekday ?? null, daysSinceLast: gap?.since ?? null,
+      statuses, via,
+    },
+    timeline,
+  };
+}
+
+export interface EmployeeMore {
+  peers: Person[];
+  departmentSize: number;
+  taken: { orders: number; value: number };
+  leaves: { daysThisYear: number; pending: number; rows: Array<{ type: string; from: string; to: string; days: number; status: string; reason: string | null }> };
+  claims: { pending: number; approved: number; paid: number; rows: Array<{ category: string | null; amount: number; spentOn: string | null; status: string }> };
+  payslips: Array<{ month: string; net: number; published: boolean }>;
+  requests: Array<{ subject: string | null; kind: string | null; status: string; at: Date }>;
+  dashboardActions: { total: number; rows: AuditEntry[] };
+}
+
+export async function employeeMore(uid: string, dashboardName: string | null): Promise<EmployeeMore> {
+  const [peers, dept, taken, leaveSum, leaves, claimSum, claims, slips, reqs, actCount, acts] = await Promise.all([
+    query<Person>(
+      `select r.uid, coalesce(${FULL_NAME("r")}, 'Unnamed') as name, d.designation from fp_staff s
+         join fp_staff r on r.reporting_manager_uid = s.reporting_manager_uid and r.uid <> s.uid and coalesce(r.active, 1) = 1
+         left join fp_designation d on d.uid = r.designation_uid
+        where s.uid = $1 and s.reporting_manager_uid is not null order by 2 limit 12`,
+      [uid],
+    ),
+    one<{ n: number }>(
+      `select count(*)::int as n from emp_master m join emp_master me on me.department_id = m.department_id
+         join fp_staff s on s.uid = m.staff_uid and coalesce(s.active, 1) = 1 where me.staff_uid = $1`,
+      [uid],
+    ),
+    one<{ orders: number; value: number }>(`select count(*)::int as orders, coalesce(sum(total_cost), 0)::float as value from fp_booking_order where staff_uid = $1`, [uid]),
+    one<{ days: number; pending: number }>(
+      `select coalesce(sum(days) filter (where status = 'approved' and from_date >= date_trunc('year', current_date)), 0)::float as days,
+              (count(*) filter (where status = 'pending'))::int as pending from emp_leave where staff_uid = $1`,
+      [uid],
+    ),
+    query<EmployeeMore["leaves"]["rows"][number]>(
+      `select coalesce(t.name, 'Leave') as type, to_char(l.from_date, 'YYYY-MM-DD') as "from", to_char(l.to_date, 'YYYY-MM-DD') as "to",
+              coalesce(l.days, 0)::float as days, l.status, l.reason
+         from emp_leave l left join emp_leave_type t on t.id = l.type_id where l.staff_uid = $1 order by l.from_date desc limit 8`,
+      [uid],
+    ),
+    one<{ pending: number; approved: number; paid: number }>(
+      `select coalesce(sum(amount) filter (where status = 'pending'), 0)::float as pending,
+              coalesce(sum(coalesce(approved_amount, amount)) filter (where status = 'approved'), 0)::float as approved,
+              coalesce(sum(coalesce(approved_amount, amount)) filter (where status = 'paid' or paid_at is not null), 0)::float as paid
+         from emp_claim where staff_uid = $1`,
+      [uid],
+    ),
+    query<EmployeeMore["claims"]["rows"][number]>(
+      `select category, amount::float, to_char(spent_on, 'YYYY-MM-DD') as "spentOn", status from emp_claim where staff_uid = $1 order by created_at desc limit 8`,
+      [uid],
+    ),
+    query<EmployeeMore["payslips"][number]>(
+      `select month::text as month, coalesce(net, 0)::float as net, coalesce(published, false) as published from emp_payslip where staff_uid = $1 order by month desc limit 6`,
+      [uid],
+    ),
+    query<EmployeeMore["requests"][number]>(
+      `select subject, kind, status, created_at as at from emp_request where staff_uid = $1 order by created_at desc limit 6`,
+      [uid],
+    ),
+    dashboardName ? one<{ n: number }>(`select count(*)::int as n from master_audit where actor = $1`, [dashboardName]) : Promise.resolve(null),
+    dashboardName ? query<AuditEntry>(`select at, actor, action, summary from master_audit where actor = $1 order by at desc limit 25`, [dashboardName]) : Promise.resolve([]),
+  ]);
+  return {
+    peers,
+    departmentSize: dept?.n ?? 0,
+    taken: taken ?? { orders: 0, value: 0 },
+    leaves: { daysThisYear: leaveSum?.days ?? 0, pending: leaveSum?.pending ?? 0, rows: leaves },
+    claims: { ...(claimSum ?? { pending: 0, approved: 0, paid: 0 }), rows: claims },
+    payslips: slips,
+    requests: reqs,
+    dashboardActions: { total: actCount?.n ?? 0, rows: acts },
+  };
+}

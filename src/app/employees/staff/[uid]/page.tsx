@@ -4,18 +4,18 @@ import { cookies } from "next/headers";
 import { buttonVariants } from "@/components/ui/button";
 import { EmployeeAdmin } from "@/components/employees/EmployeeAdmin";
 import {
-  A, Account, Avatar, Breakdown, Card, Chain, Details, Empty, Header, History, Layout, MonthBars, Stats, Table, Tabs, Tag,
+  A, Account, Avatar, Breakdown, Card, Chain, Details, Empty, Facts, Header, History, Layout, MonthBars, Stats, Table, Tabs, Tag,
   ago, day, rs, rsShort, td, tdNum, when,
 } from "@/components/profile/parts";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { one } from "@/lib/db";
 import { employeeProfile, listDepartments, unlinkedUsers, wingLabel } from "@/lib/employees";
-import { employeeExtras, type OrderLine } from "@/lib/profiles";
+import { employeeExtras, employeeMore, type OrderLine } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
 
-const TABS = ["overview", "team", "customers", "access", "history"] as const;
+const TABS = ["overview", "team", "customers", "hr", "access", "activity"] as const;
 type Tab = (typeof TABS)[number];
 const time = (d: Date | string) => new Date(d).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
 
@@ -39,6 +39,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: { pa
     tab === "access" && e.dashboardUserId ? one<{ id: string; email: string; name: string }>(`select id, email, name from app_user where id = $1`, [e.dashboardUserId]) : Promise.resolve(null),
   ]);
   const users = linked ? [linked, ...free] : free;
+  const more = await employeeMore(uid, x.accounts.dashboard?.name ?? null);
   const first = e.name.split(" ")[0];
   const base = `/employees/staff/${e.uid}`;
   const logins = [x.accounts.employeeApp, x.accounts.dashboard, ...x.accounts.salesforce].filter(Boolean).length;
@@ -50,8 +51,9 @@ export default async function EmployeeProfilePage({ params, searchParams }: { pa
         { key: "overview", label: "Overview" },
         { key: "team", label: "Team", count: x.team.total },
         { key: "customers", label: "Customers & sales", count: x.customers.total },
+        { key: "hr", label: "Leave & pay" },
         { key: "access", label: "Logins & access", count: logins },
-        { key: "history", label: "History", count: x.history.length },
+        { key: "activity", label: "Activity", count: x.history.length + (isOwner ? more.dashboardActions.total : 0) },
       ]} />
 
       {tab === "overview" ? (
@@ -64,6 +66,9 @@ export default async function EmployeeProfilePage({ params, searchParams }: { pa
               {e.reports.length > 6 ? <A href={`${base}?tab=team`} className="mt-2 inline-block text-[13px]">All {e.reports.length} →</A> : null}
             </Card>
           </div>
+          {more.peers.length ? (
+            <Card title="Works alongside" note={`Others who report to ${e.manager ?? "the same manager"}`}><People people={more.peers} columns /></Card>
+          ) : null}
           <RecentOrders orders={x.recent.slice(0, 5)} />
         </>
       ) : null}
@@ -100,6 +105,15 @@ export default async function EmployeeProfilePage({ params, searchParams }: { pa
             ) : <Empty>No customer has {first} as their sales officer.</Empty>}
           </Card>
           <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Sales">
+              <Facts rows={[
+                ["Orders they took", more.taken.orders ? `${more.taken.orders.toLocaleString("en-IN")} · ${rs(more.taken.value)}` : "None in the Salesforce app"],
+                ["From their customers", `${x.stats.orders.toLocaleString("en-IN")} · ${rs(x.stats.value)}`],
+                ["Last 90 days", `${x.stats.orders90} · ${rs(x.stats.value90)}`],
+                ["Average order", x.stats.orders ? rs(x.stats.value / x.stats.orders) : null],
+                ["Last order", x.stats.last ? `${day(x.stats.last)} (${ago(x.stats.last)})` : null],
+              ]} />
+            </Card>
             <Card title="By channel">{x.customers.byKind.length ? <Breakdown rows={x.customers.byKind.map((k) => ({ label: k.kind, n: k.n }))} total={x.customers.total} /> : <Empty>None yet.</Empty>}</Card>
             <Card title="Beats">
               {x.beats.length ? (
@@ -159,7 +173,73 @@ export default async function EmployeeProfilePage({ params, searchParams }: { pa
         </>
       ) : null}
 
-      {tab === "history" ? <Card title="Changes to this record" note="Edits made in the dashboard, newest first"><History rows={x.history} /></Card> : null}
+      {tab === "hr" ? (
+        <>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Leave" note={`${more.leaves.daysThisYear} days taken this year${more.leaves.pending ? ` · ${more.leaves.pending} waiting for approval` : ""}`}>
+              {more.leaves.rows.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.leaves.rows.map((l, i) => (
+                    <li key={i} className="flex justify-between gap-3 py-2.5">
+                      <span className="min-w-0"><span className="text-foreground">{l.type}</span><span className="text-tertiary-foreground"> · {day(l.from)}{l.to !== l.from ? ` – ${day(l.to)}` : ""} · {l.days} day{l.days === 1 ? "" : "s"}</span>{l.reason ? <div className="truncate text-[12px] text-tertiary-foreground">{l.reason}</div> : null}</span>
+                      <span className="shrink-0 capitalize text-tertiary-foreground">{l.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No leave requested through the Employee app.</Empty>}
+            </Card>
+            <Card title="Reimbursements" note={`${rs(more.claims.pending)} waiting · ${rs(more.claims.approved)} approved · ${rs(more.claims.paid)} paid`}>
+              {more.claims.rows.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.claims.rows.map((c, i) => (
+                    <li key={i} className="flex justify-between gap-3 py-2.5">
+                      <span className="min-w-0 truncate">{c.category ?? "Claim"}<span className="text-tertiary-foreground"> · {day(c.spentOn)}</span></span>
+                      <span className="shrink-0 tabular-nums">{rs(c.amount)} <span className="ml-2 capitalize text-tertiary-foreground">{c.status}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No claims yet.</Empty>}
+            </Card>
+          </div>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+            <Card title="Salary slips">
+              {more.payslips.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.payslips.map((p) => (
+                    <li key={p.month} className="flex justify-between gap-3 py-2.5">
+                      <span>{new Date(`${p.month.slice(0, 7)}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</span>
+                      <span className="tabular-nums">{rs(p.net)}<span className="ml-2 text-tertiary-foreground">{p.published ? "published" : "draft"}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No salary slips yet.</Empty>}
+            </Card>
+            <Card title="Requests to HR">
+              {more.requests.length ? (
+                <ul className="divide-y divide-border text-[13px]">
+                  {more.requests.map((r, i) => (
+                    <li key={i} className="flex justify-between gap-3 py-2.5">
+                      <span className="min-w-0 truncate">{r.subject ?? r.kind ?? "Request"}<span className="text-tertiary-foreground"> · {day(r.at)}</span></span>
+                      <span className="shrink-0 capitalize text-tertiary-foreground">{r.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <Empty>No requests yet.</Empty>}
+            </Card>
+          </div>
+        </>
+      ) : null}
+
+      {tab === "activity" ? (
+        <>
+          {isOwner && x.accounts.dashboard ? (
+            <Card title="What they did in the dashboard" note={more.dashboardActions.total ? `${more.dashboardActions.total.toLocaleString("en-IN")} changes made with their login · latest ${more.dashboardActions.rows.length}` : "Changes made with their dashboard login"}>
+              <History rows={more.dashboardActions.rows} />
+            </Card>
+          ) : null}
+          <Card title="Changes to their record" note="Edits made in the dashboard, newest first"><History rows={x.history} /></Card>
+        </>
+      ) : null}
     </>
   );
 

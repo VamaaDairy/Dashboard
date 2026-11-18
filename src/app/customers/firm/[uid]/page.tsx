@@ -3,17 +3,18 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { buttonVariants } from "@/components/ui/button";
 import {
-  A, Account, Breakdown, Card, Chain, Details, Empty, Facts, Header, History, Layout, MonthBars, Stats, Table, Tabs, Tag,
+  A, Account, Breakdown, Card, Chain, Details, Empty, Facts, Header, Layout, MonthBars, Stats, Table, Tabs, Tag,
   ago, day, rs, rsShort, td, tdNum, when,
 } from "@/components/profile/parts";
 import { userFromToken } from "@/lib/access-server";
 import { CUSTOMER_KINDS, firmOrders, firmProfile, servedFirms } from "@/lib/customers";
-import { firmExtras, type FirmExtras } from "@/lib/profiles";
+import { firmExtras, firmMore, type FirmExtras, type TimelineItem } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
 
 const LOGIN: Record<string, string> = { distributor: "Distributor app", retailer: "Retailer app", salesman: "Sales officer" };
-const TABS = ["overview", "sales", "network", "accounts", "history"] as const;
+const TABS = ["overview", "sales", "prices", "network", "accounts", "activity"] as const;
+const SOURCE: Record<string, string> = { list: "Own price list", channel: "Channel price", product: "Base DP" };
 type Tab = (typeof TABS)[number];
 
 /**
@@ -33,6 +34,7 @@ export default async function FirmProfilePage({ params, searchParams }: { params
     f.kind !== "retailers" ? servedFirms(uid) : Promise.resolve([]),
     firmExtras(uid, { name: f.name, phone: f.phone, tallyLedger: f.routeParty?.tallyLedger ?? null }),
   ]);
+  const more = await firmMore(uid, f.name);
   const kind = CUSTOMER_KINDS.find((k) => k.key === f.kind);
   const map = f.lat && f.lng ? `https://www.google.com/maps/search/?api=1&query=${f.lat},${f.lng}` : null;
   const orderHref = (o: { uid: string }) => `/app-orders/${f.kind === "retailers" ? "retailers" : "distributors"}/${o.uid}`;
@@ -63,9 +65,10 @@ export default async function FirmProfilePage({ params, searchParams }: { params
       <Tabs base={base} on={tab} tabs={[
         { key: "overview", label: "Overview" },
         { key: "sales", label: "Orders & money", count: x.stats.orders },
+        { key: "prices", label: "Prices", count: more.prices.length },
         { key: "network", label: serves ? "Network" : "Served by", count: serves ? x.network.total : undefined },
         { key: "accounts", label: "Accounts & records", count: records },
-        { key: "history", label: "History", count: x.history.length },
+        { key: "activity", label: "Activity", count: more.timeline.length },
       ]} />
 
       {tab === "overview" ? (
@@ -103,6 +106,18 @@ export default async function FirmProfilePage({ params, searchParams }: { params
               ]} />
             </Card>
           </div>
+          <Card title="Ordering pattern">
+            <div className="grid gap-x-12 gap-y-6 lg:grid-cols-3">
+              <Facts rows={[
+                ["Orders a month", more.pattern.perMonth !== null ? more.pattern.perMonth.toFixed(1) : null],
+                ["Days between orders", more.pattern.avgGapDays !== null ? `${Math.round(more.pattern.avgGapDays)} on average` : null],
+                ["Usually orders on", more.pattern.topWeekday],
+                ["Since last order", more.pattern.daysSinceLast !== null ? `${more.pattern.daysSinceLast} days` : null],
+              ]} />
+              <div><div className="mb-1 text-[12px] text-tertiary-foreground">How they order</div>{more.pattern.via.length ? <Breakdown rows={more.pattern.via} total={x.stats.orders} /> : <Empty>No orders yet.</Empty>}</div>
+              <div><div className="mb-1 text-[12px] text-tertiary-foreground">Order status</div>{more.pattern.statuses.length ? <Breakdown rows={more.pattern.statuses} total={x.stats.orders} /> : <Empty>No orders yet.</Empty>}</div>
+            </div>
+          </Card>
           {x.ledger.entries.length ? (
             <Card title="Ledger" note="Latest entries in the app ledger">
               <Table head={["Date", "Entry", "Reference", "Debit", "Credit"]} right={[3, 4]}>
@@ -197,7 +212,31 @@ export default async function FirmProfilePage({ params, searchParams }: { params
         </>
       ) : null}
 
-      {tab === "history" ? <Card title="Changes to this record" note="Edits made in the dashboard, newest first"><History rows={x.history} /></Card> : null}
+      {tab === "prices" ? (
+        <Card title="What the Gaia app charges them" note={`${f.priceList ? `Price list ${f.priceList}` : "No own price list, so channel prices"} · the same prices their orders use`}
+          action={<A href={`/price-list/overview?customer=${f.uid}`} className="text-[13px]">Compare in Prices →</A>}>
+          {more.prices.length ? (
+            <Table head={["Product", "SKU", "MRP", "Their price", "Below MRP", "From"]} right={[2, 3, 4]}>
+              {more.prices.map((p) => (
+                <tr key={p.sku}>
+                  <td className={td}>{p.name}</td>
+                  <td className={`${td} font-mono text-[12px] text-foreground/70`}>{p.sku}</td>
+                  <td className={tdNum}>{p.mrp ? rs(p.mrp) : "—"}</td>
+                  <td className={`${tdNum} font-medium`}>₹{p.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                  <td className={`${tdNum} text-foreground/70`}>{p.mrp ? `${Math.round(((p.mrp - p.price) / p.mrp) * 1000) / 10}%` : "—"}</td>
+                  <td className={`${td} text-foreground/70`}>{p.source === "list" && p.list ? p.list : SOURCE[p.source]}</td>
+                </tr>
+              ))}
+            </Table>
+          ) : <Empty>No products are priced for them, so the app shows them nothing to order.</Empty>}
+        </Card>
+      ) : null}
+
+      {tab === "activity" ? (
+        <Card title="Activity" note="Orders, order updates, complaints, credit notes, their own changes in the app and edits to their record, newest first">
+          <Timeline rows={f.kind === "retailers" ? more.timeline.map((t) => ({ ...t, href: t.href?.replace("/app-orders/distributors/", "/app-orders/retailers/") ?? null })) : more.timeline} />
+        </Card>
+      ) : null}
     </>
   );
 
@@ -273,5 +312,32 @@ function Products({ rows }: { rows: FirmExtras["products"] }) {
         </tr>
       ))}
     </Table>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = { order: "Order", record: "Record", self: "In the app", complaint: "Complaint", "credit note": "Credit note" };
+
+function Timeline({ rows }: { rows: TimelineItem[] }) {
+  if (!rows.length) return <Empty>Nothing has happened yet.</Empty>;
+  const days = rows.map((r) => day(r.at) ?? "");
+  return (
+    <ol>
+      {rows.map((r, i) => {
+        const head = i === 0 || days[i] !== days[i - 1] ? days[i] : null;
+        return (
+          <li key={i}>
+            {head ? <div className="pt-4 pb-1 text-[12px] font-medium text-tertiary-foreground first:pt-1">{head}</div> : null}
+            <div className="grid grid-cols-[3.5rem_6rem_minmax(0,1fr)] gap-3 border-b border-border py-2 text-[13px]">
+              <span className="tabular-nums text-tertiary-foreground">{new Date(r.at).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })}</span>
+              <span className="text-tertiary-foreground">{KIND_LABEL[r.kind] ?? r.kind}</span>
+              <span className="min-w-0">
+                {r.href ? <A href={r.href}>{r.text}</A> : <span className="text-foreground">{r.text}</span>}
+                {r.actor ? <span className="text-tertiary-foreground"> · {r.actor}</span> : null}
+              </span>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
