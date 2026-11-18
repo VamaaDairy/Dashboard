@@ -39,8 +39,8 @@ export default async function BannersPage() {
   const stateOf = (b: BannerRow) =>
     !b.active ? ["Off", "bg-muted text-muted-foreground ring-foreground/10"]
       : b.endsAt && b.endsAt < today ? ["Ended", "bg-muted text-muted-foreground ring-foreground/10"]
-        : b.startsAt && b.startsAt > today ? ["Scheduled", "bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-950/40 dark:text-sky-300"]
-          : ["Live", "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300"];
+        : b.startsAt && b.startsAt > today ? ["Scheduled", "bg-info/10 text-info ring-border-info"]
+          : ["Live", "bg-primary/10 text-primary ring-border-brand"];
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">

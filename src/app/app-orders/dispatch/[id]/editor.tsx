@@ -74,7 +74,7 @@ export function TripEditor({ trip, transporters, more }: { trip: Trip; transport
         <button type="button" disabled={pending} onClick={save} className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">{pending ? "Saving…" : "Save trip"}</button>
         <span className="text-[12px] text-muted-foreground">The transporter sees the stops in this order. Once they start the trip it can no longer be changed here.</span>
       </div>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>
   );
 }

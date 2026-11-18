@@ -93,7 +93,7 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
             <Link href={colHref(false)} className={cn("rounded-md px-2 py-1", !byCategory ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>By route</Link>
             <Link href={colHref(true)} className={cn("rounded-md px-2 py-1", byCategory ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>By category</Link>
           </span>
-          {pendingOrders && !confirmed ? <span className="text-[12px] text-amber-700 dark:text-amber-400">{pendingOrders} order{pendingOrders === 1 ? " is" : "s are"} not confirmed yet - included, shown under Pending.</span> : null}
+          {pendingOrders && !confirmed ? <span className="text-[12px] text-warning-foreground">{pendingOrders} order{pendingOrders === 1 ? " is" : "s are"} not confirmed yet - included, shown under Pending.</span> : null}
         </div>
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full border-collapse text-sm">
@@ -104,7 +104,7 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
                 <th className="px-3 py-2 text-left font-semibold">Unit</th>
                 <th className="px-3 py-2 text-right font-semibold">Total</th>
                 <th className="px-3 py-2 text-right font-semibold">Confirmed</th>
-                <th className="px-3 py-2 text-right font-semibold text-amber-700 dark:text-amber-400">Pending</th>
+                <th className="px-3 py-2 text-right font-semibold text-warning-foreground">Pending</th>
                 <th className="px-3 py-2 text-right font-semibold">Value</th>
                 {heads.map((h) => <th key={h} className="whitespace-nowrap border-l border-border px-3 py-2 text-right font-semibold">{h}</th>)}
               </tr>
@@ -123,7 +123,7 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
                             <ul className="mt-1.5 space-y-0.5 pl-10 text-[12px]">
                               {[...r.customers.values()].sort((a, b) => b.qty - a.qty).map((x) => (
                                 <li key={x.name + x.route} className="flex justify-between gap-3">
-                                  <span className={x.pending ? "text-amber-700 dark:text-amber-400" : ""}>{x.name} <span className="text-muted-foreground">· {x.route}</span></span>
+                                  <span className={x.pending ? "text-warning-foreground" : ""}>{x.name} <span className="text-muted-foreground">· {x.route}</span></span>
                                   <span className="num font-medium">{cases(x.qty, r.pack)}</span>
                                 </li>
                               ))}
@@ -134,7 +134,7 @@ export default async function ProductTotalsPage({ searchParams }: { searchParams
                         <td className="whitespace-nowrap px-3 py-2">{r.label.unit ?? "—"}</td>
                         <td className="num whitespace-nowrap px-3 py-2 text-right font-semibold">{cases(r.qty, r.pack)}<div className="text-[11px] font-normal text-muted-foreground">{kg(r.kg)}</div></td>
                         <td className="num whitespace-nowrap px-3 py-2 text-right">{r.confirmedQty ? cases(r.confirmedQty, r.pack) : "—"}</td>
-                        <td className="num whitespace-nowrap px-3 py-2 text-right text-amber-700 dark:text-amber-400">{pending ? cases(pending, r.pack) : "—"}</td>
+                        <td className="num whitespace-nowrap px-3 py-2 text-right text-warning-foreground">{pending ? cases(pending, r.pack) : "—"}</td>
                         <td className="num whitespace-nowrap px-3 py-2 text-right">{inr(r.value)}</td>
                         {heads.map((h) => <td key={h} className="num whitespace-nowrap border-l border-border px-3 py-2 text-right">{r.byCol.get(h) ? cases(r.byCol.get(h)!, r.pack) : ""}</td>)}
                       </tr>

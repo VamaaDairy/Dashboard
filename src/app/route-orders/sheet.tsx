@@ -25,7 +25,7 @@ export function AutoRefresh({ seconds = 30 }: { seconds?: number }) {
   }, [router, seconds]);
   return (
     <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground" title={`Refreshes every ${seconds} s`}>
-      <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" /><span className="relative inline-flex size-2 rounded-full bg-emerald-500" /></span>
+      <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-50" /><span className="relative inline-flex size-2 rounded-full bg-primary" /></span>
       Live · {at.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
     </span>
   );
@@ -107,12 +107,12 @@ export function QtyCell({ uids, sku, name, customer, qty, pack, locked }: {
               <input ref={p > 1 ? undefined : first} inputMode="numeric" value={pc} onChange={(e) => setPc(e.target.value.replace(/\D/g, ""))} className="mt-0.5 h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground" />
             </label>
           </div>
-          {error ? <p className="mt-2 text-[12px] text-red-600">{error}</p> : null}
+          {error ? <p className="mt-2 text-[12px] text-destructive">{error}</p> : null}
           <div className="mt-2 flex items-center gap-1.5">
             <button type="button" disabled={pending} onClick={submit} className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60">
               {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Save
             </button>
-            {qty ? <button type="button" disabled={pending} onClick={() => save(0, null)} className="h-8 rounded-md border border-input px-2 text-[13px] text-red-600 hover:bg-muted">Remove</button> : null}
+            {qty ? <button type="button" disabled={pending} onClick={() => save(0, null)} className="h-8 rounded-md border border-input px-2 text-[13px] text-destructive hover:bg-muted">Remove</button> : null}
             <button type="button" onClick={close} aria-label="Close" className="h-8 rounded-md px-1.5 text-muted-foreground hover:bg-muted"><X className="size-4" /></button>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">Saved on the order: the app, its invoice and history follow.</p>
@@ -138,7 +138,7 @@ export function ConfirmButton({ uids, label = "Confirm", big = false }: { uids: 
         router.refresh();
       })}
       className={cn("inline-flex items-center gap-1 rounded-md font-medium disabled:opacity-60",
-        big ? "h-8 bg-primary px-3 text-sm text-primary-foreground" : "h-6 border border-amber-600/40 bg-background px-2 text-[11px] text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950")}
+        big ? "h-8 bg-primary px-3 text-sm text-primary-foreground" : "h-6 border border-border-warning bg-background px-2 text-[11px] text-warning-foreground hover:bg-warning/15")}
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />} {label}
     </button>
@@ -164,7 +164,7 @@ export function RemoveProduct({ uids, sku, name, orders }: { uids: string[]; sku
           router.refresh();
         });
       }}
-      className="mt-1 inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-normal text-red-600 hover:bg-red-50 disabled:opacity-60 dark:hover:bg-red-950/40"
+      className="mt-1 inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-normal text-destructive hover:bg-destructive/10 disabled:opacity-60"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />} Cancel for day
     </button>

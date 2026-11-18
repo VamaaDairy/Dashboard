@@ -14,9 +14,9 @@ const day = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en
 const time = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }) : null);
 
 export const TRIP_STATUS: Record<Trip["status"], { label: string; cls: string }> = {
-  planned: { label: "Planned", cls: "bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-950/40 dark:text-sky-300" },
-  on_the_way: { label: "On the way", cls: "bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300" },
-  completed: { label: "Completed", cls: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300" },
+  planned: { label: "Planned", cls: "bg-info/10 text-info ring-border-info" },
+  on_the_way: { label: "On the way", cls: "bg-warning/12 text-warning-foreground ring-border-warning" },
+  completed: { label: "Completed", cls: "bg-primary/10 text-primary ring-border-brand" },
   cancelled: { label: "Cancelled", cls: "bg-muted text-muted-foreground ring-foreground/10" },
 };
 
@@ -111,7 +111,7 @@ export function DispatchBoard({ date, orders, trips, transporters, canEdit }: { 
                           <span className="block truncate font-medium">{o.buyer}</span>
                           <span className="block truncate text-[12px] text-muted-foreground">#{o.orderId} · ordered {day(o.orderDate)} · for {day(o.deliveryDate)}{o.buyerCode ? ` · ${o.buyerCode}` : ""}{o.address ? ` · ${o.address}` : ""}</span>
                         </span>
-                        {o.lat === null ? <span title="No map pin for this customer" className="text-amber-600"><MapPinOff className="size-4" /></span> : null}
+                        {o.lat === null ? <span title="No map pin for this customer" className="text-warning-foreground"><MapPinOff className="size-4" /></span> : null}
                         <span className="num w-16 text-right text-[12px] text-muted-foreground">{num(o.qty)} pcs</span>
                         <span className="num w-20 text-right font-medium">{inr(o.total)}</span>
                       </label>
@@ -139,7 +139,7 @@ export function DispatchBoard({ date, orders, trips, transporters, canEdit }: { 
                 <button type="button" onClick={() => setPicked([])} className="h-9 rounded-lg border border-input px-3 text-sm hover:bg-muted">Clear</button>
                 <span className="text-[12px] text-muted-foreground">Stops go in the order shown; change it on the trip.</span>
               </div>
-              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
             </div>
           ) : null}
         </section>
@@ -161,7 +161,7 @@ export function DispatchBoard({ date, orders, trips, transporters, canEdit }: { 
                   <span className="ml-auto num text-sm font-medium">{inr(t.total)}</span>
                 </div>
                 <div className="mt-1 text-[13px] text-muted-foreground">
-                  {t.transporter ? <>{t.transporter.name} · {t.transporter.phone}</> : <span className="text-amber-700 dark:text-amber-400">No transporter yet</span>}
+                  {t.transporter ? <>{t.transporter.name} · {t.transporter.phone}</> : <span className="text-warning-foreground">No transporter yet</span>}
                   {t.vehicleNo ? <> · <span className="font-mono">{t.vehicleNo}</span></> : null}
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -177,7 +177,7 @@ export function DispatchBoard({ date, orders, trips, transporters, canEdit }: { 
                   {canEdit && (t.status === "planned" || t.status === "on_the_way") ? (
                     <button type="button" disabled={pending}
                       onClick={() => { if (window.confirm("Cancel this trip? Its orders go back to waiting.")) start(async () => { const r = await cancelTripAction(t.id); if (!r.ok) window.alert(r.error); router.refresh(); }); }}
-                      className="h-8 rounded-lg border border-input px-3 text-[13px] text-red-600 hover:bg-muted">Cancel trip</button>
+                      className="h-8 rounded-lg border border-input px-3 text-[13px] text-destructive hover:bg-muted">Cancel trip</button>
                   ) : null}
                 </div>
               </div>
