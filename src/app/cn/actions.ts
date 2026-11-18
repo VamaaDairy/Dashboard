@@ -7,8 +7,9 @@ import { query, tx } from "@/lib/db";
 import { userFromToken } from "@/lib/access-server";
 import { levelFor, atLeast } from "@/lib/access";
 import { addDays, today } from "@/lib/dates";
+import { notifyComplaint } from "@/lib/cn/app";
 import {
-  CATEGORIES, CUSTOMER_TYPES, DEPARTMENTS, QTY_UNITS, levelCovers, levelNames, requiredLevel, rupees,
+  CATEGORIES, CUSTOMER_TYPES, DEPARTMENTS, QTY_UNITS, REFUND_MODES, levelCovers, levelNames, requiredLevel, rupees,
 } from "@/lib/cn/sop";
 
 export type CnResult = { ok: true; id: string } | { ok: false; error: string };
@@ -75,6 +76,8 @@ async function advance(
 async function run(id: string, fn: () => Promise<void>): Promise<CnResult> {
   try {
     await fn();
+    // a complaint raised from an app: tell whoever raised it where it now stands
+    await notifyComplaint(id);
     revalidatePath("/cn", "layout");
     return { ok: true, id };
   } catch (e) {
@@ -265,12 +268,44 @@ export async function postCn(id: string, cnNumber: string, cnDate: string, cnVal
     const d = date(cnDate, "CN date", true);
     const v = money(cnValue, "CN value");
     await tx(async (c) => {
-      const row = (await c.query(`select approved_value::float8 as approved, approved_by from cn_complaint where id = $1 and stage = 'approved'`, [id])).rows[0];
+      const row = (await c.query(`select approved_value::float8 as approved, approved_by, source from cn_complaint where id = $1 and stage = 'approved'`, [id])).rows[0];
       if (!row) throw new Error("This complaint is not waiting for posting.");
+      if (row.source === "d2c") throw new Error("A D2C complaint is settled with a refund - record the refund instead.");
       if (me.role !== "owner" && me.name === row.approved_by) throw new Error("The approver cannot also post the credit note.");
       if (v !== row.approved) throw new Error(`CN value must equal the approved value of ${rupees(row.approved)}.`);
       await advance(c, id, "approved", "posted", me.name, `CN ${no} posted for ${rupees(v)}`, s(remark) || null,
         { cn_number: no, cn_date: d, cn_value: v, finance_by: me.name, finance_on: today() });
+    });
+  });
+}
+
+/**
+ * D2C complaints are settled with a refund, not a credit note: finance pays it (Easebuzz dashboard, UPI, bank or
+ * cash) and records it here. The amount must be exactly what was approved, and the customer sees the refund, its
+ * mode, reference and date in the Gaia app. A refund of the whole order also marks the order as refunded.
+ */
+export async function recordRefund(id: string, value: string, mode: string, ref: string, on: string, remark: string): Promise<CnResult> {
+  const me = await actor("cn.finance");
+  if (!me) return denied();
+  return run(id, async () => {
+    const v = money(value, "Refund amount");
+    const m = oneOf(mode, REFUND_MODES, "Paid by");
+    const r = need(ref, "Reference (UTR, Easebuzz refund id or receipt no.)");
+    const d = date(on, "Refunded on", true)!;
+    if (d > today()) throw new Error("Refund date cannot be in the future");
+    await tx(async (c) => {
+      const row = (await c.query(
+        `select approved_value::float8 as approved, approved_by, source, shop_order_id from cn_complaint where id = $1 and stage = 'approved'`, [id],
+      )).rows[0];
+      if (!row) throw new Error("This complaint is not waiting for a refund.");
+      if (row.source !== "d2c") throw new Error("Only D2C complaints are refunded - post a credit note instead.");
+      if (me.role !== "owner" && me.name === row.approved_by) throw new Error("The approver cannot also record the refund.");
+      if (v !== row.approved) throw new Error(`The refund must equal the approved ${rupees(row.approved)}.`);
+      await advance(c, id, "approved", "posted", me.name, `Refund of ${rupees(v)} paid by ${m} (ref ${r})`, s(remark) || null,
+        { refund_value: v, refund_mode: m, refund_ref: r, refund_on: d, refund_by: me.name, finance_by: me.name, finance_on: today() });
+      if (row.shop_order_id) {
+        await c.query(`update shop_order set payment_status = 'refunded', updated_at = now() where id = $1 and total <= $2 and payment_status = 'paid'`, [row.shop_order_id, v]);
+      }
     });
   });
 }
@@ -296,11 +331,11 @@ export async function closeComplaint(id: string, remark: string): Promise<CnResu
   if (!me) return denied();
   return run(id, async () => {
     await tx(async (c) => {
-      const row = (await c.query(`select return_required, return_verified_on from cn_complaint where id = $1 and stage = 'posted'`, [id])).rows[0];
+      const row = (await c.query(`select return_required, return_verified_on, source from cn_complaint where id = $1 and stage = 'posted'`, [id])).rows[0];
       if (!row) throw new Error("This complaint is not ready to close.");
       if (row.return_required && !row.return_verified_on) throw new Error("Verify the returned material before closing.");
       await advance(c, id, "posted", "closed", me.name, "Complaint closed", s(remark) || null,
-        { outcome: "cn_issued", closed_by: me.name, closed_on: today(), closure_remark: s(remark) || null });
+        { outcome: row.source === "d2c" ? "refunded" : "cn_issued", closed_by: me.name, closed_on: today(), closure_remark: s(remark) || null });
     });
   });
 }

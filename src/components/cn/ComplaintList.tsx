@@ -9,6 +9,8 @@ export { dmy };
 
 const th = "h-9 px-3 text-[11px] font-medium uppercase tracking-wider text-tertiary-foreground";
 
+const FROM: Record<string, string> = { d2c: "Gaia app", distributor: "Distributors app", salesforce: "Salesforce" };
+
 /** The complaints table, shared by the full list and the approval / finance queues. */
 export function ComplaintList({ title, rows, today, empty }: { title: string; rows: Complaint[]; today: string; empty: string }) {
   const count = <span className="num rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{rows.length}</span>;
@@ -62,7 +64,7 @@ export function ComplaintList({ title, rows, today, empty }: { title: string; ro
                   </TableCell>
                   <TableCell className="px-3 py-2.5 align-top">
                     <div className="text-[13px] font-medium">{c.customer_name}</div>
-                    <div className="mt-0.5 text-[12px] text-tertiary-foreground">Inv. {c.invoice_no}</div>
+                    <div className="mt-0.5 text-[12px] text-tertiary-foreground">Inv. {c.invoice_no}{c.source !== "dashboard" ? ` · from ${FROM[c.source]}` : ""}</div>
                   </TableCell>
                   <TableCell className="px-3 py-2.5 align-top">
                     <div className="max-w-64 truncate text-[13px]">{c.product_name}</div>
