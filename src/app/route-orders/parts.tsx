@@ -32,14 +32,18 @@ export function Chip({ href, on, children }: { href: string; on: boolean; childr
 }
 
 /** The date, who's buying, and confirmed-only. All of them stay in the URL. */
-export function DayFilters({ base, date, buyer, route, confirmed, distributorsOnly = false }: {
+export function DayFilters({ base, date, buyer, route, confirmed, distributorsOnly = false, by = "delivery", extra = {} }: {
   base: string; date: string; buyer: string; route?: string; confirmed: boolean;
+  /** which of the order's two dates the day is: the delivery date (default) or the order date */
+  by?: "delivery" | "order";
+  /** other query values the page keeps (e.g. its column choice) */
+  extra?: Record<string, string | undefined>;
   /** the demand sheet: retailers' orders never count, so there is no Retailers choice */
   distributorsOnly?: boolean;
 }) {
   const href = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const all = { date, buyer, route, confirmed: confirmed ? "1" : undefined, ...over };
+    const all = { date, buyer, route, confirmed: confirmed ? "1" : undefined, by: by === "order" ? "order" : undefined, ...extra, ...over };
     for (const [k, v] of Object.entries(all)) if (v && !(k === "buyer" && v === "all")) p.set(k, v);
     return `${base}?${p}`;
   };
@@ -47,8 +51,13 @@ export function DayFilters({ base, date, buyer, route, confirmed, distributorsOn
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <form action={base} className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">Delivery date</span>
-          <input key={date} type="date" name="date" defaultValue={date} aria-label="Delivery date" className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
+          <span className="inline-flex rounded-lg border border-input p-0.5 text-xs font-semibold">
+            <Link href={href({ by: undefined })} className={cn("rounded-md px-2 py-1", by === "delivery" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>Delivery date</Link>
+            <Link href={href({ by: "order" })} className={cn("rounded-md px-2 py-1", by === "order" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>Order date</Link>
+          </span>
+          <input key={date} type="date" name="date" defaultValue={date} aria-label={by === "order" ? "Order date" : "Delivery date"} className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
+          {by === "order" ? <input type="hidden" name="by" value="order" /> : null}
+          {Object.entries(extra).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
           {buyer !== "all" ? <input type="hidden" name="buyer" value={buyer} /> : null}
           {route ? <input type="hidden" name="route" value={route} /> : null}
           {confirmed ? <input type="hidden" name="confirmed" value="1" /> : null}

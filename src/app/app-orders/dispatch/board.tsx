@@ -10,6 +10,7 @@ import { cancelTripAction, createTripAction } from "./actions";
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const num = (n: number) => (Number.isInteger(n) ? n.toLocaleString("en-IN") : n.toFixed(1));
+const day = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-IN", { timeZone: "UTC", day: "numeric", month: "short" });
 const time = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }) : null);
 
 export const TRIP_STATUS: Record<Trip["status"], { label: string; cls: string }> = {
@@ -108,7 +109,7 @@ export function DispatchBoard({ date, orders, trips, transporters, canEdit }: { 
                         {canEdit ? <input type="checkbox" checked={picked.includes(o.uid)} onChange={() => toggle(o.uid)} className="size-4 accent-primary" /> : null}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium">{o.buyer}</span>
-                          <span className="block truncate text-[12px] text-muted-foreground">#{o.orderId}{o.buyerCode ? ` · ${o.buyerCode}` : ""}{o.address ? ` · ${o.address}` : ""}</span>
+                          <span className="block truncate text-[12px] text-muted-foreground">#{o.orderId} · ordered {day(o.orderDate)} · for {day(o.deliveryDate)}{o.buyerCode ? ` · ${o.buyerCode}` : ""}{o.address ? ` · ${o.address}` : ""}</span>
                         </span>
                         {o.lat === null ? <span title="No map pin for this customer" className="text-amber-600"><MapPinOff className="size-4" /></span> : null}
                         <span className="num w-16 text-right text-[12px] text-muted-foreground">{num(o.qty)} pcs</span>
