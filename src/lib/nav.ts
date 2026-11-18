@@ -76,8 +76,9 @@ const distAppOrders: NavItem = {
     { href: "/app-orders/notifications", key: "apporders", label: "Notifications" },
   ],
 };
-const primary = orders("Primary", Truck, ["portalOrder", "fpsalesview", "stockView", "fpmybookingorders"]);
-const secondary = orders("Secondary", ShoppingBag, ["fpcustbookingorders", "fpsecondarysalesview", "fpsalesreturnview", "collections", "task"]);
+// The old ERP order lists (Primary: portal / my booking orders; Secondary: customer booking orders) are gone from the
+// sidebar: App orders classifies every order as distributor or retailer. What else they held stays here.
+const salesStock = orders("Sales & stock", Truck, ["fpsalesview", "fpsecondarysalesview", "stockView", "fpsalesreturnview", "collections", "task"]);
 const distCustomers = orders("Customers", Contact, ["distribution", "customerTarget", "customerTypeMaster", "customerRouteMapping"]);
 const distProducts = orders("Product Management", Package, ["fpproducts", "fpfocusproduct", "fpproductinventory", "displayPlanogram", "greenCallTargets"]);
 const salesTeam = orders("Sales team", Users, ["staffs", "employeecustomermaster", "employeefaceregistration", "attendance", "leave", "employeeTarget", "catalogue", "lms"]);
@@ -337,7 +338,7 @@ const WORKING: NavSection[] = [
   {
     id: "distributor", label: "Distributor & Retail", icon: Network,
     groups: [
-      { label: "Orders", items: items(distAppOrders, primary, secondary, dash.distSales) },
+      { label: "Orders", items: items(distAppOrders, salesStock, dash.distSales) },
       {
         label: "Customers & products",
         items: items(
@@ -469,7 +470,7 @@ const WORKING: NavSection[] = [
       { label: "Plant", items: [dash.milkIn, dash.tanks, dash.production, dash.byProduct, dash.fuel] },
       { label: "Sales", items: items(dash.d2cSales, dash.distSales, dash.fieldActivity, dash.kpi) },
       { label: "Accounts", items: [dash.creditNotes, dash.cn] },
-      { label: "Distributor & retail orders", items: items(distAppOrders, primary, secondary) },
+      { label: "Distributor & retail orders", items: items(distAppOrders, salesStock) },
       { label: "Distributor & retail masters", items: items(distCustomers, distProducts, salesMasters) },
       { label: "Distributor & retail prices", items: items(appProductPrices, marginsSlabs, schemes, priceList) },
     ],
