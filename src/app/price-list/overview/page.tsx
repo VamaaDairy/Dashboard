@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ProductThumb } from "@/components/products/Product";
 import { X } from "lucide-react";
-import { packCosts, packFor } from "@/lib/pricing";
 import { allListPrices, channelRates, channels, customerCheck, priceLists, standardPrices } from "@/lib/price-list";
 import { cn } from "@/lib/utils";
 import { CustomerCheckPicker } from "../editors";
@@ -18,14 +17,13 @@ const SOURCE: Record<string, string> = { list: "own list", channel: "channel pri
  */
 export default async function PriceOverviewPage({ searchParams }: { searchParams: Promise<{ customer?: string; group?: string; q?: string }> }) {
   const { customer, group, q } = await searchParams;
-  const [products, chans, rates, lists, listPrices, check, costs] = await Promise.all([
+  const [products, chans, rates, lists, listPrices, check] = await Promise.all([
     standardPrices(),
     channels(),
     channelRates(),
     priceLists(),
     allListPrices(),
     customer ? customerCheck(customer) : Promise.resolve(null),
-    packCosts(),
   ]);
 
   const groups = [...new Set(lists.map((l) => l.grp ?? "Other"))];
@@ -79,7 +77,6 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
               <tr>
                 <th rowSpan={2} className={cn(head, "left-0 z-20 min-w-60 border-r border-foreground/10 text-left")}>Product</th>
                 {check ? <th rowSpan={2} className={cn(head, "border-r border-foreground/10 text-foreground")}>{check.name.length > 18 ? `${check.name.slice(0, 18)}…` : check.name}<div className="font-normal">pays in app</div></th> : null}
-                <th rowSpan={2} className={cn(head, "border-r border-foreground/10")}>Packaging</th>
                 <th colSpan={1 + chans.length} className={cn(head, "border-r border-b border-foreground/10 text-center")}>MRP & channels</th>
                 {[...byGroup].map(([g, ls]) => (
                   <th key={g} colSpan={ls.length} className={cn(head, "border-r border-b border-foreground/10 text-center")}>{g}</th>
@@ -124,7 +121,6 @@ export default async function PriceOverviewPage({ searchParams }: { searchParams
                         )}
                       </td>
                     ) : null}
-                    <td className="tabular-nums border-t border-r border-foreground/10 px-3 py-2 text-right whitespace-nowrap text-foreground/75">{(() => { const v = packFor(costs, p.sku)?.perPc; return v == null ? "-" : money(Math.round(v * 100) / 100); })()}</td>
                     <td className="tabular-nums border-t border-foreground/10 px-3 py-2 text-right font-semibold whitespace-nowrap">{money(p.mrp)}</td>
                     {chans.map((c, j) => {
                       const v = pr?.get(c.uid);

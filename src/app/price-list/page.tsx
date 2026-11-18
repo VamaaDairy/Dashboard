@@ -2,11 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { MasterList, Thumb, type MasterItem } from "@/components/pricing/MasterList";
-import { DetailHeading, Margin, NothingPicked, PACK_COLOR, SUB, Split, Summary, T, money, money2 } from "@/components/pricing/ui";
+import { DetailHeading, Margin, NothingPicked, SUB, Split, Summary, T, money, money2 } from "@/components/pricing/ui";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { allListPrices, priceLists, standardPrices } from "@/lib/price-list";
-import { marginPct, packCosts, packFor, skuCard, type PackCost, type SkuCard } from "@/lib/pricing";
+import { marginPct, skuCard, type SkuCard } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import { PriceCell } from "./editors";
 
@@ -17,8 +17,7 @@ const when = (d: Date) => new Date(d).toLocaleDateString("en-IN", { timeZone: "A
 
 /**
  * SKUs: every product on the left; the one picked on the right with its MRP and trade prices (click to change),
- * where they sit against each other, its packaging cost from the plant's packing list, the party lists that price it
- * and its price history.
+ * where they sit against each other, the party lists that price it and its price history.
  */
 export default async function SkuPricesPage({ searchParams }: { searchParams: Promise<{ sku?: string; list?: string }> }) {
   const sp = await searchParams;
@@ -27,12 +26,11 @@ export default async function SkuPricesPage({ searchParams }: { searchParams: Pr
   const me = await userFromToken((await cookies()).get("session")?.value);
   const canEdit = !!me && atLeast(levelFor(me, "pricelist"), "edit");
 
-  const [products, costs, , lists] = await Promise.all([standardPrices(), packCosts(), allListPrices(), priceLists()]);
+  const [products, , lists] = await Promise.all([standardPrices(), allListPrices(), priceLists()]);
   const onSale = products.filter((p) => p.inApp);
   const missing = onSale.filter((p) => !p.rt || !p.db).length;
   const margins = onSale.map((p) => marginPct(p.db, p.mrp)).filter((m): m is number => m !== null);
   const avg = margins.length ? Math.round((margins.reduce((a, b) => a + b, 0) / margins.length) * 10) / 10 : null;
-  const noPack = products.filter((p) => packFor(costs, p.sku)?.perPc == null).length;
 
   const selected = products.find((p) => p.uid === sp.sku)?.uid ?? onSale[0]?.uid ?? products[0]?.uid ?? null;
   const card = selected ? await skuCard(selected) : null;
@@ -58,7 +56,6 @@ export default async function SkuPricesPage({ searchParams }: { searchParams: Pr
         { value: String(onSale.length), label: "SKUs on sale" },
         { value: String(missing), label: "missing a trade price", alert: missing > 0 },
         { value: avg === null ? "—" : `${avg}%`, label: "average distributor margin" },
-        { value: String(products.length - noPack), label: `with packaging cost (${noPack} without)` },
         { value: String(lists.length), label: "party price lists", href: "/price-list/lists" },
       ]} />
       <Split
@@ -79,7 +76,7 @@ export default async function SkuPricesPage({ searchParams }: { searchParams: Pr
 }
 
 function SkuDetail({ card, canEdit }: { card: SkuCard; canEdit: boolean }) {
-  const { product: p, pack } = card;
+  const { product: p } = card;
   const listed = card.lists.filter((l) => l.price !== null);
   const others = card.channels.filter((c) => c.price && c.code !== "DB" && c.code !== "RT");
 
@@ -98,8 +95,8 @@ function SkuDetail({ card, canEdit }: { card: SkuCard; canEdit: boolean }) {
         </div>
       </div>
 
-      {/* the four numbers */}
-      <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-foreground/10 bg-foreground/10 xl:grid-cols-4">
+      {/* the three prices */}
+      <div className="mt-6 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-foreground/10 bg-foreground/10 sm:grid-cols-3">
         <Figure label="MRP" note="The D2C app sells at this">
           <PriceCell size="lg" target={{ kind: "mrp" }} productUid={p.uid} value={p.mrp || null} canEdit={canEdit} />
         </Figure>
@@ -109,18 +106,11 @@ function SkuDetail({ card, canEdit }: { card: SkuCard; canEdit: boolean }) {
         <Figure label="Distributor price" note={<Margin pct={marginPct(p.db, p.mrp)} />}>
           <PriceCell size="lg" target={{ kind: "channel", channel: "DB" }} productUid={p.uid} value={p.db} canEdit={canEdit} />
         </Figure>
-        <Figure label="Packaging" note={pack?.perPc != null && p.mrp ? `${Math.round((pack.perPc / p.mrp) * 1000) / 10}% of MRP` : "No packing list in the plant"}>
-          <div className="tabular-nums flex h-10 items-center text-[22px] font-semibold tracking-tight text-foreground">{pack?.perPc != null ? money2(pack.perPc) : "—"}</div>
-        </Figure>
       </div>
 
-      {p.mrp > 0 ? <PriceBar mrp={p.mrp} rt={p.rt} db={p.db} pack={pack?.perPc ?? null} /> : null}
+      {p.mrp > 0 ? <PriceBar mrp={p.mrp} rt={p.rt} db={p.db} /> : null}
 
-      <div className="grid gap-x-12 min-[1700px]:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <div>
-          <DetailHeading note={pack ? `Plant SKU ${pack.skuCode} · ${pack.pcsPerCase} per case` : undefined}>Packaging</DetailHeading>
-          <PackTable pack={pack} />
-        </div>
+      <div className="max-w-3xl">
         <div>
           <DetailHeading note={`${listed.length} of ${card.lists.length} price this SKU`}>Party price lists</DetailHeading>
           {listed.length ? (
@@ -187,8 +177,8 @@ function Figure({ label, note, children }: { label: string; note?: React.ReactNo
   );
 }
 
-/** MRP as a scale: packaging as a filled segment, the trade prices as ticks, labelled below (or above when two are close). */
-function PriceBar({ mrp, rt, db, pack }: { mrp: number; rt: number | null; db: number | null; pack: number | null }) {
+/** MRP as a scale: the trade prices as ticks, labelled below (or above when two are close). */
+function PriceBar({ mrp, rt, db }: { mrp: number; rt: number | null; db: number | null }) {
   const at = (v: number) => Math.max(0, Math.min(100, (v / mrp) * 100));
   const marks = [
     db ? { v: db, label: "distributor" } : null,
@@ -203,13 +193,11 @@ function PriceBar({ mrp, rt, db, pack }: { mrp: number; rt: number | null; db: n
         {marks.map((m, i) => above[i] ? <Label key={m.label} pos={at(m.v)} value={m.v} label={m.label} /> : null)}
       </div>
       <div className="relative h-2.5 rounded-full bg-foreground/[0.07]">
-        {pack ? <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.max(1.5, at(pack))}%`, background: PACK_COLOR }} /> : null}
         {marks.map((m) => (
           <div key={m.label} className="absolute -top-1 -bottom-1 w-0.5 rounded bg-foreground" style={{ left: `calc(${at(m.v)}% - ${m.v === mrp ? 2 : 1}px)` }} />
         ))}
       </div>
       <div className="relative mt-2 h-9">
-        {pack ? <Label pos={Math.max(4, at(pack) / 2)} value={pack} label="packaging" /> : null}
         {marks.map((m, i) => !above[i] ? <Label key={m.label} pos={at(m.v)} value={m.v} label={m.label} /> : null)}
       </div>
     </div>
@@ -223,39 +211,5 @@ function Label({ pos, value, label }: { pos: number; value: number; label: strin
       <b className="block font-semibold text-foreground">{money(value)}</b>
       <span className="text-foreground/75">{label}</span>
     </span>
-  );
-}
-
-const perPiece = (l: PackCost["lines"][number], perCase: number) =>
-  l.per === "case" ? `${+l.qty.toFixed(3)} / ${perCase}` : l.unit === "kg" ? `${+(l.qty * 1000).toFixed(2)} g` : `${+l.qty.toFixed(3)}`;
-
-function PackTable({ pack }: { pack: PackCost | null }) {
-  if (!pack) return <p className={cn("py-2 text-[13px]", SUB)}>This SKU has no packing list in the plant yet. Add one on the SKU packing page under Plant &amp; Production.</p>;
-  if (pack.flat) return <p className="py-2 text-[13px] text-foreground">Costed at a flat <span className="tabular-nums font-semibold">{money2(pack.perPc)}</span> per piece, without a material list.</p>;
-  return (
-    <table className={cn(T.table, "tabular-nums")}>
-      <thead>
-        <tr>
-          <th className={T.th}>Material</th>
-          <th className={cn(T.th, "text-right whitespace-nowrap")}>Per piece</th>
-          <th className={cn(T.th, "text-right")}>Rate</th>
-          <th className={cn(T.th, "text-right")}>Cost</th>
-        </tr>
-      </thead>
-      <tbody>
-        {pack.lines.map((l, i) => (
-          <tr key={i}>
-            <td className={cn(T.td, "text-foreground")}>{l.name}</td>
-            <td className={cn(T.td, "text-right text-foreground")}>{perPiece(l, pack.pcsPerCase)}</td>
-            <td className={cn(T.td, "text-right", l.rate === null ? "text-destructive" : SUB)}>{l.rate === null ? "no rate" : `${money(l.rate, 2)}${l.unit === "kg" ? " / kg" : ""}`}</td>
-            <td className={cn(T.td, "text-right text-foreground")}>{money(Math.round(l.perPc * 10000) / 10000, 4)}</td>
-          </tr>
-        ))}
-        <tr>
-          <td className="pt-3 font-semibold text-foreground" colSpan={3}>Total per piece{pack.missingRate ? <span className="ml-2 font-normal text-destructive">(a material has no rate)</span> : null}</td>
-          <td className="pt-3 text-right font-semibold text-foreground">{money(pack.perPc, 4)}</td>
-        </tr>
-      </tbody>
-    </table>
   );
 }
