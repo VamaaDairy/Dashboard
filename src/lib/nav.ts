@@ -439,8 +439,17 @@ const WORKING: NavSection[] = [
       {
         label: "Customer Master",
         items: items(
-          { href: "/customers/distributors", key: "customers", label: "Distributors", icon: Network },
-          { href: "/customers/retailers", key: "customers", label: "Retailers", icon: Store },
+          {
+            href: "/customers/distributors", key: "customers", label: "Trade customers", icon: Network,
+            children: [
+              { href: "/customers/super-stockists", key: "customers", label: "Super stockists" },
+              { href: "/customers/distributors", key: "customers", label: "Distributors (GT / ATP)" },
+              { href: "/customers/mfs", key: "customers", label: "MFS" },
+              { href: "/customers/institutions", key: "customers", label: "Institutions" },
+              { href: "/customers/pt", key: "customers", label: "PT / Parlours" },
+              { href: "/customers/retailers", key: "customers", label: "Retailers" },
+            ],
+          },
           { href: "/customers/d2c", key: "customers", label: "D2C customers", icon: Contact },
           { href: "/customers/duplicates", key: "customers", label: "Same mobile twice", icon: ClipboardCheck },
           distCustomers && { ...distCustomers, label: "Customer setup (all fields)" },
