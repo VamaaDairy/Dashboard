@@ -95,7 +95,7 @@ export const RESOURCES: Resource[] = [
 export const GROUPS = [...new Set(RESOURCES.map((r) => r.group))];
 
 /** Pages only owners may open. */
-const OWNER_ONLY = ["/users"];
+const OWNER_ONLY = ["/users", "/hierarchy"];
 /** Pages any signed-in user may open. */
 const OPEN = ["/no-access", "/profile"];
 
