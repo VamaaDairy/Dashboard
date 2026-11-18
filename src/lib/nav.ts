@@ -1,9 +1,8 @@
 /**
  * The sidebar, split into sections (Plant, Logistics, D2C, WhatsApp, Distributor & Retail, Pricing,
  * Accounts, HR, Masters, MIS, Admin). All sections show one under the other, each opening and closing on its own,
- * with a search box above them. Every page has one home: the section of the people who use it (masters in Masters,
- * reports and dashboards for sales in MIS, setup in Admin). Pages the newer ones replaced are left out of the
- * sections; built Orders pages that no section links to show under "Not in use" for the owner, so nothing is lost.
+ * with a search box above them. A page can sit in more than one section (Labour in Plant and HR; every dashboard under
+ * the page it belongs to and again in MIS); the section that opens by itself is then the one you used last.
  *
  * Orders pages that are still empty placeholders never show in a working section: they are
  * listed under "Not in use" (owner only), together with any built Orders page that no section
@@ -81,15 +80,21 @@ const distAppOrders: NavItem = {
 // sidebar: App orders classifies every order as distributor or retailer. What else they held stays here.
 const salesStock = orders("Sales & stock", Truck, ["fpsalesview", "fpsecondarysalesview", "stockView", "fpsalesreturnview", "collections", "task"]);
 const distCustomers = orders("Customers", Contact, ["distribution", "customerTarget", "customerTypeMaster", "customerRouteMapping"]);
-// the product list itself (fpproducts) lives in Masters > Product Master
-const distProducts = orders("Product Management", Package, ["fpfocusproduct", "fpproductinventory", "displayPlanogram", "greenCallTargets"]);
-// the old staff list (employeecustomermaster), attendance and leave are replaced by the Employee Master and the
-// Employee app; staffs stays as the full edit form behind "Edit" on an employee's profile
+const distProducts = orders("Product Management", Package, ["fpproducts", "fpfocusproduct", "fpproductinventory", "displayPlanogram", "greenCallTargets"]);
+// The old staff list (employeecustomermaster), attendance and leave pages are replaced by the Employee Master and
+// the Employee app's Attendance and Leave, so they are left out (they show under "Not in use").
 const salesTeam = orders("Sales team", Users, ["staffs", "employeefaceregistration", "employeeTarget", "catalogue", "lms"]);
-// categories and tax codes live with the products, in Masters > Product Master
-const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
+const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
 // Pricing
 const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Prices", icon: Tags };
+const appProductPrices: NavItem = {
+  href: "/product-master/d2c", key: "productmaster", label: "App product prices", icon: PackageSearch,
+  children: [
+    { href: "/product-master/d2c", key: "productmaster.d2c", label: "D2C app" },
+    { href: "/product-master/retail", key: "productmaster.retail", label: "Retailer app" },
+    { href: "/product-master/distributor", key: "productmaster.distributor", label: "Wholesale app" },
+  ],
+};
 const marginsSlabs = orders("Margins & slabs", IndianRupee, ["fpchannelrates", "priceSlabs"]);
 const schemes = orders("Schemes", Gift, ["schemes", "schemesQPS"]);
 // Accounts
@@ -109,7 +114,7 @@ const cnManagement: NavItem = {
     { href: "/cn/finance", key: "cn.finance", label: "Finance posting" },
   ],
 };
-// Dashboards: under the page they belong to; the sales ones in MIS
+// Dashboards: each sits in its own section and again in MIS
 const dash = {
   milkIn: { href: "/procurement/dashboard", key: "procurement.dashboard", label: "Milk in", icon: Droplets } as NavItem,
   tanks: { href: "/tanks/dashboard", key: "tanks.dashboard", label: "Tanks", icon: Cylinder } as NavItem,
@@ -198,6 +203,8 @@ const WORKING: NavSection[] = [
             href: "/fuel/production", key: "fuel", label: "Fuel", icon: Fuel,
             children: [
               { href: "/fuel/production", key: "fuel.production", label: "Production in plant" },
+              { href: "/fuel/milk-to-plant", key: "fuel.milk", label: "Milk to plant" },
+              { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery outside plant" },
               dashLeaf(dash.fuel),
             ],
           },
@@ -231,6 +238,7 @@ const WORKING: NavSection[] = [
             children: [
               { href: "/fuel/milk-to-plant", key: "fuel.milk", label: "Milk to plant" },
               { href: "/fuel/delivery", key: "fuel.delivery", label: "Delivery outside plant" },
+              dashLeaf(dash.fuel),
             ],
           },
         ],
@@ -294,6 +302,12 @@ const WORKING: NavSection[] = [
             ],
           },
           {
+            href: "/product-master/d2c", key: "productmaster.d2c", label: "Catalogue", icon: PackageSearch,
+            children: [
+              { href: "/product-master/d2c", key: "productmaster.d2c", label: "App products" },
+            ],
+          },
+          {
             href: "/shop-orders/offers", key: "shop", label: "Marketing", icon: BadgePercent,
             children: [
               { href: "/shop-orders/offers", key: "shop", label: "Offers" },
@@ -326,14 +340,26 @@ const WORKING: NavSection[] = [
   {
     id: "distributor", label: "Distributor & Retail", icon: Network,
     groups: [
-      { label: "Orders", items: items(distAppOrders, salesStock) },
+      { label: "Orders", items: items(distAppOrders, salesStock, dash.distSales) },
       {
-        label: "Products",
-        items: items(distProducts),
+        label: "Customers & products",
+        items: items(
+          distCustomers,
+          {
+            href: "/product-master/distributor", key: "productmaster", label: "App products", icon: PackageSearch,
+            children: [
+              { href: "/product-master/distributor", key: "productmaster.distributor", label: "Distributor app" },
+              { href: "/product-master/retail", key: "productmaster.retail", label: "Retail app" },
+            ],
+          },
+          distProducts,
+          schemes,
+        ),
       },
       {
         label: "Field sales",
         items: items(
+          salesTeam,
           dash.kpi,
           orders("Field Force Management", MapPinned, ["beat", "cityCategory", "displayAudit"]),
           dash.fieldActivity,
@@ -346,7 +372,13 @@ const WORKING: NavSection[] = [
     id: "pricing", label: "Pricing", icon: Tags,
     groups: [
       { label: "Prices", items: [priceList] },
+      { label: "App products", items: [appProductPrices] },
+      { label: "Names", items: [{ href: "/product-names", key: "productnames", label: "Product names check", icon: ClipboardCheck }] },
       { label: "Distributor & retail", items: items(marginsSlabs, schemes) },
+      {
+        label: "Milk purchase",
+        items: [{ href: "/procurement/rate-chart", key: "procurement.rates", label: "Milk rate chart", icon: Droplets }],
+      },
     ],
   },
   {
@@ -356,6 +388,7 @@ const WORKING: NavSection[] = [
         label: "Accounts",
         items: [
           outstandings,
+          pod,
           { ...creditNotes, children: [{ href: "/credit-note", key: "creditnote", label: "All credit notes", exact: true }, dashLeaf(dash.creditNotes)] },
           { ...cnManagement, children: [...cnManagement.children!, dashLeaf(dash.cn)] },
         ],
@@ -382,13 +415,14 @@ const WORKING: NavSection[] = [
               { href: "/employee-app/accounts", key: "emp.accounts", label: "Accounts & sites" },
             ],
           },
+          labour,
         ],
       },
       { label: "Field sales team", items: items(salesTeam) },
     ],
   },
   {
-    // employees, customers and products: the records every other section uses
+    // the masters in one place; the same pages also sit in the sections that use them
     id: "masters", label: "Masters", icon: Database,
     groups: [
       {
@@ -399,6 +433,9 @@ const WORKING: NavSection[] = [
           { href: "/employees/office", key: "employees", label: "Office", icon: Briefcase },
           { href: "/employees/unset", key: "employees", label: "Not placed yet", icon: Users },
           { href: "/employees/departments", key: "employees", label: "Departments", icon: Network },
+          salesTeam && { ...salesTeam, label: "Field staff setup (all fields)" },
+          { href: "/employee-app/accounts", key: "emp.accounts", label: "Employee app accounts", icon: Smartphone },
+          { href: "/users", key: "", label: "Dashboard users", icon: UserPlus, ownerOnly: true },
         ),
       },
       {
@@ -415,8 +452,10 @@ const WORKING: NavSection[] = [
               { href: "/customers/retailers", key: "customers", label: "Retailers" },
             ],
           },
+          { href: "/d2c/customers", key: "d2c.customers", label: "D2C customers", icon: Contact },
           { href: "/customers/duplicates", key: "customers", label: "Same mobile twice", icon: ClipboardCheck },
           distCustomers && { ...distCustomers, label: "Customer setup (all fields)" },
+          { href: "/route-orders/masters", key: "routeorders.masters", label: "Route customers & products", icon: Route },
         ),
       },
       {
@@ -439,7 +478,18 @@ const WORKING: NavSection[] = [
   {
     id: "mis", label: "MIS", icon: BarChart3,
     groups: [
-      { label: "Sales", items: items(dash.distSales) },
+      { label: "Sales", items: items(dash.distSales, dash.fieldActivity, dash.kpi) },
+      {
+        label: "Orders",
+        items: [
+          { href: "/route-orders/products", key: "routeorders", label: "Demand sheet", icon: Boxes },
+          { href: "/route-orders", key: "routeorders", label: "Route sheet", icon: Route, exact: true },
+        ],
+      },
+      { label: "Accounts", items: [dash.creditNotes, dash.cn] },
+      { label: "Distributor & retail orders", items: items(distAppOrders, salesStock) },
+      { label: "Distributor & retail masters", items: items(distCustomers, distProducts, salesMasters) },
+      { label: "Distributor & retail prices", items: items(appProductPrices, marginsSlabs, schemes, priceList) },
     ],
   },
   {
@@ -455,6 +505,7 @@ const WORKING: NavSection[] = [
       {
         label: "System",
         items: [
+          { href: "/product-names", key: "productnames", label: "Product names check", icon: Tags },
           { href: "/audit", key: "audit", label: "Change log", icon: FileClock },
           { href: "/hierarchy", key: "", label: "Hierarchy (employees & customers)", icon: Network, ownerOnly: true },
           { href: "/users", key: "", label: "Users", icon: UserPlus, ownerOnly: true },
