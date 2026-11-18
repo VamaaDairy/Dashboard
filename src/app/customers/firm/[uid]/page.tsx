@@ -19,11 +19,12 @@ export default async function FirmProfilePage({ params }: { params: Promise<{ ui
   const { uid } = await params;
   const f = await firmProfile(uid);
   if (!f) notFound();
-  const [orders, served] = await Promise.all([firmOrders(uid), f.kind === "distributors" ? servedFirms(uid) : Promise.resolve([])]);
+  // anyone but a retailer can serve others: a super stockist its distributors, a distributor its retailers ...
+  const [orders, served] = await Promise.all([firmOrders(uid), f.kind !== "retailers" ? servedFirms(uid) : Promise.resolve([])]);
   const kind = CUSTOMER_KINDS.find((k) => k.key === f.kind);
   const map = f.lat && f.lng ? `https://www.google.com/maps/search/?api=1&query=${f.lat},${f.lng}` : null;
   const ordered = orders.reduce((s, o) => s + o.total, 0);
-  const orderHref = (o: { uid: string }) => `/app-orders/${f.kind ?? "distributors"}/${o.uid}`;
+  const orderHref = (o: { uid: string }) => `/app-orders/${f.kind === "retailers" ? "retailers" : "distributors"}/${o.uid}`;
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
@@ -93,8 +94,8 @@ export default async function FirmProfilePage({ params }: { params: Promise<{ ui
           </Panel>
         </div>
 
-        {f.kind === "distributors" ? (
-          <Panel title={`Retailers served · ${served.length}`} flush>
+        {f.kind !== "retailers" && (served.length || f.kind === "distributors" || f.kind === "super-stockists") ? (
+          <Panel title={`Customers served · ${served.length}`} flush>
             {served.length ? (
               <ul className="divide-y divide-border text-sm">
                 {served.map((s) => (
@@ -104,7 +105,7 @@ export default async function FirmProfilePage({ params }: { params: Promise<{ ui
                   </li>
                 ))}
               </ul>
-            ) : <p className="px-4 py-5 text-center text-sm text-muted-foreground">No retailer is mapped to this distributor.</p>}
+            ) : <p className="px-4 py-5 text-center text-sm text-muted-foreground">No customer is mapped to this one yet.</p>}
           </Panel>
         ) : null}
 

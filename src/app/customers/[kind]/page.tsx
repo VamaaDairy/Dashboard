@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { Contact, Plus, Search } from "lucide-react";
+import { ChevronRight, Contact, List, Network, Plus, Search } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Pill } from "@/components/cn/ui";
 import { CustomerTabs } from "@/components/customers/CustomerTabs";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { CUSTOMER_KINDS, customerCounts, isCustomerKind, listD2c, listFirms } from "@/lib/customers";
+import { CUSTOMER_KINDS, customerCounts, firmTypes, isCustomerKind, listD2c, listFirms, servedBy, type FirmKind, type FirmRow } from "@/lib/customers";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -18,19 +19,38 @@ const day = (d: Date | string | null) =>
 const th = "whitespace-nowrap px-3 py-2 font-semibold";
 const td = "px-3 py-2";
 
-/** Customer Master: distributors, retailers or D2C customers, each with a link to its profile. */
-export default async function CustomerListPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ q?: string }> }) {
+/**
+ * Customer Master, one sub-section per channel (super stockists, distributors, MFS, institutions, parlours, retailers,
+ * D2C), each with a link to every profile. Firms can be narrowed to one type (GT / ATP, the MFS chain, the institution
+ * group) and shown as a list or as a hierarchy: grouped by type (retailers: by who serves them), each with the
+ * customers it serves underneath.
+ */
+export default async function CustomerListPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ q?: string; type?: string; view?: string }> }) {
   const { kind } = await params;
   if (!isCustomerKind(kind)) notFound();
-  const q = ((await searchParams).q ?? "").trim();
+  const sp = await searchParams;
+  const q = (sp.q ?? "").trim();
+  const type = (sp.type ?? "").trim() || null;
+  const tree = sp.view === "tree";
   const info = CUSTOMER_KINDS.find((k) => k.key === kind)!;
   const me = await userFromToken((await cookies()).get("session")?.value);
   const canAdd = kind !== "d2c" && !!me && atLeast(levelFor(me, "fp.distribution"), "edit");
-  const [counts, firms, d2c] = await Promise.all([
+  const [counts, firms, d2c, types] = await Promise.all([
     customerCounts(),
-    kind === "d2c" ? Promise.resolve([]) : listFirms(kind, q),
+    kind === "d2c" ? Promise.resolve([]) : listFirms(kind, q, type),
     kind === "d2c" ? listD2c(q) : Promise.resolve([]),
+    kind === "d2c" ? Promise.resolve([]) : firmTypes(kind),
   ]);
+  // the hierarchy: who each shown customer serves (one level down)
+  const children = tree && kind !== "d2c" ? await servedBy(firms.filter((f) => f.serves > 0).map((f) => f.uid)) : new Map();
+  const href = (over: Record<string, string | null>) => {
+    const p = new URLSearchParams();
+    const all: Record<string, string | null> = { q: q || null, type, view: tree ? "tree" : null, ...over };
+    for (const [k, v] of Object.entries(all)) if (v) p.set(k, v);
+    const qs = p.toString();
+    return `/customers/${kind}${qs ? `?${qs}` : ""}`;
+  };
+  const chip = (on: boolean) => cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px]", on ? "border-primary bg-primary/10 font-medium text-primary" : "border-border hover:bg-muted");
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
@@ -40,20 +60,40 @@ export default async function CustomerListPage({ params, searchParams }: { param
           title={`Customer Master · ${info.label}`}
           subtitle={kind === "d2c"
             ? "Everyone who shops in the Gaia app: orders, spend and subscriptions. Open one for the full profile."
-            : `Every ${info.one.toLowerCase()}: contact, who serves them, sales officer, price list, app login and orders. Open one for the full profile.`}
+            : `${info.about} Contact, who serves them, sales officer, price list, app login and orders; open one for the full profile.`}
           actions={canAdd ? <Link href="/orders/distribution/new" className={buttonVariants({ variant: "primary" })}><Plus className="size-4" /> Add {info.one.toLowerCase()}</Link> : null}
         />
         <CustomerTabs on={kind} counts={counts} />
+        {kind !== "d2c" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-input p-0.5">
+              <Link href={href({ view: null })} className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px]", !tree ? "bg-primary text-primary-foreground" : "hover:bg-muted")}><List className="size-3.5" /> List</Link>
+              <Link href={href({ view: "tree" })} className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px]", tree ? "bg-primary text-primary-foreground" : "hover:bg-muted")}><Network className="size-3.5" /> Hierarchy</Link>
+            </div>
+            {types.length > 1 ? (
+              <>
+                <span className="ml-1 text-[12px] text-muted-foreground">Type</span>
+                <Link href={href({ type: null })} className={chip(!type)}>All <span className="num opacity-70">{types.reduce((a, t) => a + t.n, 0).toLocaleString("en-IN")}</span></Link>
+                {types.slice(0, 14).map((t) => (
+                  <Link key={t.type} href={href({ type: t.type })} className={chip(type === t.type)}>{t.type} <span className="num opacity-70">{t.n.toLocaleString("en-IN")}</span></Link>
+                ))}
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <form className="flex max-w-md items-center gap-2">
+          {type ? <input type="hidden" name="type" value={type} /> : null}
+          {tree ? <input type="hidden" name="view" value="tree" /> : null}
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <input name="q" defaultValue={q} placeholder={kind === "d2c" ? "Search name, mobile, address, pincode" : "Search name, code, mobile, city, contact"}
               className="h-8 w-full rounded-lg border border-input bg-transparent pr-3 pl-8 text-sm focus:border-primary focus:outline-none" />
           </div>
           <button className="h-8 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Search</button>
-          {q ? <Link href={`/customers/${kind}`} className="text-sm text-muted-foreground hover:underline">Clear</Link> : null}
+          {q ? <Link href={href({ q: null })} className="text-sm text-muted-foreground hover:underline">Clear</Link> : null}
         </form>
 
+        {tree && kind !== "d2c" ? <Hierarchy kind={kind} firms={firms} served={children} /> : (
         <div className="overflow-x-auto rounded-lg border border-border">
           {kind === "d2c" ? (
             <table className="w-full text-sm">
@@ -79,7 +119,7 @@ export default async function CustomerListPage({ params, searchParams }: { param
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-                <tr>{[info.one, "Contact", "City", kind === "retailers" ? "Served by" : "Route", "Sales officer", "Price list", "App", "Orders", "Last order", "Last 90 days", "Status"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+                <tr>{[info.one, "Type", "Contact", "City", "Served by", "Serves", "Route", "Sales officer", "Price list", "App", "Orders", "Last order", "Last 90 days", "Status"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {firms.map((f) => (
@@ -88,9 +128,12 @@ export default async function CustomerListPage({ params, searchParams }: { param
                       <Link href={`/customers/firm/${f.uid}`} className="font-medium text-primary hover:underline">{f.name}</Link>
                       {f.code ? <div className="font-mono text-[11px] text-tertiary-foreground">{f.code}</div> : null}
                     </td>
+                    <td className={`${td} whitespace-nowrap`}>{f.type === "Not set" ? <span className="text-muted-foreground">—</span> : f.type}</td>
                     <td className={td}><div>{f.contactPerson ?? "—"}</div><div className="font-mono text-xs text-muted-foreground">{f.phone ?? ""}</div></td>
                     <td className={td}>{f.city ?? "—"}</td>
-                    <td className={td}>{(kind === "retailers" ? f.servedBy : f.route) ?? "—"}</td>
+                    <td className={td}>{f.servedByUid ? <Link href={`/customers/firm/${f.servedByUid}`} className="hover:underline">{f.servedBy}</Link> : "—"}</td>
+                    <td className={`${td} num text-right`}>{f.serves || "—"}</td>
+                    <td className={td}>{f.route ?? "—"}</td>
                     <td className={td}>{f.salesOfficer ?? "—"}</td>
                     <td className={td}>{f.priceList ?? <span className="text-muted-foreground">Standard</span>}</td>
                     <td className={td}>{f.appLogin ? <Pill tone="success">Login</Pill> : <Pill>No login</Pill>}</td>
@@ -100,12 +143,82 @@ export default async function CustomerListPage({ params, searchParams }: { param
                     <td className={td}>{f.active ? <Pill tone="success">Active</Pill> : <Pill>Inactive</Pill>}</td>
                   </tr>
                 ))}
-                {firms.length === 0 ? <tr><td colSpan={11} className="px-3 py-10 text-center text-muted-foreground">{q ? "No customer matches." : `No ${info.label.toLowerCase()} yet.`}</td></tr> : null}
+                {firms.length === 0 ? <tr><td colSpan={14} className="px-3 py-10 text-center text-muted-foreground">{q ? "No customer matches." : `No ${info.label.toLowerCase()} yet.`}</td></tr> : null}
               </tbody>
             </table>
           )}
         </div>
+        )}
+        {kind !== "d2c" && firms.length >= 2000 ? <p className="text-[12px] text-muted-foreground">Showing the first 2,000. Search or pick a type to narrow it.</p> : null}
       </div>
+    </div>
+  );
+}
+
+const KIND_ONE = Object.fromEntries(CUSTOMER_KINDS.map((k) => [k.key, k.one]));
+
+/**
+ * The hierarchy: customers grouped by type (retailers: by who serves them), each opening to the customers it serves.
+ */
+function Hierarchy({ kind, firms, served }: { kind: FirmKind; firms: FirmRow[]; served: Map<string, Array<{ uid: string; name: string; code: string | null; kind: FirmKind | null; channel: string | null; city: string | null; active: boolean }>> }) {
+  const groups = new Map<string, FirmRow[]>();
+  for (const f of firms) {
+    const g = kind === "retailers" ? f.servedBy ?? "Not mapped" : f.type;
+    groups.set(g, [...(groups.get(g) ?? []), f]);
+  }
+  const ordered = [...groups].sort((a, b) => (a[0] === "Not set" || a[0] === "Not mapped" ? 1 : 0) - (b[0] === "Not set" || b[0] === "Not mapped" ? 1 : 0) || b[1].length - a[1].length);
+  if (!firms.length) return <div className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">No customer matches.</div>;
+  return (
+    <div className="space-y-3">
+      {ordered.map(([g, list]) => {
+        const active = list.filter((f) => f.active).length;
+        return (
+          <section key={g} className="overflow-hidden rounded-lg border border-border">
+            <header className="flex flex-wrap items-baseline gap-2 border-b border-border bg-muted/50 px-4 py-2">
+              <h3 className="font-semibold">{g}</h3>
+              <span className="text-[12px] text-muted-foreground">{list.length} · {active} active{kind !== "retailers" ? ` · serve ${list.reduce((a, f) => a + f.serves, 0).toLocaleString("en-IN")}` : ""}</span>
+            </header>
+            <ul className="divide-y divide-border">
+              {list.map((f) => {
+                const kids = served.get(f.uid) ?? [];
+                const row = (
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
+                    <Link href={`/customers/firm/${f.uid}`} className="font-medium text-primary hover:underline">{f.name}</Link>
+                    <span className="font-mono text-[11px] text-tertiary-foreground">{f.code}</span>
+                    <span className="text-[12px] text-muted-foreground">{[f.city, kind !== "retailers" && f.servedBy ? `served by ${f.servedBy}` : null, f.orders ? `${f.orders} orders` : null].filter(Boolean).join(" · ")}</span>
+                    {f.active ? null : <Pill>Inactive</Pill>}
+                    {f.serves ? <span className="ml-auto text-[12px] font-medium text-foreground">serves {f.serves.toLocaleString("en-IN")}</span> : null}
+                  </div>
+                );
+                return (
+                  <li key={f.uid}>
+                    {kids.length ? (
+                      <details className="group">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2 hover:bg-muted/40">
+                          <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+                          {row}
+                        </summary>
+                        <ul className="border-t border-border bg-muted/20 py-1 pl-10 pr-4">
+                          {kids.map((k) => (
+                            <li key={k.uid} className="flex flex-wrap items-center gap-x-3 py-1 text-[13px]">
+                              <Link href={`/customers/firm/${k.uid}`} className="hover:underline">{k.name}</Link>
+                              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{k.kind ? KIND_ONE[k.kind] : k.channel ?? "—"}</span>
+                              <span className="text-[12px] text-muted-foreground">{[k.code, k.city].filter(Boolean).join(" · ")}</span>
+                              {k.active ? null : <Pill>Inactive</Pill>}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : (
+                      <div className="flex items-center gap-2 px-4 py-2"><span className="size-4 shrink-0" />{row}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
 }
