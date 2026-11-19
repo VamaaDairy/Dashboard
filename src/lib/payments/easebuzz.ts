@@ -136,11 +136,17 @@ export async function startPayment(orderKey: string, customerId: number): Promis
 export type ApplyResult = { ok: true; status: string; orderId: number } | { ok: false; error: string };
 
 /**
+ * The way a reply reached us: Easebuzz's webhook (its server), the payment page coming back (the customer's phone
+ * posting the result to the same URL), or our own check with the Transaction API. Kept per attempt (db/112).
+ */
+export type PaySource = "webhook" | "payment page" | "app check";
+
+/**
  * Records what Easebuzz says about a payment - from the webhook, the success / failure URL or the
  * Transaction API. Only signed replies for our own txnid count; a success must be for the amount asked.
  * Safe to call any number of times: the order is paid and placed once.
  */
-export async function applyReply(r: Record<string, unknown>, source: string): Promise<ApplyResult> {
+export async function applyReply(r: Record<string, unknown>, source: PaySource): Promise<ApplyResult> {
   if (!verified(r)) {
     console.error(`[easebuzz] ${source}: reply with a wrong or missing hash for txnid ${field(r, "txnid")}`);
     return { ok: false, error: "Hash mismatch" };
@@ -153,6 +159,8 @@ export async function applyReply(r: Record<string, unknown>, source: string): Pr
       [txnid],
     )).rows[0];
     if (!pay) return { error: "Unknown txnid" };
+    // the first time each way brought a signed reply for this attempt
+    await c.query(`update shop_payment set heard = heard || jsonb_build_object($2::text, now()) where id = $1 and not (heard ? $2)`, [pay.id, source]);
     if (status === "success" && Math.abs(Number(field(r, "amount")) - pay.amount) > 0.009) {
       console.error(`[easebuzz] ${source}: ${txnid} paid ${field(r, "amount")} but ${pay.amount} was asked`);
       await c.query(`update shop_payment set status = 'amount_mismatch', raw = $2, updated_at = now() where id = $1`, [pay.id, JSON.stringify(r)]);
@@ -161,8 +169,9 @@ export async function applyReply(r: Record<string, unknown>, source: string): Pr
     // a success is final: a later failure for the same attempt never undoes it
     if (pay.status !== "success") {
       await c.query(
-        `update shop_payment set status = $2, easepayid = coalesce($3, easepayid), mode = coalesce($4, mode), raw = $5, updated_at = now() where id = $1`,
-        [pay.id, status, field(r, "easepayid") || null, field(r, "mode") || null, JSON.stringify(r)],
+        `update shop_payment set status = $2, easepayid = coalesce($3, easepayid), mode = coalesce($4, mode), raw = $5,
+                confirmed_by = case when $2 = 'success' then $6 else confirmed_by end, updated_at = now() where id = $1`,
+        [pay.id, status, field(r, "easepayid") || null, field(r, "mode") || null, JSON.stringify(r), source],
       );
     }
     if (status !== "success") return { orderId: pay.order_id, placedNow: false };
@@ -207,7 +216,7 @@ export async function checkPayment(orderKey: string): Promise<{ ok: true } | { o
       const reply = await post(`${DASH_URL}transaction/v1/retrieve`, params);
       // { status: true, msg: { ...the transaction, signed like the other replies } }; anything else = not known yet
       if (reply.status === true && reply.msg && typeof reply.msg === "object") {
-        const r = await applyReply(reply.msg as Record<string, unknown>, "transaction API");
+        const r = await applyReply(reply.msg as Record<string, unknown>, "app check");
         if (r.ok && r.status === "success") break;
       } else {
         console.error(`[easebuzz] transaction check for ${pay.txnid} got no transaction:`, JSON.stringify(reply).slice(0, 300));
@@ -247,7 +256,11 @@ export async function expireUnpaid() {
 
 /** The payment attempts of an order, newest first (dashboard). */
 export const paymentsOf = (orderId: number) =>
-  query<{ txnid: string; amount: number; status: string; easepayid: string | null; mode: string | null; created_at: Date; updated_at: Date }>(
-    `select txnid, amount::float as amount, status, easepayid, mode, created_at, updated_at from shop_payment where order_id = $1 order by created_at desc`,
+  query<{
+    txnid: string; amount: number; status: string; easepayid: string | null; mode: string | null; created_at: Date; updated_at: Date;
+    /** first time each way (PaySource) brought a reply, ISO time */
+    heard: Record<string, string>; confirmed_by: PaySource | null;
+  }>(
+    `select txnid, amount::float as amount, status, easepayid, mode, created_at, updated_at, heard, confirmed_by from shop_payment where order_id = $1 order by created_at desc`,
     [orderId],
   );
