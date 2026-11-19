@@ -22,7 +22,7 @@ export interface NameCheckRow {
 export async function nameCheck(): Promise<NameCheckRow[]> {
   const [labels, production, route, whatsapp] = await Promise.all([
     productLabels(),
-    query<{ code: string; name: string }>(`select distinct on (code) code, name from sku where scenario_id = $1 order by code, is_active desc`, [await activeScenarioId()]),
+    query<{ code: string; name: string }>(`select distinct on (code) coalesce(master_sku_no::text, code) as code, name from sku where scenario_id = $1 order by code, is_active desc`, [await activeScenarioId()]),
     query<{ code: string; name: string }>(`select sku_no::text as code, name from route_order_product`),
     query<{ code: string; name: string }>(`select retailer_id as code, name from wa_product where active`),
   ]);

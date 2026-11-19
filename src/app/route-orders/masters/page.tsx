@@ -183,7 +183,10 @@ export default async function MastersPage({ searchParams }: { searchParams: Prom
               <Panel title={`Edit ${editingProduct.name}`} description={`SKU ${editingProduct.sku_no}`}>
                 <form action={saveProduct} className="grid gap-3 md:grid-cols-3">
                   <input type="hidden" name="id" value={editingProduct.id} />
-                  <Text label="Name" name="name" value={editingProduct.name} />
+                  {/* the name is the Product Master's (one name everywhere); only the billing settings are kept here */}
+                  <label className="text-xs font-medium">Name (from the Product Master)
+                    <input name="name" readOnly value={editingProduct.name} className={`${inputCls} cursor-not-allowed bg-muted`} />
+                  </label>
                   <Text label="Category" name="category" value={editingProduct.category} />
                   <Text label="Tally stock item (exactly as in Tally)" name="tally_item" value={editingProduct.tally_item} />
                   <Text label="Tally sales ledger" name="tally_ledger" value={editingProduct.tally_ledger} />

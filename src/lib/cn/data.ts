@@ -14,6 +14,9 @@ export interface Complaint {
   invoice_no: string;
   invoice_date: string | null;
   product_name: string;
+  /** the Product Master product (db/110), when known */
+  sku_no: number | null;
+  product_image: string | null;
   batch_no: string | null;
   qty_affected: number;
   qty_unit: string;
@@ -58,7 +61,7 @@ const PLAIN = [
   "capa_owner", "rca_by", "recommended_value", "return_required", "recommend_remark", "recommended_by", "approval_level",
   "approver_level", "approved_value", "approved_by", "approval_remark", "cn_number", "cn_value", "finance_by",
   "return_verified_by", "return_remark", "closed_by", "closure_remark", "capa_effective", "capa_review_by", "capa_review_remark",
-  "source", "shop_order_id", "booking_order_uid", "firm_uid", "items", "refund_value", "refund_mode", "refund_ref", "refund_by",
+  "source", "shop_order_id", "booking_order_uid", "firm_uid", "items", "refund_value", "refund_mode", "refund_ref", "refund_by", "sku_no",
 ];
 const COLUMNS = [
   ...PLAIN.map((c) => `c.${c}`),
@@ -67,6 +70,8 @@ const COLUMNS = [
   "(select o.order_no from shop_order o where o.id = c.shop_order_id) as shop_order_no",
   "(select b.order_id from fp_booking_order b where b.uid = c.booking_order_uid) as booking_order_id",
   "coalesce((select array_agg(p.id order by p.id) from cn_photo p where p.complaint_id = c.id), '{}') as photo_ids",
+  // the Product Master's photo of the product (db/110: sku_no), the same one every page shows
+  "(select l.image from product_label l where l.sku_no = c.sku_no order by l.sku_code ~ '^[0-9]+$' desc limit 1) as product_image",
 ].join(", ");
 
 export const listComplaints = () =>

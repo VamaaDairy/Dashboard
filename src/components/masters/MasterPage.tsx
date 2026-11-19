@@ -50,7 +50,8 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
   const data = await listMaster(def, req);
   // add / edit / deactivate / delete are shown only to people who may do them
   const me = def.entity || def.orderDecisions ? await userFromToken((await cookies()).get("session")?.value) : null;
-  const canEdit = !!def.entity && !!me && atLeast(levelFor(me, `fp.${slug}`), "edit");
+  // a read-only screen (e.g. rates: changed on the Prices page only) has no Add / Edit
+  const canEdit = !!def.entity && !def.readOnly && !!me && atLeast(levelFor(me, `fp.${slug}`), "edit");
   // confirm / cancel on the order list
   const canDecide = !!def.orderDecisions && !!me && atLeast(levelFor(me, `fp.${slug}`), "edit");
   const page = Math.min(req.page, data.pages);
@@ -83,6 +84,11 @@ export async function MasterPage({ slug, searchParams }: { slug: string; searchP
           subtitle={def.subtitle}
           actions={
             <>
+            {def.readOnly ? (
+              <Link href={def.readOnly.href} title={def.readOnly.note} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90">
+                {def.readOnly.label}
+              </Link>
+            ) : null}
             {canEdit && def.appLogin ? <CreateMissingLogins kind={def.appLogin} /> : null}
             {canEdit && def.appLogin === "distributor" ? <CreateMissingLogins kind="retailer" /> : null}
             {canEdit ? (

@@ -85,7 +85,13 @@ export default async function ComplaintPage({ params }: PageProps<"/cn/[id]">) {
                 <Row label="Depot / region" value={c.region} />
                 <Row label="Contact no." value={c.contact_no} mono />
                 <Row label="Invoice" value={`${c.invoice_no}${c.invoice_date ? ` · ${dmy(c.invoice_date)}` : ""}`} />
-                <Row label="Product" value={`${c.product_name}${c.batch_no ? ` · batch ${c.batch_no}` : ""}`} />
+                <Row label="Product" value={
+                  <span className="inline-flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- the Product Master photo, served by the app */}
+                    {c.product_image ? <img src={c.product_image} alt="" className="size-8 rounded object-cover" /> : null}
+                    {`${c.product_name}${c.batch_no ? ` · batch ${c.batch_no}` : ""}`}
+                  </span>
+                } />
                 <Row label="Quantity affected" value={`${c.qty_affected} ${c.qty_unit}`} />
                 <Row label="Complaint type" value={c.category} />
                 <Row label="Description" value={c.description} />

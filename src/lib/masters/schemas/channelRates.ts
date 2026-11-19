@@ -7,7 +7,7 @@ import { REF_CHANNELS, REF_PRODUCTS, REF_STATES } from "../refs";
 export const channelRates: MasterDef = {
   slug: "fpchannelrates",
   title: "Channel Margins",
-  subtitle: "Selling price by channel and product, with the dates it applies and who last changed it.",
+  subtitle: "Selling price by channel and product, with the dates it applies and who last changed it. Changed on the Prices page only.",
   icon: Percent,
   from: `fp_channel_rate r join fp_channel c on c.uid = r.channel_uid join fp_product p on p.uid = r.product_uid${productJoin("p.sku_code")}`,
   cols: [
@@ -27,6 +27,7 @@ export const channelRates: MasterDef = {
   filters: [{ key: "channel", label: "Channel", expr: "c.channel" }],
   order: "c.channel, p.sku_name",
 
+  readOnly: { note: "Rates are changed in one place only: the Prices page.", href: "/price-list", label: "Change prices" },
   entity: {
     table: "fp_channel_rate", idCol: "uid", idExpr: "r.uid", noun: "channel price",
     fields: [

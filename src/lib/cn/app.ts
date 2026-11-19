@@ -98,11 +98,13 @@ async function insert(c: PoolClient, h: Header, i: ComplaintIn, lines: Line[]): 
   const r = await c.query<{ id: string; complaint_no: string }>(
     `insert into cn_complaint (complaint_date, customer_name, customer_type, region, contact_no, invoice_no, invoice_date, product_name,
        qty_affected, qty_unit, category, description, evidence_url, claim_value, registered_by, stage_on,
-       source, shop_order_id, shop_customer_id, booking_order_uid, firm_uid, raised_by_login, raised_by_staff, items)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Pcs',$10,$11,null,$12,$13,$1,$14,$15,$16,$17,$18,$19,$20,$21) returning id, complaint_no`,
+       source, shop_order_id, shop_customer_id, booking_order_uid, firm_uid, raised_by_login, raised_by_staff, items, sku_no)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Pcs',$10,$11,null,$12,$13,$1,$14,$15,$16,$17,$18,$19,$20,$21,$22) returning id, complaint_no`,
     [today(), h.customer, h.customerType, h.region, h.contact, h.invoiceNo, h.invoiceDate, productText(lines), qty, i.category, i.description,
       Math.max(0.01, Math.round(claim * 100) / 100), h.registeredBy, h.source, h.shopOrderId ?? null, h.shopCustomerId ?? null,
-      h.bookingOrderUid ?? null, h.firmUid ?? null, h.loginId ?? null, h.staffUid ?? null, JSON.stringify(lines)],
+      h.bookingOrderUid ?? null, h.firmUid ?? null, h.loginId ?? null, h.staffUid ?? null, JSON.stringify(lines),
+      // one line: the Product Master product it is about (several lines: the complaint lists them)
+      lines.length === 1 && /^\d+$/.test(String(lines[0].sku).replace(/\D/g, "")) ? Number(String(lines[0].sku).replace(/\D/g, "")) : null],
   );
   const { id, complaint_no: no } = r.rows[0];
   for (const p of i.photos) await c.query(`insert into cn_photo (complaint_id, mime, data) values ($1, $2, $3)`, [id, p.mime, p.data]);

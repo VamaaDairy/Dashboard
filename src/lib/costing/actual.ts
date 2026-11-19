@@ -128,10 +128,10 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
          left join v_cell v on v.object_id = o.id
         where o.scenario_id = $1 group by o.id`, [scenario]),
     query<{ bulk_product_id: string; ingredient_id: string }>(`select bulk_product_id, ingredient_id from bulk_product_ingredient`),
-    query<{ day: string; sku_id: string; code: string; name: string; category: string; pcs: number;
+    query<{ day: string; sku_id: string; code: string; label_code: string | null; name: string; category: string; pcs: number;
             per_pc: number | null; bulk_product_id: string | null; bulk_unit: string | null;
             case_unit: string; pcs_per_case: number; cases: number; loose_pcs: number }>(
-      `select to_char(d.day, 'YYYY-MM-DD') as day, s.id as sku_id, s.code, s.name, s.category,
+      `select to_char(d.day, 'YYYY-MM-DD') as day, s.id as sku_id, s.code, coalesce(s.master_sku_no::text, s.code) as label_code, s.name, s.category,
               d.cases * s.pcs_per_case + d.loose_pcs as pcs, s.bulk_qty_per_pc as per_pc, s.bulk_product_id, p.unit as bulk_unit,
               s.case_unit, s.pcs_per_case, d.cases, d.loose_pcs
          from sku_pack_day d join sku s on s.id = d.sku_id left join bulk_product p on p.id = s.bulk_product_id
@@ -265,7 +265,7 @@ export async function getCosting(from: string, to: string): Promise<Costing> {
     days: [...dayMap.values()].sort((a, b) => a.day.localeCompare(b.day)),
     batches: batchCosts,
     skus: skuCosts.map((s) => {
-      const label = labelOf(labels, s.code, s.name);
+      const label = labelOf(labels, (s as { label_code?: string | null }).label_code ?? s.code, s.name);
       return { ...s, name: label.name, label };
     }),
   };

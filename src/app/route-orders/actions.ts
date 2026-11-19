@@ -1,5 +1,6 @@
 "use server";
 
+import { productLabels } from "@/lib/products/names";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -90,7 +91,10 @@ export async function saveProduct(form: FormData) {
   const me = await editor("routeorders.masters");
   if (!me) return back(MASTERS, { tab: "products", error: DENIED });
   const id = Number(text(form, "id"));
-  const name = text(form, "name");
+  // the name is always the Product Master's (db/110): whatever the form sent, the product's one name is kept
+  const sku = id ? await one<{ sku_no: number }>(`select sku_no from route_order_product where id = $1`, [id]) : null;
+  const master = sku ? (await productLabels()).get(Number(sku.sku_no)) : undefined;
+  const name = master ? [master.name, master.qty, master.unit].filter(Boolean).join(" ") : text(form, "name");
   const pack = Number(text(form, "pack_size"));
   const gst = Number(text(form, "gst_pct"));
   if (!id || !name || !(pack > 0) || ![0, 5].includes(gst)) return back(MASTERS, { tab: "products", error: "Name, a pack size above 0 and GST of 0 or 5 are needed." });

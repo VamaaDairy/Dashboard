@@ -18,7 +18,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  */
 async function authorise(slug: string) {
   const def = MASTERS[slug];
-  if (!def?.entity) return null;
+  if (!def?.entity || def.readOnly) return null;
   const me = await userFromToken((await cookies()).get("session")?.value);
   if (!me || !atLeast(levelFor(me, `fp.${slug}`), "edit")) return null;
   return { def, who: me.name || me.email };
