@@ -108,6 +108,8 @@ export interface MasterDef {
   rowKey?: string;
   /** rows still pending can be confirmed or cancelled from the list (primary orders) */
   orderDecisions?: boolean;
+  /** Shown but not edited here: the reason, and where to change it instead (e.g. prices, changed on the Prices page only). */
+  readOnly?: { note: string; href: string; label: string };
   /** the rows can sign in to the Gaia app: shows each row's app login and lets it be created, reset or switched off */
   appLogin?: "distributor" | "salesman" | "retailer";
 }

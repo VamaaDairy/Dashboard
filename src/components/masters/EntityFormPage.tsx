@@ -12,6 +12,8 @@ import { MASTERS } from "@/lib/masters/schemas";
 export async function EntityFormPage({ slug, id }: { slug: string; id: string | null }) {
   const def = MASTERS[slug];
   if (!def?.entity) notFound();
+  // shown but not edited here (e.g. rates): back to the list, which says where they are changed
+  if (def.readOnly) redirect(`/orders/${slug}`);
   const me = await userFromToken((await cookies()).get("session")?.value);
   if (!me || !atLeast(levelFor(me, `fp.${slug}`), "edit")) redirect(`/orders/${slug}`);
 

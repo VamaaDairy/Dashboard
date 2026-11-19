@@ -44,14 +44,15 @@ export interface SkuHistoryDay {
 export async function getSkuDay(date: string): Promise<SkuDayRow[]> {
   const [rows, labels] = await Promise.all([getSkuDayRows(date), productLabels()]);
   return rows.map((r) => {
-    const label = labelOf(labels, r.code, r.name);
-    return { ...r, name: label.name, label };
+    // the Product Master product this SKU is (master_sku_no, db/110), else its own code
+    const label = labelOf(labels, r.label_code ?? r.code, r.name);
+    return { ...r, label_code: undefined, name: label.name, label };
   });
 }
 
 async function getSkuDayRows(date: string) {
-  return query<Omit<SkuDayRow, "label">>(
-    `select s.id as sku_id, s.code, s.name, s.category, s.case_unit, s.pcs_per_case, s.shelf_life_days,
+  return query<Omit<SkuDayRow, "label"> & { label_code: string | null }>(
+    `select s.id as sku_id, s.code, coalesce(s.master_sku_no::text, s.code) as label_code, s.name, s.category, s.case_unit, s.pcs_per_case, s.shelf_life_days,
             s.bulk_product_id, s.bulk_qty_per_pc, s.pack_rate_per_pc, s.is_active,
             (d.id is not null) as saved, coalesce(d.cases, 0) as cases, coalesce(d.loose_pcs, 0) as loose_pcs
        from sku s

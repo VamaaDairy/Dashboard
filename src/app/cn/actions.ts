@@ -8,6 +8,7 @@ import { userFromToken } from "@/lib/access-server";
 import { levelFor, atLeast } from "@/lib/access";
 import { addDays, today } from "@/lib/dates";
 import { notifyComplaint } from "@/lib/cn/app";
+import { listSkuOptions } from "@/lib/creditnote/data";
 import {
   CATEGORIES, CUSTOMER_TYPES, DEPARTMENTS, QTY_UNITS, REFUND_MODES, levelCovers, levelNames, requiredLevel, rupees,
 } from "@/lib/cn/sop";
@@ -101,7 +102,11 @@ export async function registerComplaint(i: RegisterInput): Promise<CnResult> {
   try {
     const customer = need(i.customer_name, "Customer name");
     const invoice = need(i.invoice_no, "Invoice no.");
-    const product = need(i.product_name, "Product");
+    const picked = need(i.product_name, "Product");
+    // picked from the list ("1042 · Gaia Maxx UHT · 110 ml"): the Product Master product it is, and its one name
+    const opt = (await listSkuOptions()).find((o) => o.name === picked);
+    const skuNo = opt?.label.inMaster ? opt.label.skuNo : null;
+    const product = opt ? [opt.label.name, opt.label.qty, opt.label.unit].filter(Boolean).join(" ") : picked;
     const evidence = need(i.evidence_url, "Photo / video link");
     if (!/^https?:\/\/\S+$/i.test(evidence)) throw new Error("Photo / video link must be a web link (http…)");
     const qty = Number(s(i.qty_affected).replace(/,/g, ""));
@@ -124,9 +129,9 @@ export async function registerComplaint(i: RegisterInput): Promise<CnResult> {
       if (dup.rows[0]) throw new Error(`Already registered as ${dup.rows[0].complaint_no} (same customer, invoice and product).`);
       const r = await c.query(
         `insert into cn_complaint (complaint_date, customer_name, customer_type, region, contact_no, invoice_no, invoice_date, product_name,
-           batch_no, qty_affected, qty_unit, category, description, evidence_url, claim_value, registered_by, stage_on)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) returning id, complaint_no`,
-        [...head, today()],
+           batch_no, qty_affected, qty_unit, category, description, evidence_url, claim_value, registered_by, stage_on, sku_no)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) returning id, complaint_no`,
+        [...head, today(), skuNo],
       );
       await log(c, r.rows[0].id, me.name, `Complaint registered as ${r.rows[0].complaint_no}`);
       return r.rows[0].id as string;

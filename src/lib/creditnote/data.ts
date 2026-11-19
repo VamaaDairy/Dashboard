@@ -70,16 +70,17 @@ export interface SkuOption {
 /** The SKU list (active ones, in the stock app's order) - what the item name is picked from. */
 export async function listSkuOptions(): Promise<SkuOption[]> {
   return withLabels(await query<Omit<SkuOption, "label" | "raw">>(
-    `select code, name, category, case_unit, pcs_per_case from sku where scenario_id = $1 and is_active order by sort_order, name`,
+    `select code, coalesce(master_sku_no::text, code) as label_code, name, category, case_unit, pcs_per_case from sku where scenario_id = $1 and is_active order by sort_order, name`,
     [await activeScenarioId()],
   ));
 }
 
 /** SKU rows with the one product name: `name` becomes "SKU · name · pack size", the list's own kept as `raw`. */
-export async function withLabels<T extends { code: string; name: string }>(rows: T[]): Promise<Array<T & { raw: string; label: ProductLabel }>> {
+export async function withLabels<T extends { code: string; name: string; label_code?: string | null }>(rows: T[]): Promise<Array<T & { raw: string; label: ProductLabel }>> {
   const labels = await productLabels();
   return rows.map((r) => {
-    const label = labelOf(labels, r.code, r.name);
+    // the Product Master product this SKU is (master_sku_no, db/110), else its own code
+    const label = labelOf(labels, r.label_code ?? r.code, r.name);
     return { ...r, raw: r.name, name: labelText(label), label };
   });
 }

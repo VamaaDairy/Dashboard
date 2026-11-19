@@ -8,7 +8,7 @@ import { active } from "./fragments";
 export const slabs: MasterDef = {
   slug: "priceSlabs",
   title: "Slab Pricing",
-  subtitle: "Special price lists (slabs) by product, as assigned to customers.",
+  subtitle: "Special price lists (slabs) by product, as assigned to customers. Changed on the Prices page only.",
   icon: Percent,
   from: `fp_slab_rate sr join fp_slab sl on sl.uid = sr.slab_uid join fp_product p on p.uid = sr.product_uid${productJoin("p.sku_code")}`,
   cols: [
@@ -28,6 +28,7 @@ export const slabs: MasterDef = {
   ],
   order: "sl.name, p.sku_name",
 
+  readOnly: { note: "Rates are changed in one place only: the Prices page.", href: "/price-list", label: "Change prices" },
   entity: {
     table: "fp_slab_rate", idCol: "uid", idExpr: "sr.uid", onExpr: "sr.active = 1", noun: "slab price",
     defaults: { active: 1 },

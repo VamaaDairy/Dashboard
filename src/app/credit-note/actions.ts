@@ -52,8 +52,8 @@ async function parseItems(f: FormData) {
   let raw: ItemInput[];
   try { raw = JSON.parse(text(f, "items")); } catch { throw new Error("Items could not be read"); }
   if (!Array.isArray(raw) || raw.length === 0) throw new Error("Add at least one item");
-  const skus = await withLabels(await query<{ code: string; name: string; case_unit: string; pcs_per_case: number }>(
-    `select code, name, case_unit, pcs_per_case from sku where scenario_id = $1`, [await activeScenarioId()],
+  const skus = await withLabels(await query<{ code: string; label_code: string | null; name: string; case_unit: string; pcs_per_case: number }>(
+    `select code, coalesce(master_sku_no::text, code) as label_code, name, case_unit, pcs_per_case from sku where scenario_id = $1`, [await activeScenarioId()],
   ));
   return raw.map((it, n) => {
     const label = `Item ${n + 1}`;

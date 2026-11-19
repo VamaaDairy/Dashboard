@@ -10,7 +10,7 @@ import type { AppChannel, AppProduct } from "@/lib/products/app-products";
 import { cn } from "@/lib/utils";
 import {
   addCategoryAction, addPhotoAction, addToListAction, archivedPhotosAction, archivePhotoAction, categoryIconAction, createProductAction, descriptionAction, makeFirstPhotoAction,
-  moveCategoryAction, moveProductAction, photosAction, restorePhotoAction, removeFromListAction, removePhotoAction, renameCategoryAction, setPricesAction, updateProductAction,
+  moveCategoryAction, moveProductAction, photosAction, restorePhotoAction, removeFromListAction, removePhotoAction, renameCategoryAction, updateProductAction,
 } from "../actions";
 
 export type Line = AppProduct & { rate: number | null };
@@ -247,8 +247,12 @@ function ProductRow({ channel, line: l, categories, first, last, canEdit, canMov
       >
         {categories.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
+      {/* prices are changed in one place only: the Prices page */}
       <div className="w-24 text-right">
-        <PriceInput label={channel === "d2c" ? "Price (MRP)" : "MRP"} value={l.mrp} canEdit={canEdit} onSave={(v) => run(() => setPricesAction(channel, l.uid, { mrp: v }))} />
+        <Link href="/price-list" title="Change it on the Prices page (the one place prices are changed)" className="block text-right hover:underline">
+          <div className="text-[10px] text-tertiary-foreground">{channel === "d2c" ? "Price (MRP)" : "MRP"}</div>
+          <div className="num text-sm">{l.mrp ? money(l.mrp) : <span className="text-tertiary-foreground">none</span>}</div>
+        </Link>
       </div>
       {/* D2C sells at the MRP; the trade lists show their default price next to it */}
       {channel === "d2c" ? null : (
@@ -288,45 +292,6 @@ function ProductRow({ channel, line: l, categories, first, last, canEdit, canMov
   );
 }
 
-/** A price you can click to change: Enter or leaving the box saves, Esc cancels. */
-function PriceInput({ label, value, canEdit, onSave }: {
-  label: string; value: number; canEdit: boolean; onSave: (v: number) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState("");
-  const save = () => {
-    setEditing(false);
-    const t = text.trim().replace(/[₹,\s]/g, "");
-    const next = Number(t);
-    if (t === "" || next === value || !Number.isFinite(next)) return;
-    onSave(next);
-  };
-  return (
-    <div>
-      <div className="text-[10px] text-tertiary-foreground">{label}</div>
-      {editing ? (
-        <input
-          autoFocus
-          inputMode="decimal"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={save}
-          onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-          className="num h-7 w-full rounded-md border border-foreground bg-background px-1.5 text-right text-sm outline-none"
-        />
-      ) : (
-        <button
-          type="button"
-          disabled={!canEdit}
-          onClick={() => { setText(String(value)); setEditing(true); }}
-          className={cn("num w-full rounded-md px-1 text-right text-sm", canEdit && "hover:bg-muted")}
-        >
-          {money(value)}
-        </button>
-      )}
-    </div>
-  );
-}
 
 function EditDialog({ channel, line: l, categories, onClose }: { channel: AppChannel; line: Line; categories: string[]; onClose: () => void }) {
   const { run, pending, error } = useRun();

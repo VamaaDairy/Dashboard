@@ -31,7 +31,8 @@ export function ComplaintList({ title, rows, today, empty }: { title: string; ro
                   </div>
                   <div>
                     <div className="text-[13px] font-medium">{c.customer_name}</div>
-                    <div className="text-[12px] text-tertiary-foreground">{c.product_name} · {c.category}</div>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- the Product Master photo, served by the app */}
+                    <div className="text-[12px] text-tertiary-foreground">{c.product_image ? <img src={c.product_image} alt="" className="mr-1.5 inline-block size-6 rounded object-cover align-middle" /> : null}{c.product_name} · {c.category}</div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="flex items-center gap-2"><StagePill stage={c.stage} /><span className="text-[12px] text-tertiary-foreground">{dmy(c.complaint_date)}</span></span>
@@ -67,7 +68,8 @@ export function ComplaintList({ title, rows, today, empty }: { title: string; ro
                     <div className="mt-0.5 text-[12px] text-tertiary-foreground">Inv. {c.invoice_no}{c.source !== "dashboard" ? ` · from ${FROM[c.source]}` : ""}</div>
                   </TableCell>
                   <TableCell className="px-3 py-2.5 align-top">
-                    <div className="max-w-64 truncate text-[13px]">{c.product_name}</div>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- the Product Master photo, served by the app */}
+                    <div className="max-w-64 truncate text-[13px]">{c.product_image ? <img src={c.product_image} alt="" className="mr-1.5 inline-block size-6 rounded object-cover align-middle" /> : null}{c.product_name}</div>
                     <div className="mt-0.5 text-[12px] text-tertiary-foreground">{c.category}</div>
                   </TableCell>
                   <TableCell className="num px-3 py-2.5 text-right align-top text-[13px] font-medium">{rupees(c.claim_value)}</TableCell>

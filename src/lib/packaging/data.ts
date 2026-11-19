@@ -37,7 +37,7 @@ export async function getPackagingMaster(): Promise<PackagingRow[]> {
   );
   const [used, labels] = await Promise.all([
     query<{ packaging_id: string; code: string; name: string }>(
-      `select distinct i.packaging_id, s.code, s.name from sku_packing_item i join sku s on s.id = i.sku_id
+      `select distinct i.packaging_id, coalesce(s.master_sku_no::text, s.code) as code, s.name from sku_packing_item i join sku s on s.id = i.sku_id
         where s.scenario_id = $1 order by s.name`, [scenario]),
     productLabels(),
   ]);
