@@ -1,3 +1,4 @@
+import { PhotoStrip } from "@/components/photos/PhotoStrip";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
@@ -79,6 +80,8 @@ export default async function FirmProfilePage({ params, searchParams }: { params
             <Card title="Served by"><Chain above={chain} self={{ name: f.name, sub: kind?.one ?? f.channel }} empty="Buys directly from Gaia." /></Card>
           </div>
           <Card title="Latest orders">{ordersTable(orders.slice(0, 5))}</Card>
+          {/* the outlet's own photos from the Gaia Distributors app (optional; nothing shows without any) */}
+          <PhotoStrip kind="outlet" refId={f.uid} label="Outlet photos (from the app)" />
         </>
       ) : null}
 

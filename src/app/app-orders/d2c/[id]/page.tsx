@@ -1,3 +1,4 @@
+import { PhotoStrip } from "@/components/photos/PhotoStrip";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
@@ -123,6 +124,9 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
               <KV label="Deliver to">{o.name}</KV>
               <KV label="Address">{o.address}{o.pincode && !o.address.includes(o.pincode) ? ` - ${o.pincode}` : ""}</KV>
               <KV label="Map">{map ? <a href={map} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><MapPin className="size-3.5" /> Open pin in Google Maps</a> : "No map pin"}</KV>
+              {/* optional photos from the apps: the customer's delivery spot, and the rider's photo of the drop */}
+              <PhotoStrip kind="customer_location" refId={o.customer_id} label="Delivery spot (from the customer)" />
+              <PhotoStrip kind="delivery_home" refId={o.id} label="Drop (from the delivery partner)" />
               <KV label="Note">{o.notes}</KV>
               <KV label="Rider">{o.rider ? `${o.rider.name} · ${o.rider.phone}` : null}</KV>
               <KV label="Delivery code" mono>{o.subscription_day ? "Not needed (subscription)" : o.delivery_otp}</KV>
