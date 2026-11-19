@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { cancelTrip, createTrip, updateTrip, type TripInput } from "@/lib/dispatch";
+import { cancelTrip, createTrip, routeRoadPlan, updateTrip, type TripInput } from "@/lib/dispatch";
 import { approveFirmRequest, rejectFirmRequest } from "@/lib/distributor/requests";
 
 type R = { ok: true; id?: number } | { ok: false; error: string };
@@ -53,4 +53,12 @@ export async function rejectRequestAction(id: number, reason: string): Promise<R
   const r = await rejectFirmRequest(id, reason, who);
   revalidatePath("/app-orders/new-customers");
   return r;
+}
+
+/** One route's outlets in their road order from the plant, with the road path (Routes map). Anyone who can see Dispatch. */
+export async function roadPlanAction(routeId: number) {
+  const me = await userFromToken((await cookies()).get("session")?.value);
+  if (!me || !atLeast(levelFor(me, "apporders"), "view")) return null;
+  if (!Number.isInteger(routeId) || routeId < 1) return null;
+  return routeRoadPlan(routeId);
 }
