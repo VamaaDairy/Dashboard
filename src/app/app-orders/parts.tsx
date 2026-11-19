@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { Pill } from "@/components/cn/ui";
 import { cn } from "@/lib/utils";
 import { STATUS_LABEL } from "@/lib/shop/pricing";
+import { STEP_LABEL, type OrderStep } from "@/lib/dispatch/steps";
 
 /** Pieces shared by the App orders pages. */
 
@@ -24,6 +25,12 @@ export const D2cStatus = ({ status }: { status: string }) => <Pill tone="neutral
 
 export function TradeStatus({ status }: { status: string }) {
   return <Pill tone="neutral">{status}</Pill>;
+}
+
+/** An order's step on its road (Pending -> Confirmed -> Dispatched -> Out for delivery -> Delivered), as one pill. */
+export function StepPill({ step }: { step: OrderStep }) {
+  const tone = ({ placed: "warning", confirmed: "info", dispatched: "brand", out_for_delivery: "brand", delivered: "success", not_delivered: "danger", cancelled: "neutral" } as const)[step];
+  return <Pill tone={tone}>{STEP_LABEL[step]}</Pill>;
 }
 
 /** "Retailer app" / "Distributor app" / "Sales officer <name>": how a trade order came in. */

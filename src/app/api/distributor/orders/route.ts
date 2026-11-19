@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     orders: orders.map(({ uid, ...o }) => ({
       ...o,
       ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }),
-      tracking: tracking.get(uid) ?? { stage: "placed", trip: null },
+      tracking: tracking.get(uid) ?? { stage: "placed", step: "placed", trip: null },
     })),
   });
 }

@@ -3,6 +3,7 @@ import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { listDistOrders, MAX_LINE_QTY, placeDistOrder } from "@/lib/distributor";
 import { ownsOpenVisit, sfFromRequest } from "@/lib/salesforce";
 import { appOrderExtras } from "@/lib/orders/direct";
+import { trackingOf } from "@/lib/dispatch";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +16,17 @@ export async function GET(req: NextRequest) {
   const login = await sfFromRequest(req);
   if (!login) return fail(401, "Please sign in again.");
   const orders = await listDistOrders(login);
-  const extras = await appOrderExtras(orders.map((o) => o.uid), { kind: "salesman", name: login.name });
+  const [extras, road] = await Promise.all([
+    appOrderExtras(orders.map((o) => o.uid), { kind: "salesman", name: login.name }),
+    trackingOf(orders.map((o) => o.uid)),
+  ]);
   return NextResponse.json({
-    orders: orders.map(({ uid, ...o }) => ({ ...o, ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }) })),
+    orders: orders.map(({ uid, ...o }) => ({
+      ...o,
+      ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }),
+      // where it is on its road: placed, confirmed, dispatched, out_for_delivery, delivered, not_delivered, cancelled
+      step: road.get(uid)?.step ?? "placed",
+    })),
   });
 }
 

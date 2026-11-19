@@ -15,7 +15,8 @@ import { decideAppOrderAction } from "./actions";
 import { confirmSelectedAction } from "./edit-actions";
 import { BulkConfirm, OrderEditor, ReopenButton } from "./order-editor";
 import { cutoffFor, orderableProducts, orderEvents } from "@/lib/orders/direct";
-import { Field, Filters, ManagedBy, TradeStatus, dateOnly, placedVia, qty, when } from "./parts";
+import { Field, Filters, ManagedBy, StepPill, TradeStatus, dateOnly, placedVia, qty, when } from "./parts";
+import { ROAD, STEP_LABEL, trackingOf, type OrderTracking } from "@/lib/dispatch";
 
 /** The Retailers and Distributors pages are the same apart from who the buyer is. */
 
@@ -38,6 +39,8 @@ export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; s
   const { status, q, date, by: rawBy } = await searchParams;
   const by = rawBy === "order" ? "order" : "delivery";
   const [orders, statuses, decide] = await Promise.all([listTradeOrders(kind, { status, q, date, by }), tradeStatuses(kind), canDecide()]);
+  // where each order is on its road: Pending -> Confirmed -> Dispatched -> Out for delivery -> Delivered
+  const road = await trackingOf(orders.map((o) => o.uid));
   // direct app orders (the buyer's own sign-in) that are still pending can be ticked and confirmed together
   const tickable = (o: (typeof orders)[number]) => decide && o.status.toLowerCase() === "pending" && (o.appKind === "distributor" || o.appKind === "retailer");
   const anyTickable = orders.some(tickable);
@@ -107,7 +110,7 @@ export async function TradeListPage({ kind, searchParams }: { kind: TradeKind; s
                   <td className="whitespace-nowrap px-3 py-2">{placedVia(o)}</td>
                   <td className="num whitespace-nowrap px-3 py-2 text-right">{o.items}<div className="text-xs text-muted-foreground">{qty(o.qty)} units</div></td>
                   <td className="num whitespace-nowrap px-3 py-2 text-right font-medium">{rupees(o.total)}</td>
-                  <td className="px-3 py-2"><TradeStatus status={o.status} />{o.reason ? <div className="mt-1 max-w-48 text-xs text-muted-foreground">{o.reason}</div> : null}</td>
+                  <td className="px-3 py-2"><StepPill step={road.get(o.uid)?.step ?? "placed"} />{o.reason ? <div className="mt-1 max-w-48 text-xs text-muted-foreground">{o.reason}</div> : null}</td>
                   <td className="px-3 py-2">{decide && o.status.toLowerCase() === "pending" ? <OrderDecision id={o.uid} orderId={String(o.orderId)} decide={decideAppOrderAction} /> : null}</td>
                 </tr>
               ))}
@@ -129,7 +132,8 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
   const direct = o.appKind === "distributor" || o.appKind === "retailer";
   const pending = o.status.toLowerCase() === "pending";
   const editable = decide && direct && pending;
-  const [history, products] = await Promise.all([orderEvents(o.uid), editable ? orderableProducts(o.uid) : Promise.resolve([])]);
+  const [history, products, roads] = await Promise.all([orderEvents(o.uid), editable ? orderableProducts(o.uid) : Promise.resolve([]), trackingOf([o.uid])]);
+  const road = roads.get(o.uid) ?? null;
   const t = TITLE[o.kind];
   const b = o.buyerProfile;
   const mrpValue = o.lines.reduce((s, l) => s + l.mrp * l.qty, 0);
@@ -147,7 +151,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
               <Pill tone="neutral" dot={false}>{t.one}</Pill>
-              <TradeStatus status={o.status} />
+              <StepPill step={road?.step ?? "placed"} />
               <span className="text-[12px]">Placed {when(o.placedAt)} · {placedVia(o)}</span>
             </span>
           }
@@ -210,6 +214,8 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                 </div>
               </Panel>
             )}
+
+            <OrderRoad road={road} placedAt={o.placedAt} confirmedAt={history.filter((e) => e.action === "confirmed").at(-1)?.at ?? null} />
 
             <Panel title="Processing" flush>
               <dl className="divide-y divide-border">
@@ -304,5 +310,50 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The order's road, one step after another - Pending, Confirmed, Dispatched (its trip left the plant), Out for delivery
+ * (the truck's next stop is this order), Delivered / Not delivered - each with its time, and the trip it is on.
+ */
+function OrderRoad({ road, placedAt, confirmedAt }: { road: OrderTracking | null; placedAt: Date; confirmedAt: Date | string | null }) {
+  const step = road?.step ?? "placed";
+  if (step === "cancelled") return null;
+  const trip = road?.trip ?? null;
+  const at = (v: Date | string | null | undefined) => (v ? when(new Date(v)) : null);
+  const reached = step === "not_delivered" ? ROAD.length - 1 : ROAD.indexOf(step);
+  const times: Record<string, string | null> = {
+    placed: at(placedAt),
+    confirmed: at(confirmedAt),
+    dispatched: at(trip?.startedAt),
+    out_for_delivery: at(trip?.outForDeliveryAt),
+    delivered: at(trip?.stop.deliveredAt),
+  };
+  return (
+    <Panel title="Delivery" description={trip ? `Trip ${trip.route}${trip.vehicleNo ? ` · ${trip.vehicleNo}` : ""}${trip.transporter ? ` · ${trip.transporter.name}` : ""}` : "Not on a trip yet"} flush>
+      <ol className="px-4 py-3 text-sm">
+        {ROAD.map((s, i) => {
+          const done = i <= reached;
+          const last = s === "delivered" && step === "not_delivered";
+          const label = last ? STEP_LABEL.not_delivered : STEP_LABEL[s];
+          const detail = last ? [times.delivered, trip?.stop.note].filter(Boolean).join(" · ")
+            : s === "delivered" && trip?.stop.receivedBy && done ? `${times.delivered ?? ""} · received by ${trip.stop.receivedBy}`
+              : s === "confirmed" && done && trip?.status === "planned" ? `${times.confirmed ?? ""} · on trip ${trip.route}, waiting to leave`
+                : s === "dispatched" && done && step === "dispatched" && trip ? `${times.dispatched ?? ""} · ${trip.stopsBefore} ${trip.stopsBefore === 1 ? "stop" : "stops"} before this one`
+                  : times[s];
+          return (
+            <li key={s} className="flex gap-3 py-1.5">
+              <span className={`mt-1 size-3 shrink-0 rounded-full border-2 ${last ? "border-destructive bg-destructive" : done ? "border-primary bg-primary" : "border-border bg-background"}`} />
+              <span className="min-w-0">
+                <span className={done ? "font-medium" : "text-muted-foreground"}>{label}</span>
+                {done && detail ? <span className="block text-[12px] text-muted-foreground">{detail}</span> : null}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {trip ? <div className="border-t border-border px-4 py-2 text-[12px]"><Link href={`/app-orders/dispatch/${trip.id}`} className="text-primary hover:underline">Open the trip</Link></div> : null}
+    </Panel>
   );
 }

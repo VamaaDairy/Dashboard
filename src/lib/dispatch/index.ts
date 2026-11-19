@@ -5,6 +5,8 @@ import { pushToRole } from "@/lib/push";
 import { haversine, shortestPath } from "@/lib/shop/route-plan";
 import { pingsBetween, toTrack, type LngLat } from "@/lib/shop/track";
 import { roadPlan, roadThrough, type RoadPlan } from "./road";
+import type { OrderStep } from "./steps";
+export { ROAD, STEP_LABEL, type OrderStep } from "./steps";
 
 /**
  * Dispatch -> delivery for trade orders (db/104): the office puts a day's confirmed orders on trips (usually one per
@@ -437,8 +439,12 @@ export async function endTrip(riderId: number, tripId: number, pos: Pos): Promis
 
 // ------------------------------------------------------------------------------------------------ the buyer's view
 
+
 export interface OrderTracking {
+  /** older app builds: dispatched covers both dispatched and out for delivery */
   stage: "placed" | "confirmed" | "dispatched" | "delivered" | "not_delivered" | "cancelled";
+  /** the full road (OrderStep) */
+  step: OrderStep;
   trip: {
     id: number;
     route: string;
@@ -448,6 +454,8 @@ export interface OrderTracking {
     /** the truck, while the trip is on the road */
     truck: { lat: number; lng: number; at: string } | null;
     startedAt: string | null;
+    /** when the truck headed for this stop: the stop before it done, or the trip's start for the first stop */
+    outForDeliveryAt: string | null;
     stopsBefore: number;
     stop: { status: StopStatus; deliveredAt: string | null; receivedBy: string | null; note: string | null };
   } | null;
@@ -460,11 +468,12 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
   const rows = await query<{
     uid: string; ostatus: string; trip_id: number | null; route: string | null; tstatus: TripStatus | null; vehicle: string | null; name: string | null; phone: string | null;
     lat: number | null; lng: number | null; loc_at: Date | null; started_at: Date | null; status: StopStatus | null; delivered_at: Date | null;
-    received_by: string | null; note: string | null; before: number | null;
+    received_by: string | null; note: string | null; before: number | null; prev_done: Date | null;
   }>(
     `select b.uid, b.status as ostatus, t.id as trip_id, t.route_name as route, t.status as tstatus, t.vehicle_no as vehicle, r.name, r.phone, r.lat, r.lng,
             r.location_at as loc_at, t.started_at, s.status, s.delivered_at, s.received_by, s.note,
-            (select count(*)::int from dist_trip_stop x where x.trip_id = t.id and x.seq < s.seq and x.status = 'pending') as before
+            (select count(*)::int from dist_trip_stop x where x.trip_id = t.id and x.seq < s.seq and x.status = 'pending') as before,
+            (select max(x.delivered_at) from dist_trip_stop x where x.trip_id = t.id and x.seq < s.seq) as prev_done
        from fp_booking_order b
        left join dist_trip_stop s on s.order_uid = b.uid
        left join dist_trip t on t.id = s.trip_id
@@ -479,10 +488,18 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
         : s.status === "not_delivered" ? "not_delivered"
           : s.tstatus === "on_the_way" ? "dispatched"
             : st === "confirmed" ? "confirmed" : "placed";
+    // the same, with the truck's road split: left the plant (dispatched), then heading for this stop (out for delivery)
+    const step: OrderStep = stage === "dispatched" ? ((s.before ?? 0) === 0 ? "out_for_delivery" : "dispatched") : stage;
+    const startedMs = s.started_at ? new Date(s.started_at).getTime() : null;
+    const prevMs = s.prev_done ? new Date(s.prev_done).getTime() : null;
+    const outMs = step === "out_for_delivery" || stage === "delivered" || stage === "not_delivered"
+      ? (prevMs !== null && startedMs !== null ? Math.max(prevMs, startedMs) : startedMs)
+      : null;
     // the truck is shown only while it is on the way to this stop and its position is fresh
     const live = s.tstatus === "on_the_way" && s.status === "pending" && s.lat !== null && s.lng !== null && !!s.loc_at && Date.now() - new Date(s.loc_at).getTime() < 30 * 60_000;
     out.set(s.uid, {
       stage,
+      step,
       trip: s.trip_id === null ? null : {
         id: s.trip_id,
         route: s.route ?? "",
@@ -491,6 +508,7 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
         transporter: s.name ? { name: s.name, phone: s.phone ?? "" } : null,
         truck: live ? { lat: s.lat!, lng: s.lng!, at: new Date(s.loc_at!).toISOString() } : null,
         startedAt: s.started_at ? new Date(s.started_at).toISOString() : null,
+        outForDeliveryAt: outMs !== null ? new Date(outMs).toISOString() : null,
         stopsBefore: s.before ?? 0,
         stop: { status: s.status!, deliveredAt: s.delivered_at ? new Date(s.delivered_at).toISOString() : null, receivedBy: s.received_by, note: s.note },
       },
