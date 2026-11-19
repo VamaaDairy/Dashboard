@@ -51,7 +51,15 @@ export async function sendOtp(phone: string, purpose: OtpPurpose): Promise<SendR
 }
 
 /** True when `code` is the live code for this number and purpose; the code is used up. */
-export async function consumeOtp(phone: string, purpose: OtpPurpose, code: string): Promise<boolean> {
+export const consumeOtp = (phone: string, purpose: OtpPurpose, code: string) => matchOtp(phone, purpose, code, true);
+
+/**
+ * True when `code` is the live code for this number and purpose, without using it up: the app confirms the number
+ * before it asks for a PIN, and the step that sets the PIN uses the code up. Wrong codes count towards the same tries.
+ */
+export const checkOtp = (phone: string, purpose: OtpPurpose, code: string) => matchOtp(phone, purpose, code, false);
+
+async function matchOtp(phone: string, purpose: OtpPurpose, code: string, use: boolean): Promise<boolean> {
   const r = await one<{ code_hash: string; attempts: number; expired: boolean; purpose: OtpPurpose }>(
     `select code_hash, attempts, purpose, expires_at < now() as expired from shop_customer_otp where phone = $1`,
     [phone],
@@ -64,7 +72,7 @@ export async function consumeOtp(phone: string, purpose: OtpPurpose, code: strin
     return false;
   }
   // keep the row (it carries the hourly send count) but make the code unusable
-  await query(`update shop_customer_otp set expires_at = now() where phone = $1`, [phone]);
+  if (use) await query(`update shop_customer_otp set expires_at = now() where phone = $1`, [phone]);
   return true;
 }
 

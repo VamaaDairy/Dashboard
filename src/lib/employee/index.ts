@@ -64,8 +64,13 @@ export async function sendEmployeeOtp(phone: string): Promise<Result> {
   return { ok: true };
 }
 
-/** True when `code` is the live code for this number; the code is used up. Also used by the distributor sign-up. */
-export async function consumeOtp(phone: string, code: string): Promise<boolean> {
+/** True when `code` is the live code for this number; the code is used up. Also used by the distributor sign-up and Forgot PIN. */
+export const consumeOtp = (phone: string, code: string) => matchEmployeeOtp(phone, code, true);
+
+/** The same check without using the code up: the app confirms the number before it asks for a PIN. */
+export const checkEmployeeOtp = (phone: string, code: string) => matchEmployeeOtp(phone, code, false);
+
+async function matchEmployeeOtp(phone: string, code: string, use: boolean): Promise<boolean> {
   const r = await one<{ code_hash: string; attempts: number; expired: boolean }>(
     `select code_hash, attempts, expires_at < now() as expired from emp_otp where phone = $1`,
     [phone],
@@ -77,7 +82,7 @@ export async function consumeOtp(phone: string, code: string): Promise<boolean> 
     await query(`update emp_otp set attempts = attempts + 1 where phone = $1`, [phone]);
     return false;
   }
-  await query(`update emp_otp set expires_at = now() where phone = $1`, [phone]);
+  if (use) await query(`update emp_otp set expires_at = now() where phone = $1`, [phone]);
   return true;
 }
 

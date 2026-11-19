@@ -104,6 +104,31 @@ export async function distLogin(phone: string, pin: string, kind?: DistLogin["ki
 }
 
 /**
+ * Forgot PIN, or the first PIN of a sign-in the office made (the number confirmed by SMS): the new PIN goes on the
+ * number's partner sign-ins ([kind], else all of them) and this phone gets a fresh session; other phones are signed out.
+ * Null when the number has no such sign-in; "inactive" when its firm is switched off.
+ */
+export async function distResetPin(phone: string, pin: string, kind?: "distributor" | "retailer"): Promise<{ token: string; login: DistLogin } | "inactive" | null> {
+  const rows = await query<{ id: number; open: boolean }>(
+    `select l.id, ${FIRM_ACTIVE} as open from dist_login l left join fp_firm f on f.uid = l.firm_uid
+      where l.phone = $1 and l.active and l.kind <> 'salesman' and ($2::text is null or l.kind = $2) order by l.id`,
+    [phone, kind ?? null],
+  );
+  if (!rows.length) return null;
+  await query(`update dist_login set pin_hash = $2, token = null where id = any($1::int[])`, [rows.map((r) => r.id), hashPin(pin)]);
+  const first = rows.find((r) => r.open);
+  if (!first) return "inactive";
+  const token = randomBytes(32).toString("hex");
+  await query(`update dist_login set token = $2 where id = $1`, [first.id, token]);
+  const login = await one<DistLogin>(`${LOGIN_SELECT} where l.id = $1`, [first.id]);
+  return login ? { token, login } : null;
+}
+
+/** True when the number has an active partner sign-in (Forgot PIN can text it a code). */
+export const hasDistLogin = async (phone: string) =>
+  !!(await one(`select 1 from dist_login where phone = $1 and active and kind <> 'salesman'`, [phone]));
+
+/**
  * The login behind a request's bearer token. `scope` keeps the two apps apart: the Gaia Distributors app ("partner",
  * the default) only accepts distributors and retailers, the Gaia Salesforce app ("salesman") only sales officers;
  * "any" is for shared endpoints such as push registration.
