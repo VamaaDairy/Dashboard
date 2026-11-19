@@ -1,3 +1,4 @@
+import { PhotoStrip } from "@/components/photos/PhotoStrip";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
@@ -102,6 +103,8 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
                     <td className="px-3 py-2.5 text-[12px] text-muted-foreground">
                       {s.receivedBy ? <div>Received by {s.receivedBy}</div> : null}
                       {s.note ? <div>{s.note}</div> : null}
+                      {/* the transporter's optional photo of the drop */}
+                      <PhotoStrip kind="delivery_trade" refId={s.orderUid} />
                       {s.gapM !== null ? <div className={s.gapM > 300 ? "text-muted-foreground" : ""}>{metres(s.gapM)} from the pin</div> : null}
                     </td>
                   </tr>
