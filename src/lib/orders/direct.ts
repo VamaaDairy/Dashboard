@@ -16,12 +16,18 @@ import { CANCELLED, CONFIRMED, decideOrder } from "./primary";
  *   Pending ──edit──▶ Pending ──confirm──▶ Confirmed ──reopen──▶ Pending
  *        └──cancel──▶ Cancelled
  *
- * The buyer can edit or cancel a pending order from the app until the cutoff (20:00 IST the day before delivery).
+ * Until the cutoff (20:00 IST the day before delivery) a pending app order can be changed from the apps - products added,
+ * quantities up or down - by the buyer (distributor / retailer, also on an order its sales officer booked) and by the
+ * sales officer (on any order of their parties, also one the buyer placed itself); the buyer can also cancel it.
  * Every step lands in dist_order_event (db/098) and the buyer's phone gets a notification for office actions.
  */
 
 export const PENDING = "Pending";
 const DIRECT = `b.app_kind in ('distributor', 'retailer')`;
+/** Any order from the apps (the buyer's own or its sales officer's), not one entered on the portal. */
+const APP = `b.app_kind is not null`;
+/** The buyer is priced from the Retail list: a retailer's own order, or one booked for a retailer (channel RT). */
+const RETAIL_BUYER = `(b.app_kind = 'retailer' or exists (select 1 from fp_firm f join fp_channel ch on ch.uid = f.channel_uid where f.uid = b.from_firm_uid and upper(ch.channel_code) = 'RT'))`;
 const CUTOFF_HOUR = 20;
 export const MAX_DESK_QTY = 9999;
 
@@ -144,9 +150,9 @@ export async function deskMeta(uid: string): Promise<{ direct: boolean; delivery
 
 /** Products the office can add to this order: on the buyer's app list and priced for the buyer. */
 export async function orderableProducts(uid: string): Promise<Array<{ sku: string; name: string; rate: number }>> {
-  const head = await one<{ firm: string; kind: string | null }>(`select from_firm_uid as firm, app_kind as kind from fp_booking_order where uid = $1`, [uid]);
+  const head = await one<{ firm: string; retail: boolean }>(`select from_firm_uid as firm, ${RETAIL_BUYER} as retail from fp_booking_order b where uid = $1`, [uid]);
   if (!head) return [];
-  const [listed, prices] = await Promise.all([listAllProducts(head.kind === "retailer" ? "retail" : "distributor"), firmPrices(head.firm)]);
+  const [listed, prices] = await Promise.all([listAllProducts(head.retail ? "retail" : "distributor"), firmPrices(head.firm)]);
   const price = new Map(prices.map((p) => [p.sku, p.price]));
   return listed
     .filter((p) => (price.get(p.sku) ?? 0) > 0)
@@ -196,12 +202,13 @@ export async function editOrder(uid: string, lines: Map<string, number>, who: Ac
   if (!wanted.size) return { ok: false, error: "An order needs at least one product. Cancel it instead." };
   if ([...wanted.values()].some((q) => !Number.isInteger(q) || q > MAX_DESK_QTY)) return { ok: false, error: "Check the quantities." };
 
-  const head = await one<{ firm: string; kind: string | null; status: string }>(
-    `select from_firm_uid as firm, app_kind as kind, status from fp_booking_order where uid = $1`,
+  const head = await one<{ firm: string; retail: boolean; status: string }>(
+    `select from_firm_uid as firm, ${RETAIL_BUYER} as retail, status from fp_booking_order b where uid = $1`,
     [uid],
   );
   if (!head) return { ok: false, error: "That order no longer exists." };
-  const priced = await priceDistLines(head.kind === "retailer" ? "retail" : "distributor", head.firm, wanted);
+  // a retailer's order (its own, or booked for it by a sales officer) is priced from the Retail list
+  const priced = await priceDistLines(head.retail ? "retail" : "distributor", head.firm, wanted);
   if (!priced.ok) return priced;
 
   const r = await tx(async (c): Promise<DeskResult & { changes?: LineChange[] }> => {
@@ -308,11 +315,30 @@ export async function reopenOrder(uid: string, who: Actor, reason: string): Prom
 
 // ------------------------------------------------------------------------------------------ from the app
 
-/** What the app shows about an order beyond its lines: the delivery date, until when the buyer may change it, and its history. */
-export async function appOrderExtras(uids: string[]): Promise<Map<string, { deliveryDate: string; editableUntil: string | null; history: Array<Omit<OrderEvent, "at"> & { at: string }> }>> {
+/** Who is looking: the buyer (distributor / retailer app), or a sales officer (Salesforce app) by name. */
+export type OrderViewer = { kind: "buyer" } | { kind: "salesman"; name: string };
+
+/**
+ * Who did a step, as this viewer reads it: Gaia (the office), the transporter by name, the sales officer by name, the
+ * buyer by name - and "You" for the viewer's own steps. Stored app actors read "<name> (<kind>)".
+ */
+function actorFor(e: Pick<OrderEvent, "actor" | "actorKind">, viewer: OrderViewer): string {
+  if (e.actorKind === "office") return "Gaia";
+  if (e.actorKind !== "app") return e.actor;
+  const m = /^(.*) \((salesman|distributor|retailer)\)$/.exec(e.actor);
+  const name = m?.[1] ?? e.actor;
+  if (m?.[2] === "salesman") return viewer.kind === "salesman" && viewer.name === name ? "You" : `Sales officer ${name}`;
+  return viewer.kind === "buyer" ? "You" : name;
+}
+
+/**
+ * What the apps show about an order beyond its lines: the delivery date, until when it may still be changed from the
+ * apps (every app order, pending, before the cutoff), and its history with who did each step.
+ */
+export async function appOrderExtras(uids: string[], viewer: OrderViewer = { kind: "buyer" }): Promise<Map<string, { deliveryDate: string; editableUntil: string | null; history: Array<Omit<OrderEvent, "at"> & { at: string }> }>> {
   if (!uids.length) return new Map();
-  const heads = await query<{ uid: string; status: string; d: string; direct: boolean }>(
-    `select b.uid, b.status, ${DELIVERY}::text as d, (${DIRECT}) as direct from fp_booking_order b where b.uid = any($1)`,
+  const heads = await query<{ uid: string; status: string; d: string; app: boolean }>(
+    `select b.uid, b.status, ${DELIVERY}::text as d, (${APP}) as app from fp_booking_order b where b.uid = any($1)`,
     [uids],
   );
   const events = await query<OrderEvent & { uid: string }>(
@@ -327,22 +353,28 @@ export async function appOrderExtras(uids: string[]): Promise<Map<string, { deli
         h.uid,
         {
           deliveryDate: h.d,
-          editableUntil: h.direct && isPending(h.status) && cutoff.getTime() > now ? cutoff.toISOString() : null,
-          // the buyer sees the office's actions by role, not by name
+          editableUntil: h.app && isPending(h.status) && cutoff.getTime() > now ? cutoff.toISOString() : null,
           history: events
             .filter((e) => e.uid === h.uid)
-            .map(({ uid: _u, at, ...e }) => ({ ...e, actor: e.actorKind === "office" ? "Gaia" : e.actorKind === "transporter" ? e.actor : "You", at: new Date(at).toISOString() })),
+            .map(({ uid: _u, at, ...e }) => ({ ...e, actor: actorFor(e, viewer), at: new Date(at).toISOString() })),
         },
       ];
     }),
   );
 }
 
+/**
+ * An app order this login may change: a distributor / retailer, any of its own firm's (its own or its sales officer's);
+ * a sales officer, any of their parties' (the ones they booked, and those of parties they are the sales contact of).
+ */
 async function appOrder(login: DistLogin, orderId: number) {
-  if (login.kind === "salesman" || !login.firmUid) return null;
+  const mine = login.kind === "salesman"
+    ? (login.staffUid ? { where: "(b.staff_uid = $2 or b.from_firm_uid in (select uid from fp_firm where sales_contact_uid = $2 and active = 1))", arg: login.staffUid } : null)
+    : (login.firmUid ? { where: "b.from_firm_uid = $2", arg: login.firmUid } : null);
+  if (!mine) return null;
   const o = await one<{ uid: string; status: string; d: string }>(
-    `select b.uid, b.status, ${DELIVERY}::text as d from fp_booking_order b where b.order_id = $1 and b.from_firm_uid = $2 and ${DIRECT}`,
-    [orderId, login.firmUid],
+    `select b.uid, b.status, ${DELIVERY}::text as d from fp_booking_order b where b.order_id = $1 and ${mine.where} and ${APP}`,
+    [orderId, mine.arg],
   );
   if (!o) return null;
   return { ...o, open: isPending(o.status) && cutoffFor(o.d).getTime() > Date.now() };
@@ -359,6 +391,8 @@ export async function editOrderFromApp(login: DistLogin, orderId: number, lines:
 }
 
 export async function cancelOrderFromApp(login: DistLogin, orderId: number, reason?: string): Promise<DeskResult> {
+  // the buyer (or the office) cancels; a sales officer changes the order instead
+  if (login.kind === "salesman") return { ok: false, error: "Only the distributor or Gaia can cancel an order." };
   const o = await appOrder(login, orderId);
   if (!o) return { ok: false, error: "Order not found." };
   if (!o.open) return { ok: false, error: closed };

@@ -6,8 +6,9 @@ import { editOrderFromApp } from "@/lib/orders/direct";
 export const dynamic = "force-dynamic";
 
 /**
- * The buyer changes their own pending order before the cutoff. Body: { lines: [{ sku, qty, packs? }] } - the whole new
- * order; a product left out (or qty 0) is removed. Prices are worked out here again.
+ * The buyer changes a pending order of its own before the cutoff - one it placed or one its sales officer booked for it:
+ * products added, quantities up or down. Body: { lines: [{ sku, qty, packs? }] } - the whole new order; a product left
+ * out (or qty 0) is removed. Prices are worked out here again; the change goes in the order's history.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   const login = await distFromRequest(req);
