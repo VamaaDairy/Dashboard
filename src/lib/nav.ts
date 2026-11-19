@@ -80,21 +80,12 @@ const distAppOrders: NavItem = {
 // sidebar: App orders classifies every order as distributor or retailer. What else they held stays here.
 const salesStock = orders("Sales & stock", Truck, ["fpsalesview", "fpsecondarysalesview", "stockView", "fpsalesreturnview", "collections", "task"]);
 const distCustomers = orders("Customers", Contact, ["distribution", "customerTarget", "customerTypeMaster", "customerRouteMapping"]);
-const distProducts = orders("Product Management", Package, ["fpproducts", "fpfocusproduct", "fpproductinventory", "displayPlanogram", "greenCallTargets"]);
 // The old staff list (employeecustomermaster), attendance and leave pages are replaced by the Employee Master and
 // the Employee app's Attendance and Leave, so they are left out (they show under "Not in use").
 const salesTeam = orders("Sales team", Users, ["staffs", "employeefaceregistration", "employeeTarget", "catalogue", "lms"]);
 const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
 // Pricing
 const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Prices", icon: Tags };
-const appProductPrices: NavItem = {
-  href: "/product-master/d2c", key: "productmaster", label: "App product prices", icon: PackageSearch,
-  children: [
-    { href: "/product-master/d2c", key: "productmaster.d2c", label: "D2C app" },
-    { href: "/product-master/retail", key: "productmaster.retail", label: "Retailer app" },
-    { href: "/product-master/distributor", key: "productmaster.distributor", label: "Wholesale app" },
-  ],
-};
 const marginsSlabs = orders("Margins & slabs", IndianRupee, ["fpchannelrates", "priceSlabs"]);
 const schemes = orders("Schemes", Gift, ["schemes", "schemesQPS"]);
 // Accounts
@@ -352,7 +343,6 @@ const WORKING: NavSection[] = [
               { href: "/product-master/retail", key: "productmaster.retail", label: "Retail app" },
             ],
           },
-          distProducts,
           schemes,
         ),
       },
@@ -372,7 +362,6 @@ const WORKING: NavSection[] = [
     id: "pricing", label: "Pricing", icon: Tags,
     groups: [
       { label: "Prices", items: [priceList] },
-      { label: "App products", items: [appProductPrices] },
       { label: "Names", items: [{ href: "/product-names", key: "productnames", label: "Product names check", icon: ClipboardCheck }] },
       { label: "Distributor & retail", items: items(marginsSlabs, schemes) },
       {
@@ -469,7 +458,7 @@ const WORKING: NavSection[] = [
               { href: "/product-master/distributor", key: "productmaster.distributor", label: "Wholesale (Distributors)" },
             ],
           },
-          orders("All products", Package, [["fpproducts", "Product Master (all SKUs)"], "categoryMaster", "taxMaster"]),
+          orders("Product details", Package, [["fpproducts", "Tax, unit & codes (all SKUs)"], "categoryMaster", "taxMaster"]),
           { href: "/product-names", key: "productnames", label: "Product names check", icon: ClipboardCheck },
         ),
       },
@@ -488,8 +477,8 @@ const WORKING: NavSection[] = [
       },
       { label: "Accounts", items: [dash.creditNotes, dash.cn] },
       { label: "Distributor & retail orders", items: items(distAppOrders, salesStock) },
-      { label: "Distributor & retail masters", items: items(distCustomers, distProducts, salesMasters) },
-      { label: "Distributor & retail prices", items: items(appProductPrices, marginsSlabs, schemes, priceList) },
+      { label: "Distributor & retail masters", items: items(distCustomers, salesMasters) },
+      { label: "Distributor & retail prices", items: items(priceList, marginsSlabs, schemes) },
     ],
   },
   {
