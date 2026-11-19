@@ -4,6 +4,7 @@ import { saveRecord } from "@/lib/masters/entity/service";
 import { MASTERS } from "@/lib/masters/schemas";
 import { consumeOtp } from "@/lib/employee";
 import { hashPin } from "@/lib/shop/rider";
+import { notifyStaff } from "@/lib/push";
 
 /**
  * New customers a sales officer proposes from the Sales app (db/104 dist_firm_request). Nothing is added to Customer
@@ -244,15 +245,19 @@ export async function approveFirmRequest(
     `update dist_firm_request set status = 'approved', firm_uid = $2, decided_by = $3, decided_at = now() where id = $1 and status = 'pending'`,
     [id, saved.id, who],
   );
+  // the officer who proposed it can now book orders for it
+  await notifyStaff(r.staffUid, { title: "New customer approved", body: `${r.name} is added as ${input.code.trim().toUpperCase()}.`, data: { type: "customer" } });
   return { ok: true, firmUid: saved.id };
 }
 
 export async function rejectFirmRequest(id: number, reason: string, who: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const why = reason.trim().slice(0, 300);
   if (!why) return { ok: false, error: "Give a reason, so they know why." };
-  const r = await one<{ id: number }>(
-    `update dist_firm_request set status = 'rejected', reason = $2, decided_by = $3, decided_at = now() where id = $1 and status = 'pending' returning id`,
+  const r = await one<{ id: number; staff_uid: string | null; name: string }>(
+    `update dist_firm_request set status = 'rejected', reason = $2, decided_by = $3, decided_at = now() where id = $1 and status = 'pending' returning id, staff_uid, name`,
     [id, why, who],
   );
-  return r ? { ok: true } : { ok: false, error: "It was already decided." };
+  if (!r) return { ok: false, error: "It was already decided." };
+  await notifyStaff(r.staff_uid, { title: "New customer not approved", body: `${r.name}: ${why}`, data: { type: "customer" } });
+  return { ok: true };
 }

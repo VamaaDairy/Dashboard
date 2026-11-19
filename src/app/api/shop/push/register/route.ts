@@ -3,11 +3,12 @@ import { fail } from "@/lib/shop/api";
 import { customerFromRequest } from "@/lib/shop/customer";
 import { riderFromRequest } from "@/lib/shop/rider";
 import { distFromRequest } from "@/lib/distributor";
+import { empFromRequest } from "@/lib/employee";
 import { bearerOf, registerDevice, unregisterDevice, type PushRole } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
-/** Which account this Bearer token belongs to: a customer, a rider or a distributor/sales login. */
+/** Which account this Bearer token belongs to: a customer, a rider, a distributor/sales login or an employee (Salesforce app). */
 async function whoIs(req: NextRequest): Promise<{ role: PushRole; id: number; bearer: string } | null> {
   const bearer = bearerOf(req.headers.get("authorization"));
   if (!bearer) return null;
@@ -17,6 +18,9 @@ async function whoIs(req: NextRequest): Promise<{ role: PushRole; id: number; be
   if (r) return { role: "rider", id: r.id, bearer };
   const d = await distFromRequest(req, "any");
   if (d) return { role: "distributor", id: d.id, bearer };
+  // the Gaia Salesforce app: an employee's own sign-in
+  const e = await empFromRequest(req);
+  if (e) return { role: "staff", id: e.loginId, bearer };
   return null;
 }
 

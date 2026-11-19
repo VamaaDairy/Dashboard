@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { one, query } from "@/lib/db";
 import { pushConfigured, sendPush, type PushMessage } from "./fcm";
 
-export type PushRole = "customer" | "rider" | "distributor";
+/** staff: the Gaia Salesforce app (employees and sales officers), by their employee sign-in (emp_login.id). */
+export type PushRole = "customer" | "rider" | "distributor" | "staff";
 
 const hashSession = (bearer: string) => createHash("sha256").update(bearer).digest("hex");
 
@@ -32,6 +33,9 @@ const LIVE: Record<PushRole, string> = {
   distributor: `select d.token from push_device d
                   join dist_login l on l.id = d.owner_id and l.active and encode(sha256(convert_to(l.token, 'UTF8')), 'hex') = d.session_hash
                  where d.role = 'distributor' and ($1::int is null or d.owner_id = $1) and ($2::text is null or l.kind = $2)`,
+  staff: `select d.token from push_device d
+            join emp_login l on l.id = d.owner_id and l.active and encode(sha256(convert_to(l.token, 'UTF8')), 'hex') = d.session_hash
+           where d.role = 'staff' and ($1::int is null or d.owner_id = $1)`,
 };
 
 /**
@@ -120,4 +124,15 @@ const FOR_SUBSCRIPTION = {
 /** Tells the customer their subscription was started, paused, resumed or cancelled. */
 export async function notifySubscription(customerId: number, event: keyof typeof FOR_SUBSCRIPTION): Promise<void> {
   await notify("customer", customerId, { ...FOR_SUBSCRIPTION[event], data: { type: "subscription", event } });
+}
+
+/** Pushes to an employee's phone(s) in the Gaia Salesforce app, by their staff record. Never throws. */
+export async function notifyStaff(staffUid: string | null | undefined, m: PushMessage): Promise<void> {
+  if (!staffUid) return;
+  try {
+    const logins = await query<{ id: number }>(`select id from emp_login where staff_uid = $1 and active`, [staffUid]);
+    for (const l of logins) await pushToRole("staff", l.id, m);
+  } catch (e) {
+    console.error("[push] staff notify failed:", e);
+  }
 }
