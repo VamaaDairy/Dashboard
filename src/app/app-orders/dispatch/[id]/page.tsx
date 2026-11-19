@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { Truck } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { RouteMap } from "@/components/shop/RouteMap";
+import { PLAN_SOLID, RouteMap } from "@/components/shop/RouteMap";
 import type { LngLat } from "@/lib/shop/track";
 import { AMBER, GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { userFromToken } from "@/lib/access-server";
@@ -40,7 +40,8 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   // the plant the truck sets out from, and the planned way round: plant, then the stops in their order
   markers.unshift({ lat: t.origin.lat, lng: t.origin.lng, label: "Plant", color: NAVY, popup: t.origin.name });
   // by road through the stops in their order (Ola Maps; straight lines when it can't say)
-  const planned: LngLat[] = (await tripRoadPath(t)).path;
+  const road = await tripRoadPath(t);
+  const planned: LngLat[] = road.path;
   const noPin = t.stops.filter((s) => s.lat === null).length;
 
   return (
@@ -68,7 +69,12 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <RouteMap track={track.segments} planned={planned} markers={markers} live={t.status === "on_the_way"} height="420px" plain />
+          <RouteMap track={track.segments} planned={planned} solid markers={markers} live={t.status === "on_the_way"} height="420px" plain />
+          {/* what the two lines are: the planned road route and the road the truck actually took (its phone's GPS) */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
+            <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: PLAN_SOLID }} />Planned{road.road ? ` by road: ${metres(road.metres)}` : " (straight lines)"}</span>
+            <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: NAVY }} />Driven{track.metres ? `: ${metres(track.metres)}` : t.startedAt ? "" : " (once the trip starts)"}</span>
+          </div>
           {noPin ? <div className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground">{noPin} {noPin === 1 ? "stop has" : "stops have"} no map pin; set it on the customer in Customer Masters.</div> : null}
         </div>
 

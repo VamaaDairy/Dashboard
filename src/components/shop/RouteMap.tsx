@@ -48,7 +48,10 @@ function pin(color: string, label: string) {
  * order's own leg), the planned road route (dashed grey) and labelled pins. With `live`, the page reloads
  * its data every 20 s so the line grows while the rider is on the way.
  */
-export function RouteMap({ track, highlight = [], planned, markers, live = false, height = "65vh", plain = false }: {
+/** The planned road route when it is drawn solid (Dispatch): a light navy under the driven route's dark navy. */
+export const PLAN_SOLID = "#8FA0D8";
+
+export function RouteMap({ track, highlight = [], planned, markers, live = false, height = "65vh", plain = false, solid = false }: {
   track: LngLat[][];
   highlight?: LngLat[][];
   planned?: LngLat[] | null;
@@ -57,11 +60,15 @@ export function RouteMap({ track, highlight = [], planned, markers, live = false
   height?: string;
   /** No frame of its own (the page's card is the frame) and plain dot markers instead of label pills. */
   plain?: boolean;
+  /** Draw the planned route and the signal gaps as solid lines (the planned one light navy) instead of dashes and dots. */
+  solid?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const pins = useRef<maplibregl.Marker[]>([]);
   const fitted = useRef(false);
+  // the line style is set once, when the map is made
+  const solidLines = useRef(solid);
   const [ready, setReady] = useState(false);
   const [note, setNote] = useState("Loading map…");
   const router = useRouter();
@@ -81,8 +88,12 @@ export function RouteMap({ track, highlight = [], planned, markers, live = false
         // a white casing under the routes so they read cleanly over the streets
         m.addLayer({ id: "planned-casing", type: "line", source: "planned", paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.9 }, layout: { "line-cap": "round", "line-join": "round" } });
         m.addLayer({ id: "track-casing", type: "line", source: "track", paint: { "line-color": "#ffffff", "line-width": 8 }, layout: { "line-cap": "round", "line-join": "round" } });
-        m.addLayer({ id: "planned", type: "line", source: "planned", paint: { "line-color": GREY, "line-width": 3, "line-opacity": 0.85, "line-dasharray": [2, 1.5] }, layout: { "line-cap": "round" } });
-        m.addLayer({ id: "gaps", type: "line", source: "gaps", paint: { "line-color": NAVY, "line-width": 2, "line-opacity": 0.6, "line-dasharray": [1, 3] } });
+        m.addLayer(solidLines.current
+          ? { id: "planned", type: "line", source: "planned", paint: { "line-color": PLAN_SOLID, "line-width": 4.5, "line-opacity": 0.95 }, layout: { "line-cap": "round", "line-join": "round" } }
+          : { id: "planned", type: "line", source: "planned", paint: { "line-color": GREY, "line-width": 3, "line-opacity": 0.85, "line-dasharray": [2, 1.5] }, layout: { "line-cap": "round" } });
+        m.addLayer(solidLines.current
+          ? { id: "gaps", type: "line", source: "gaps", paint: { "line-color": NAVY, "line-width": 3, "line-opacity": 0.6 }, layout: { "line-cap": "round" } }
+          : { id: "gaps", type: "line", source: "gaps", paint: { "line-color": NAVY, "line-width": 2, "line-opacity": 0.6, "line-dasharray": [1, 3] } });
         m.addLayer({ id: "track", type: "line", source: "track", paint: { "line-color": NAVY, "line-width": 4.5 }, layout: { "line-cap": "round", "line-join": "round" } });
         m.addLayer({ id: "highlight", type: "line", source: "highlight", paint: { "line-color": GREEN, "line-width": 7 }, layout: { "line-cap": "round", "line-join": "round" } });
         setReady(true);
