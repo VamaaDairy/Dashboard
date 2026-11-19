@@ -8,7 +8,7 @@ import type { LngLat } from "@/lib/shop/track";
 import { AMBER, GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { dispatchOrders, getTrip, transporters, tripTrack } from "@/lib/dispatch";
+import { dispatchOrders, getTrip, transporters, tripRoadPath, tripTrack } from "@/lib/dispatch";
 import { TripStatusPill } from "../board";
 import { TripEditor } from "./editor";
 
@@ -39,7 +39,8 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   if (t.status === "on_the_way" && tr?.lat != null && tr?.lng != null) markers.push({ lat: tr.lat, lng: tr.lng, label: `${tr.name}${t.vehicleNo ? ` · ${t.vehicleNo}` : ""}`, color: NAVY });
   // the plant the truck sets out from, and the planned way round: plant, then the stops in their order
   markers.unshift({ lat: t.origin.lat, lng: t.origin.lng, label: "Plant", color: NAVY, popup: t.origin.name });
-  const planned: LngLat[] = [[t.origin.lng, t.origin.lat], ...t.stops.filter((s) => s.lat !== null && s.lng !== null).map((s) => [s.lng!, s.lat!] as LngLat)];
+  // by road through the stops in their order (Ola Maps; straight lines when it can't say)
+  const planned: LngLat[] = (await tripRoadPath(t)).path;
   const noPin = t.stops.filter((s) => s.lat === null).length;
 
   return (

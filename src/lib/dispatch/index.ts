@@ -4,6 +4,7 @@ import { one, query, tx } from "@/lib/db";
 import { pushToRole } from "@/lib/push";
 import { haversine, shortestPath } from "@/lib/shop/route-plan";
 import { pingsBetween, toTrack, type LngLat } from "@/lib/shop/track";
+import { roadPlan, roadThrough, type RoadPlan } from "./road";
 
 /**
  * Dispatch -> delivery for trade orders (db/104): the office puts a day's confirmed orders on trips (usually one per
@@ -247,6 +248,7 @@ export interface TripInput {
 export async function createTrip(input: TripInput, who: string): Promise<Result<{ id: number }>> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { ok: false, error: "Pick the day." };
   const uids = [...new Set(input.orderUids)];
+  const ordered = await byRoadFromPlant(uids);
   return tx(async (c) => {
     const bad = await checkOrders(c, uids, null);
     if (bad) return { ok: false as const, error: bad };
@@ -259,13 +261,7 @@ export async function createTrip(input: TripInput, who: string): Promise<Result<
         (input.vehicleNo?.trim().toUpperCase() || tr.vehicle || null), input.notes?.trim().slice(0, 300) || null, who],
     );
     const id = rows[0].id;
-    // the stops in the shortest way round from the plant (by the customers' map pins); the office can still reorder them
-    const pins = (await c.query<{ uid: string; lat: number | null; lng: number | null }>(
-      `select b.uid, f.latitude::float as lat, f.longitude::float as lng from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid where b.uid = any($1::uuid[])`,
-      [uids],
-    )).rows;
-    const byUid = new Map(pins.map((p) => [p.uid, p]));
-    const ordered = orderFromPlant(uids.map((u) => byUid.get(u) ?? { uid: u, lat: null, lng: null })).map((p) => p.uid);
+    // the stops in the shortest way round from the plant by road (byRoadFromPlant); the office can still reorder them
     let seq = 0;
     for (const uid of ordered) await c.query(`insert into dist_trip_stop (trip_id, order_uid, seq) values ($1, $2, $3)`, [id, uid, ++seq]);
     return { ok: true as const, id };
@@ -530,3 +526,37 @@ export async function routesOnMap(): Promise<RouteOnMap[]> {
   }
   return [...out.values()].map((r) => ({ ...r, customers: orderFromPlant(r.customers) }));
 }
+
+/** Valid map pins only (Customer Masters keeps a few 0,0 or swapped ones). */
+const PIN = (col: string) => `case when ${col}.latitude::float between 6 and 37 and ${col}.longitude::float between 68 and 98`;
+
+/**
+ * Orders in the shortest way round from the plant by road (their customers' pins); orders whose customer has no pin go
+ * last, as given. Falls back to straight-line order when Ola can't say.
+ */
+async function byRoadFromPlant(uids: string[]): Promise<string[]> {
+  const pins = await query<{ uid: string; lat: number | null; lng: number | null }>(
+    `select b.uid, ${PIN("f")} then f.latitude::float end as lat, ${PIN("f")} then f.longitude::float end as lng
+       from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid where b.uid = any($1::uuid[])`,
+    [uids],
+  );
+  const at = new Map(pins.map((p) => [p.uid, p]));
+  const pinned = uids.filter((u) => at.get(u)?.lat != null);
+  const rest = uids.filter((u) => at.get(u)?.lat == null);
+  if (pinned.length < 2) return [...pinned, ...rest];
+  const plan = await roadPlan(plant(), pinned.map((u) => ({ lat: at.get(u)!.lat!, lng: at.get(u)!.lng! })));
+  return [...plan.order.map((i) => pinned[i]), ...rest];
+}
+
+/** One route's outlets on the map in their road order from the plant, with the road path through them. */
+export async function routeRoadPlan(routeId: number): Promise<{ customers: RouteCustomer[]; plan: RoadPlan } | null> {
+  const r = (await routesOnMap()).find((x) => x.id === routeId);
+  if (!r) return null;
+  const pinned = r.customers.filter((c) => c.lat !== null && c.lng !== null);
+  const plan = await roadPlan(plant(), pinned.map((c) => ({ lat: c.lat!, lng: c.lng! })));
+  return { customers: [...plan.order.map((i) => pinned[i]), ...r.customers.filter((c) => c.lat === null)], plan };
+}
+
+/** A trip's road path from the plant through its stops in their order. */
+export const tripRoadPath = (t: Trip) =>
+  roadThrough(t.origin, t.stops.filter((s) => s.lat !== null && s.lng !== null).map((s) => ({ lat: s.lat!, lng: s.lng! })));
