@@ -7,8 +7,8 @@ import type { LngLat } from "@/lib/shop/track";
 
 /**
  * Road plans from the plant (db/107): which order to visit a set of points in, by road distance, and the road path
- * through them, from Ola Maps. Ola's distance matrix takes at most 10 points a side, so a long route is asked for in
- * 10 x 10 blocks; its directions are asked for 10 stops at a time and joined. Plans are kept by their exact points.
+ * through them, from Ola Maps. Ola's distance matrix takes at most 50 pairs a request (5 x 10 works, 10 x 10 is refused),
+ * so a long route is asked for in 5 x 10 blocks; its directions are asked for 10 stops at a time and joined. Plans are kept by their exact points.
  * Without Ola (or when it fails) the order falls back to straight-line distance and the path to straight lines.
  */
 
@@ -24,6 +24,17 @@ export interface RoadPlan {
 }
 
 const BLOCK = 10;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Ola allows only so many requests a minute: on "too many" (429) wait 10, 20, then 30 s and ask again. */
+async function olaFetch(url: URL): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const r = await fetch(url, { headers: { "X-Request-Id": crypto.randomUUID() }, signal: AbortSignal.timeout(15000), cache: "no-store" });
+    if (r.status !== 429 || attempt >= 3) return r;
+    await sleep(10000 * (attempt + 1));
+  }
+}
+/** origins x destinations per distance matrix request: Ola refuses more than 50 pairs */
+const ROWS = 5, COLS = 10;
 const key = () => process.env.OLA_MAPS_API_KEY ?? "";
 
 /** Road metres between every pair of points (null where Ola could not say). */
@@ -32,15 +43,15 @@ async function roadMetres(pts: Pt[]): Promise<Array<Array<number | null>> | null
   const n = pts.length;
   const m: Array<Array<number | null>> = Array.from({ length: n }, () => Array<number | null>(n).fill(null));
   const blocks: Array<[number, number]> = [];
-  for (let i = 0; i < n; i += BLOCK) for (let k = 0; k < n; k += BLOCK) blocks.push([i, k]);
+  for (let i = 0; i < n; i += ROWS) for (let k = 0; k < n; k += COLS) blocks.push([i, k]);
   const ask = async ([i0, k0]: [number, number]) => {
-    const from = pts.slice(i0, i0 + BLOCK), to = pts.slice(k0, k0 + BLOCK);
+    const from = pts.slice(i0, i0 + ROWS), to = pts.slice(k0, k0 + COLS);
     const url = new URL("https://api.olamaps.io/routing/v1/distanceMatrix");
     url.searchParams.set("origins", from.map((p) => `${p.lat},${p.lng}`).join("|"));
     url.searchParams.set("destinations", to.map((p) => `${p.lat},${p.lng}`).join("|"));
     url.searchParams.set("mode", "driving");
     url.searchParams.set("api_key", key());
-    const r = await fetch(url, { headers: { "X-Request-Id": crypto.randomUUID() }, signal: AbortSignal.timeout(15000), cache: "no-store" });
+    const r = await olaFetch(url);
     if (!r.ok) throw new Error(`Ola distance matrix ${r.status}: ${(await r.text()).slice(0, 200)}`);
     const j = (await r.json()) as { rows?: Array<{ elements?: Array<{ distance?: number }> }> };
     j.rows?.forEach((row, a) => row.elements?.forEach((e, b) => {
@@ -48,8 +59,8 @@ async function roadMetres(pts: Pt[]): Promise<Array<Array<number | null>> | null
     }));
   };
   try {
-    // a few at a time, so a long route doesn't fire dozens of requests at once
-    for (let x = 0; x < blocks.length; x += 4) await Promise.all(blocks.slice(x, x + 4).map(ask));
+    // two at a time, so a long route stays inside Ola's requests-a-minute limit (olaFetch waits when it doesn't)
+    for (let x = 0; x < blocks.length; x += 2) await Promise.all(blocks.slice(x, x + 2).map(ask));
     return m;
   } catch (e) {
     console.error("dispatch road plan:", e);
@@ -64,7 +75,8 @@ async function roadPath(start: Pt, stops: Pt[]): Promise<{ path: LngLat[]; metre
   let metres = 0, seconds = 0, from = start;
   for (let i = 0; i < stops.length; i += BLOCK) {
     const part = stops.slice(i, i + BLOCK);
-    const r = await routeVia(from, part.slice(0, -1), part[part.length - 1]);
+    // directions share the requests-a-minute limit: one more try after a pause before giving up
+    const r = (await routeVia(from, part.slice(0, -1), part[part.length - 1])) ?? (await sleep(15000), await routeVia(from, part.slice(0, -1), part[part.length - 1]));
     if (!r) return null;
     path.push(...r.points.map(([lat, lng]) => [lng, lat] as LngLat));
     metres += r.distanceM;

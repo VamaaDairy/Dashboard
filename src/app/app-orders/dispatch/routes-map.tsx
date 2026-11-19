@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RouteMap } from "@/components/shop/RouteMap";
+import { PLAN_SOLID, RouteMap } from "@/components/shop/RouteMap";
 import { NAVY, type MapMarker } from "@/components/shop/route-colors";
 import type { LngLat } from "@/lib/shop/track";
 import { cn } from "@/lib/utils";
@@ -73,14 +73,15 @@ export function RoutesMap({ routes, plant }: { routes: Route[]; plant: { name: s
         ))}
       </div>
       {pick !== "all" ? (
-        <p className="text-[12px] text-muted-foreground">
-          {loading && !roadNow ? "Working out the road route from the plant…"
+        <p className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+          <span className="h-1 w-6 rounded-full" style={{ background: PLAN_SOLID }} />
+          {loading && !roadNow ? "Working out the road route from the plant (the first time can take up to a minute)…"
             : roadNow?.road ? `By road from the plant: ${(roadNow.metres / 1000).toFixed(1)} km, about ${Math.round(roadNow.seconds / 60)} min of driving, ${roadNow.customers.filter((c) => c.lat !== null).length} outlets in this order.`
               : "Road data is not available right now: shown in straight lines, nearest first."}
         </p>
       ) : null}
       <div className="overflow-hidden rounded-lg border border-border">
-        <RouteMap key={String(pick)} track={[]} planned={planned} markers={markers} height="520px" plain />
+        <RouteMap key={String(pick)} track={[]} planned={planned} markers={markers} height="520px" plain solid />
       </div>
       {noPin.length ? (
         <p className="text-[12px] text-muted-foreground">

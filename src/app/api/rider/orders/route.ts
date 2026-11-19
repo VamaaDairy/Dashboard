@@ -3,6 +3,7 @@ import { fail, orderJson } from "@/lib/shop/api";
 import { riderOrders } from "@/lib/shop/orders";
 import { riderFromRequest } from "@/lib/shop/rider";
 import { planRider, store } from "@/lib/shop/route-plan";
+import { plant } from "@/lib/dispatch";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,9 @@ export async function GET(req: NextRequest) {
   const orders = await riderOrders(rider.id);
   // the rider types the code the customer reads out; the app never gets to see it
   return NextResponse.json({
-    // where orders are collected, marked on the rider's maps
-    store: store(),
+    // where orders are collected, marked on the rider's maps: House of Gaia for delivery boys, the plant for
+    // transporters (distributor and retailer trips are loaded at Tum Gaon)
+    store: rider.kind === "transporter" ? plant() : store(),
     orders: orders.map((o) => ({
       ...orderJson(o),
       id: o.id,
