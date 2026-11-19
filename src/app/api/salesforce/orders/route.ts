@@ -2,14 +2,23 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { listDistOrders, MAX_LINE_QTY, placeDistOrder } from "@/lib/distributor";
 import { ownsOpenVisit, sfFromRequest } from "@/lib/salesforce";
+import { appOrderExtras } from "@/lib/orders/direct";
 
 export const dynamic = "force-dynamic";
 
-/** The orders this officer booked for their parties. */
+/**
+ * The orders of this officer's parties (the ones they booked, and the ones the parties placed themselves), each with its
+ * delivery date, until when it can still be changed from the app (editableUntil) and its history - who did what, the
+ * officer's own steps as "You".
+ */
 export async function GET(req: NextRequest) {
   const login = await sfFromRequest(req);
   if (!login) return fail(401, "Please sign in again.");
-  return NextResponse.json({ orders: await listDistOrders(login) });
+  const orders = await listDistOrders(login);
+  const extras = await appOrderExtras(orders.map((o) => o.uid), { kind: "salesman", name: login.name });
+  return NextResponse.json({
+    orders: orders.map(({ uid, ...o }) => ({ ...o, ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }) })),
+  });
 }
 
 /**
