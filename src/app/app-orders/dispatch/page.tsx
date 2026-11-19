@@ -4,9 +4,10 @@ import { Truck } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { dispatchOrders, transporters, tripsOn } from "@/lib/dispatch";
+import { dispatchOrders, plant, routesOnMap, transporters, tripsOn } from "@/lib/dispatch";
 import { todayIst } from "@/lib/orders/direct";
 import { DispatchBoard } from "./board";
+import { RoutesMap } from "./routes-map";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function DispatchPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   // by default tomorrow's deliveries: orders are for the day after they are placed
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : nextDay(todayIst());
-  const [orders, trips, trucks, me] = await Promise.all([dispatchOrders(date), tripsOn(date), transporters(), userFromToken((await cookies()).get("session")?.value)]);
+  const [orders, trips, trucks, routes, me] = await Promise.all([dispatchOrders(date), tripsOn(date), transporters(), routesOnMap(), userFromToken((await cookies()).get("session")?.value)]);
   const canEdit = !!me && atLeast(levelFor(me, "apporders"), "edit");
 
   return (
@@ -44,6 +45,7 @@ export default async function DispatchPage({ searchParams }: { searchParams: Pro
           }
         />
         <DispatchBoard date={date} orders={orders} trips={trips} transporters={trucks.filter((t) => t.active)} canEdit={canEdit} />
+        <RoutesMap routes={routes} plant={plant()} />
       </div>
     </div>
   );

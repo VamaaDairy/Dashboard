@@ -2,7 +2,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { one, query, tx } from "@/lib/db";
 import { pushToRole } from "@/lib/push";
-import { haversine } from "@/lib/shop/route-plan";
+import { haversine, shortestPath } from "@/lib/shop/route-plan";
 import { pingsBetween, toTrack, type LngLat } from "@/lib/shop/track";
 
 /**
@@ -17,6 +17,26 @@ import { pingsBetween, toTrack, type LngLat } from "@/lib/shop/track";
  */
 
 export type TripStatus = "planned" | "on_the_way" | "completed" | "cancelled";
+
+/**
+ * The plant at Tum Gaon (Mahasamund; Plus Code 7MH454JJ+9PP), where every distributor and retailer delivery starts.
+ * DISPATCH_PLANT_LAT / DISPATCH_PLANT_LNG on the server move the pin.
+ */
+export function plant(): { name: string; lat: number; lng: number } {
+  const lat = Number(process.env.DISPATCH_PLANT_LAT), lng = Number(process.env.DISPATCH_PLANT_LNG);
+  const set = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+  return { name: "Gaia Plant, Tum Gaon", lat: set ? lat : 21.1809625, lng: set ? lng : 82.1318281 };
+}
+
+/** Pins in the shortest order to visit from the plant (straight-line distances); points without a pin keep their place at the end. */
+export function orderFromPlant<T extends { lat: number | null; lng: number | null }>(points: T[]): T[] {
+  const pinned = points.filter((p) => p.lat !== null && p.lng !== null) as Array<T & { lat: number; lng: number }>;
+  const rest = points.filter((p) => p.lat === null || p.lng === null);
+  if (pinned.length < 2) return [...pinned, ...rest];
+  const all = [plant(), ...pinned];
+  const d = all.map((a) => all.map((b) => haversine(a, b)));
+  return [...shortestPath(d).map((k) => pinned[k - 1]), ...rest];
+}
 export type StopStatus = "pending" | "delivered" | "not_delivered";
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -102,6 +122,8 @@ export interface TripStop {
 
 export interface Trip {
   id: number;
+  /** where the truck sets out from (the plant) */
+  origin: { name: string; lat: number; lng: number };
   date: string;
   routeId: number | null;
   route: string;
@@ -135,8 +157,9 @@ const TRIP_SELECT = `
     from dist_trip t
     left join shop_rider r on r.id = t.transporter_id`;
 
-const finish = (t: Omit<Trip, "qty" | "total">): Trip => ({
+const finish = (t: Omit<Trip, "qty" | "total" | "origin">): Trip => ({
   ...t,
+  origin: plant(),
   createdAt: new Date(t.createdAt).toISOString(),
   startedAt: t.startedAt ? new Date(t.startedAt).toISOString() : null,
   endedAt: t.endedAt ? new Date(t.endedAt).toISOString() : null,
@@ -145,11 +168,11 @@ const finish = (t: Omit<Trip, "qty" | "total">): Trip => ({
 });
 
 export async function tripsOn(date: string): Promise<Trip[]> {
-  return (await query<Omit<Trip, "qty" | "total">>(`${TRIP_SELECT} where t.trip_date = $1 and t.status <> 'cancelled' order by t.route_name, t.id`, [date])).map(finish);
+  return (await query<Omit<Trip, "qty" | "total" | "origin">>(`${TRIP_SELECT} where t.trip_date = $1 and t.status <> 'cancelled' order by t.route_name, t.id`, [date])).map(finish);
 }
 
 export async function getTrip(id: number): Promise<Trip | null> {
-  const t = await one<Omit<Trip, "qty" | "total">>(`${TRIP_SELECT} where t.id = $1`, [id]);
+  const t = await one<Omit<Trip, "qty" | "total" | "origin">>(`${TRIP_SELECT} where t.id = $1`, [id]);
   return t ? finish(t) : null;
 }
 
@@ -236,8 +259,15 @@ export async function createTrip(input: TripInput, who: string): Promise<Result<
         (input.vehicleNo?.trim().toUpperCase() || tr.vehicle || null), input.notes?.trim().slice(0, 300) || null, who],
     );
     const id = rows[0].id;
+    // the stops in the shortest way round from the plant (by the customers' map pins); the office can still reorder them
+    const pins = (await c.query<{ uid: string; lat: number | null; lng: number | null }>(
+      `select b.uid, f.latitude::float as lat, f.longitude::float as lng from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid where b.uid = any($1::uuid[])`,
+      [uids],
+    )).rows;
+    const byUid = new Map(pins.map((p) => [p.uid, p]));
+    const ordered = orderFromPlant(uids.map((u) => byUid.get(u) ?? { uid: u, lat: null, lng: null })).map((p) => p.uid);
     let seq = 0;
-    for (const uid of uids) await c.query(`insert into dist_trip_stop (trip_id, order_uid, seq) values ($1, $2, $3)`, [id, uid, ++seq]);
+    for (const uid of ordered) await c.query(`insert into dist_trip_stop (trip_id, order_uid, seq) values ($1, $2, $3)`, [id, uid, ++seq]);
     return { ok: true as const, id };
   }).then(async (r) => {
     if (r.ok && input.transporterId) await tellTransporter(input.transporterId, r.id);
@@ -471,4 +501,32 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
     });
   }
   return out;
+}
+
+// ------------------------------------------------------------------------------------------------ routes map
+
+export interface RouteCustomer { name: string; channel: string; lat: number | null; lng: number | null; code: string | null }
+export interface RouteOnMap { id: number; name: string; customers: RouteCustomer[] }
+
+/**
+ * Every route of the Route sheet with its customers and their map pins (from Customer Masters, i.e. the Recibo data):
+ * the route's parties linked to a customer, in the shortest order from the plant.
+ */
+export async function routesOnMap(): Promise<RouteOnMap[]> {
+  const rows = await query<{ route_id: number; route: string; name: string; channel: string; code: string | null; lat: number | null; lng: number | null }>(
+    `select r.id as route_id, r.name as route, coalesce(f.name, p.name) as name, p.channel, f.firm_code as code,
+            case when f.latitude::float between 6 and 37 and f.longitude::float between 68 and 98 then f.latitude::float end as lat,
+            case when f.latitude::float between 6 and 37 and f.longitude::float between 68 and 98 then f.longitude::float end as lng
+       from route_order_route r
+       left join route_order_party p on p.route_id = r.id and p.active
+       left join fp_firm f on f.uid = p.firm_uid
+      order by r.sort nulls last, r.id, p.name`,
+  );
+  const out = new Map<number, RouteOnMap>();
+  for (const x of rows) {
+    const r = out.get(x.route_id) ?? { id: x.route_id, name: x.route, customers: [] };
+    if (x.name) r.customers.push({ name: x.name, channel: x.channel, code: x.code, lat: x.lat, lng: x.lng });
+    out.set(x.route_id, r);
+  }
+  return [...out.values()].map((r) => ({ ...r, customers: orderFromPlant(r.customers) }));
 }
