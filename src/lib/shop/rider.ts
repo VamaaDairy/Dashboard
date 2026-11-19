@@ -32,6 +32,15 @@ export async function riderLogin(phone: string, pin: string, kind?: PartnerKind)
   return { token, rider };
 }
 
+/** Forgot PIN (the number confirmed by SMS): a new PIN and a fresh session; every other phone is signed out. */
+export async function riderResetPin(phone: string, pin: string): Promise<{ token: string; rider: Rider } | null> {
+  const token = randomBytes(32).toString("hex");
+  const r = await one<Rider & { pin_hash: string }>(`update shop_rider set pin_hash = $2, token = $3 where phone = $1 and active returning *`, [phone, hashPin(pin), token]);
+  if (!r) return null;
+  const { pin_hash: _p, ...rider } = r;
+  return { token, rider };
+}
+
 /** A partner creates their own account from the app (the number is already confirmed by SMS). Signed in straight away;
  *  orders still only reach them once the office assigns one. Null when the number already has an account, even a deactivated one. */
 export async function riderSignup(name: string, phone: string, pin: string, kind: PartnerKind, vehicleNo: string | null): Promise<{ token: string; rider: Rider } | null> {
