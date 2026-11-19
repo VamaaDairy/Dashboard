@@ -247,6 +247,8 @@ const WORKING: NavSection[] = [
             ],
           },
           pod,
+          // the transporters' accounts (the delivery partners page, showing transporters only)
+          { href: "/shop-orders/riders?kind=transporter", key: "shop", label: "Transporters", icon: Truck },
         ],
       },
       { label: "Van sales", items: items(orders("Van & dispatch", MapPin, ["delivery", "loadSheet", "stockTransferView", "vanMaster"])) },

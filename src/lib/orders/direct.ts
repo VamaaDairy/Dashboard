@@ -6,7 +6,8 @@ import { unitsText, type Units } from "@/lib/distributor/packs";
 import { listAllProducts } from "@/lib/shop/catalog";
 import { redraftInvoice } from "@/lib/distributor/invoice";
 import { syncOrderLedger } from "@/lib/books";
-import { notifyStaff, pushToRole } from "@/lib/push";
+import { notifyStaff } from "@/lib/push";
+import { tellBuyersOf, tellOfficers } from "./notify";
 import { CANCELLED, CONFIRMED, decideOrder } from "./primary";
 
 /**
@@ -178,13 +179,9 @@ async function tellOfficer(uid: string, title: string, body: string) {
   if (o?.staff) await notifyStaff(o.staff, { title, body: `${o.party} · ${body}`, data: { type: "order" } });
 }
 
+/** Tells the buyer: every app sign-in of its firm (also for an order a sales officer booked for it). Never throws. */
 async function tellBuyer(uid: string, title: string, body: string) {
-  const o = await one<{ login: number | null; kind: "distributor" | "retailer" | null; orderId: number }>(
-    `select app_login_id as login, app_kind as kind, order_id as "orderId" from fp_booking_order where uid = $1`,
-    [uid],
-  );
-  if (!o?.login) return;
-  await pushToRole("distributor", o.login, { title, body, data: { type: "order", orderId: String(o.orderId) } }, o.kind === "retailer" ? "retailer" : "distributor");
+  await tellBuyersOf([uid], () => ({ title, body }));
 }
 
 const describe = (changes: LineChange[]) =>
@@ -250,9 +247,19 @@ export async function editOrder(uid: string, lines: Map<string, number>, who: Ac
     await event(c, uid, "edited", who, note, changes);
     return { ok: true, changes };
   });
-  if (r.ok && who.kind === "office" && r.changes) {
+  if (r.ok && r.changes) {
     const o = await one<{ orderId: number }>(`select order_id as "orderId" from fp_booking_order where uid = $1`, [uid]);
-    await tellBuyer(uid, `Order #${o?.orderId} was changed by Gaia`, describe(r.changes));
+    const officer = /^(.*) \(salesman\)$/.exec(who.name)?.[1];
+    if (who.kind === "office") {
+      await tellBuyer(uid, `Order #${o?.orderId} was changed by Gaia`, describe(r.changes));
+      await tellOfficer(uid, `Order #${o?.orderId} was changed by Gaia`, describe(r.changes));
+    } else if (officer) {
+      // the sales officer changed it: the buyer hears what changed
+      await tellBuyer(uid, `Order #${o?.orderId} was changed by Sales officer ${officer}`, describe(r.changes));
+    } else {
+      // the buyer changed it: the sales officer who booked it hears what changed
+      await tellOfficers([uid], (x) => ({ title: `Order #${x.orderId} was changed by ${x.party}`, body: describe(r.changes!) }));
+    }
   }
   return r.ok ? { ok: true } : r;
 }
@@ -278,10 +285,13 @@ export async function cancelOrder(uid: string, who: Actor, reason: string): Prom
   const r = await decideOrder(uid, "cancel", who.name, why);
   if (!r.ok) return r;
   await tx((c) => event(c, uid, "cancelled", who, why));
+  const o = await one<{ orderId: number }>(`select order_id as "orderId" from fp_booking_order where uid = $1`, [uid]);
   if (who.kind === "office") {
-    const o = await one<{ orderId: number }>(`select order_id as "orderId" from fp_booking_order where uid = $1`, [uid]);
     await tellBuyer(uid, `Order #${o?.orderId} cancelled`, why);
     await tellOfficer(uid, `Order #${o?.orderId} cancelled`, why);
+  } else {
+    // the buyer cancelled it: the sales officer who booked it hears
+    await tellOfficers([uid], (x) => ({ title: `Order #${x.orderId} cancelled by ${x.party}`, body: why }));
   }
   return { ok: true };
 }

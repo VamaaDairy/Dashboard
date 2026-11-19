@@ -1,3 +1,4 @@
+import { tellBuyersOf } from "@/lib/orders/notify";
 import "server-only";
 import { randomBytes, randomInt } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -283,7 +284,7 @@ export async function placeDistOrder(
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const total = Math.round(lines.reduce((s, l) => s + l.qty * l.dp, 0) * 100) / 100;
 
-  return tx(async (c) => {
+  const placed = await tx(async (c) => {
     await c.query(`select pg_advisory_xact_lock(hashtext('dist_order_no'))`);
     // follow the portal's own vocabulary instead of inventing one
     const [{ n }] = (await c.query<{ n: number }>(`select coalesce(max(order_id), 0) + 1 as n from fp_booking_order`)).rows;
@@ -348,8 +349,16 @@ export async function placeDistOrder(
       await c.query("rollback to savepoint invoice");
       console.error("invoice for order", n, e);
     }
-    return { ok: true as const, orderId: n, total };
+    return { ok: true as const, orderId: n, total, uid: orderUid };
   });
+  // a sales officer booked it: the party hears of it in its own app (every sign-in of the firm)
+  if (login.kind === "salesman") {
+    await tellBuyersOf([placed.uid], (o) => ({
+      title: `New order #${o.orderId} from Sales officer ${login.name}`,
+      body: `${lines.length} ${lines.length === 1 ? "product" : "products"} · ₹${total.toLocaleString("en-IN")}. You can change it in the app until 8 pm the day before delivery.`,
+    }));
+  }
+  return { ok: true as const, orderId: placed.orderId, total: placed.total };
 }
 
 export interface DistOrderRow {

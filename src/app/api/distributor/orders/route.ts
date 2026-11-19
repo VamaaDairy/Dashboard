@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { distFromRequest, listDistOrders, MAX_LINE_QTY, placeDistOrder } from "@/lib/distributor";
 import { appOrderExtras } from "@/lib/orders/direct";
-import { trackingOf } from "@/lib/dispatch";
+import { plant, trackingOf } from "@/lib/dispatch";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     orders: orders.map(({ uid, ...o }) => ({
       ...o,
       ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }),
-      tracking: tracking.get(uid) ?? { stage: "placed", step: "placed", trip: null },
+      tracking: tracking.get(uid) ?? { stage: "placed", step: "placed", from: plant(), trip: null },
     })),
   });
 }

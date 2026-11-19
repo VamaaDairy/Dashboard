@@ -5,11 +5,11 @@ import { addRiderAction, setRiderAction } from "@/lib/shop/actions";
 
 const box = "h-9 rounded-lg border border-input bg-transparent px-3 text-sm";
 
-export function AddRiderForm() {
+export function AddRiderForm({ initialKind = "delivery" }: { initialKind?: "delivery" | "transporter" }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
-  const [kind, setKind] = useState<"delivery" | "transporter">("delivery");
+  const [kind, setKind] = useState<"delivery" | "transporter">(initialKind);
   const [vehicle, setVehicle] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();

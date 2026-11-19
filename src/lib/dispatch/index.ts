@@ -2,9 +2,11 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { one, query, tx } from "@/lib/db";
 import { pushToRole } from "@/lib/push";
+import { tellOrders } from "@/lib/orders/notify";
 import { haversine, shortestPath } from "@/lib/shop/route-plan";
 import { pingsBetween, toTrack, type LngLat } from "@/lib/shop/track";
 import { roadPlan, roadThrough, type RoadPlan } from "./road";
+import { olaEnabled, route as olaRoute } from "@/lib/shop/ola";
 import type { OrderStep } from "./steps";
 export { ROAD, STEP_LABEL, type OrderStep } from "./steps";
 
@@ -197,20 +199,6 @@ async function event(c: PoolClient, uid: string, action: string, actor: string, 
   await c.query(`insert into dist_order_event (order_uid, action, actor, actor_kind, note) values ($1, $2, $3, $4, $5)`, [uid, action, actor, kind, note]);
 }
 
-/** Tells the buyer's phone. Never throws. */
-async function tellBuyers(uids: string[], title: (orderId: number) => string, body: (orderId: number) => string) {
-  if (!uids.length) return;
-  const rows = await query<{ login: number | null; kind: string | null; orderId: number }>(
-    `select app_login_id as login, app_kind as kind, order_id as "orderId" from fp_booking_order where uid = any($1::uuid[])`,
-    [uids],
-  );
-  for (const o of rows) {
-    if (!o.login || (o.kind !== "distributor" && o.kind !== "retailer")) continue;
-    try {
-      await pushToRole("distributor", o.login, { title: title(o.orderId), body: body(o.orderId), data: { type: "order", orderId: String(o.orderId) } }, o.kind);
-    } catch {}
-  }
-}
 
 /** Checks the orders can go on a trip: confirmed trade orders, not on another trip. */
 async function checkOrders(c: PoolClient, uids: string[], tripId: number | null): Promise<string | null> {
@@ -366,7 +354,7 @@ export async function startTrip(riderId: number, tripId: number, pos: Pos): Prom
     if ((await c.query(`select 1 from dist_trip where transporter_id = $1 and status = 'on_the_way'`, [riderId])).rows.length) {
       return { ok: false as const, error: "Finish your trip on the road first." };
     }
-    const stops = (await c.query<{ order_uid: string }>(`select order_uid from dist_trip_stop where trip_id = $1`, [tripId])).rows;
+    const stops = (await c.query<{ order_uid: string }>(`select order_uid from dist_trip_stop where trip_id = $1 and status = 'pending' order by seq`, [tripId])).rows;
     if (!stops.length) return { ok: false as const, error: "This trip has no stops." };
     await c.query(
       `update dist_trip set status = 'on_the_way', started_at = now(), start_lat = $2, start_lng = $3, updated_at = now() where id = $1`,
@@ -377,7 +365,13 @@ export async function startTrip(riderId: number, tripId: number, pos: Pos): Prom
     return { ok: true as const, uids: stops.map((s) => s.order_uid) };
   });
   if (!r.ok) return r;
-  await tellBuyers(r.uids, (n) => `Order ${n} dispatched`, (n) => `Your order ${n} is on the way. Track it in the app.`);
+  // the first stop is out for delivery at once; the others are dispatched, with how many stops come before theirs
+  await tellOrders(r.uids, (o) => {
+    const before = r.uids.indexOf(o.uid);
+    return before === 0
+      ? { title: `Order ${o.orderId} is out for delivery`, body: "The truck has left Gaia Plant, Tum Gaon and yours is the next stop. Track it in the app." }
+      : { title: `Order ${o.orderId} dispatched`, body: `The truck has left Gaia Plant, Tum Gaon: ${before} ${before === 1 ? "stop" : "stops"} before yours. Track it in the app.` };
+  });
   return { ok: true };
 }
 
@@ -408,16 +402,24 @@ export async function finishStop(
     );
     const received = input.receivedBy?.trim() ? `Received by ${input.receivedBy.trim().slice(0, 80)}` : null;
     await event(c, s.order_uid, input.delivered ? "delivered" : "not_delivered", s.name ?? "Transporter", "transporter", input.delivered ? received : note);
-    return { ok: true as const, uid: s.order_uid };
+    // the truck heads for the next stop: that order is now out for delivery
+    const next = (await c.query<{ order_uid: string }>(
+      `select x.order_uid from dist_trip_stop x where x.trip_id = (select trip_id from dist_trip_stop where id = $1) and x.status = 'pending' order by x.seq limit 1`,
+      [stopId],
+    )).rows[0]?.order_uid ?? null;
+    return { ok: true as const, uid: s.order_uid, received, note, next };
   });
   if (!r.ok) return r;
-  if (input.delivered) await tellBuyers([r.uid], (n) => `Order ${n} delivered`, (n) => `Your order ${n} was delivered. Thank you!`);
+  await tellOrders([r.uid], (o) => input.delivered
+    ? { title: `Order ${o.orderId} delivered`, body: `${r.received ? `${r.received}. ` : ""}Thank you!` }
+    : { title: `Order ${o.orderId} not delivered`, body: r.note ?? "The transporter could not deliver it. Gaia will contact you." });
+  if (r.next) await tellOrders([r.next], (o) => ({ title: `Order ${o.orderId} is out for delivery`, body: "Yours is the truck's next stop. Track it in the app." }));
   return { ok: true };
 }
 
-/** The trip is over. Stops not done by then are recorded as not delivered ("Not visited"). */
+/** The trip is over. Stops not done by then are recorded as not delivered ("Not visited"); their buyers are told. */
 export async function endTrip(riderId: number, tripId: number, pos: Pos): Promise<Result> {
-  return tx(async (c) => {
+  const r = await tx(async (c) => {
     const t = (await c.query<{ status: string; transporter_id: number | null; name: string | null }>(
       `select t.status, t.transporter_id, r.name from dist_trip t left join shop_rider r on r.id = t.transporter_id where t.id = $1 for update of t`,
       [tripId],
@@ -433,8 +435,11 @@ export async function endTrip(riderId: number, tripId: number, pos: Pos): Promis
       `update dist_trip set status = 'completed', ended_at = now(), end_lat = $2, end_lng = $3, updated_at = now() where id = $1`,
       [tripId, okPos(pos) ? pos.lat : null, okPos(pos) ? pos.lng : null],
     );
-    return { ok: true as const };
+    return { ok: true as const, missed: left.map((s) => s.order_uid) };
   });
+  if (!r.ok) return r;
+  await tellOrders(r.missed, (o) => ({ title: `Order ${o.orderId} not delivered`, body: "The truck could not reach you on this trip. Gaia will contact you." }));
+  return { ok: true };
 }
 
 // ------------------------------------------------------------------------------------------------ the buyer's view
@@ -445,6 +450,8 @@ export interface OrderTracking {
   stage: "placed" | "confirmed" | "dispatched" | "delivered" | "not_delivered" | "cancelled";
   /** the full road (OrderStep) */
   step: OrderStep;
+  /** where the goods leave from (the plant), for the buyer's map */
+  from: { name: string; lat: number; lng: number };
   trip: {
     id: number;
     route: string;
@@ -453,6 +460,8 @@ export interface OrderTracking {
     transporter: { name: string; phone: string } | null;
     /** the truck, while the trip is on the road */
     truck: { lat: number; lng: number; at: string } | null;
+    /** out for delivery: how far the truck is from this buyer, by road (Ola), else in a straight line (road false) */
+    away: { metres: number; road: boolean } | null;
     startedAt: string | null;
     /** when the truck headed for this stop: the stop before it done, or the trip's start for the first stop */
     outForDeliveryAt: string | null;
@@ -468,13 +477,15 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
   const rows = await query<{
     uid: string; ostatus: string; trip_id: number | null; route: string | null; tstatus: TripStatus | null; vehicle: string | null; name: string | null; phone: string | null;
     lat: number | null; lng: number | null; loc_at: Date | null; started_at: Date | null; status: StopStatus | null; delivered_at: Date | null;
-    received_by: string | null; note: string | null; before: number | null; prev_done: Date | null;
+    received_by: string | null; note: string | null; before: number | null; prev_done: Date | null; flat: number | null; flng: number | null;
   }>(
     `select b.uid, b.status as ostatus, t.id as trip_id, t.route_name as route, t.status as tstatus, t.vehicle_no as vehicle, r.name, r.phone, r.lat, r.lng,
             r.location_at as loc_at, t.started_at, s.status, s.delivered_at, s.received_by, s.note,
             (select count(*)::int from dist_trip_stop x where x.trip_id = t.id and x.seq < s.seq and x.status = 'pending') as before,
-            (select max(x.delivered_at) from dist_trip_stop x where x.trip_id = t.id and x.seq < s.seq) as prev_done
+            (select max(x.delivered_at) from dist_trip_stop x where x.trip_id = t.id and x.seq < s.seq) as prev_done,
+            f.latitude as flat, f.longitude as flng
        from fp_booking_order b
+       left join fp_firm f on f.uid = b.from_firm_uid
        left join dist_trip_stop s on s.order_uid = b.uid
        left join dist_trip t on t.id = s.trip_id
        left join shop_rider r on r.id = t.transporter_id
@@ -500,6 +511,7 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
     out.set(s.uid, {
       stage,
       step,
+      from: plant(),
       trip: s.trip_id === null ? null : {
         id: s.trip_id,
         route: s.route ?? "",
@@ -507,6 +519,7 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
         vehicleNo: s.vehicle,
         transporter: s.name ? { name: s.name, phone: s.phone ?? "" } : null,
         truck: live ? { lat: s.lat!, lng: s.lng!, at: new Date(s.loc_at!).toISOString() } : null,
+        away: null,
         startedAt: s.started_at ? new Date(s.started_at).toISOString() : null,
         outForDeliveryAt: outMs !== null ? new Date(outMs).toISOString() : null,
         stopsBefore: s.before ?? 0,
@@ -514,7 +527,31 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
       },
     });
   }
+  // out for delivery: how far the truck is from the buyer
+  await Promise.all(rows.map(async (s) => {
+    const t = out.get(s.uid);
+    if (t?.step !== "out_for_delivery" || !t.trip?.truck || s.flat === null || s.flng === null || (s.flat === 0 && s.flng === 0)) return;
+    t.trip.away = await truckAway(t.trip.id, t.trip.truck, { lat: s.flat, lng: s.flng });
+  }));
   return out;
+}
+
+/** Road distances from the truck to a stop, kept two minutes per truck position (the app looks every 30 s). */
+const awayKept = new Map<string, { at: number; v: { metres: number; road: boolean } }>();
+
+async function truckAway(tripId: number, truck: { lat: number; lng: number }, to: { lat: number; lng: number }): Promise<{ metres: number; road: boolean }> {
+  const k = `${tripId}|${truck.lat.toFixed(4)},${truck.lng.toFixed(4)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}`;
+  const kept = awayKept.get(k);
+  if (kept && Date.now() - kept.at < 120_000) return kept.v;
+  let v = { metres: Math.round(haversine(truck, to)), road: false };
+  if (olaEnabled()) {
+    // never hold up the order list for long: give Ola 4 s, else the straight line
+    const r = await Promise.race([olaRoute(truck, to).catch(() => null), new Promise<null>((ok) => setTimeout(() => ok(null), 4000))]);
+    if (r && r.distanceM > 0) v = { metres: Math.round(r.distanceM), road: true };
+  }
+  if (awayKept.size > 500) awayKept.clear();
+  awayKept.set(k, { at: Date.now(), v });
+  return v;
 }
 
 // ------------------------------------------------------------------------------------------------ routes map
