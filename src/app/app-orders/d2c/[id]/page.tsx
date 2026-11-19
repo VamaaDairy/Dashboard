@@ -23,6 +23,15 @@ import { orderTrack } from "@/lib/shop/track";
 export const dynamic = "force-dynamic";
 
 /** One D2C order: what was ordered, where it goes, who it is for, and who is bringing it. */
+/** How Easebuzz's word on an attempt reached us, first heard first: "Webhook 3:50:53 pm (confirmed) · App check 3:50:54 pm". */
+const WAY: Record<string, string> = { webhook: "Webhook", "payment page": "Payment page", "app check": "App check" };
+function heardLine(heard: Record<string, string>, confirmedBy: string | null): string {
+  return Object.entries(heard)
+    .sort((a, b) => Date.parse(a[1]) - Date.parse(b[1]))
+    .map(([way, at]) => `${WAY[way] ?? way} ${new Date(at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true, timeZone: "Asia/Kolkata" })}${way === confirmedBy ? " (confirmed)" : ""}`)
+    .join(" · ");
+}
+
 export default async function D2cOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const o = await getOrderById(Number(id));
@@ -164,6 +173,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
                       <div className="min-w-0">
                         <div className="truncate font-mono text-foreground">{p.txnid}</div>
                         <div className="text-foreground/75">{when(p.updated_at)}{p.mode ? ` · ${p.mode}` : ""}</div>
+                        {Object.keys(p.heard ?? {}).length ? <div className="text-foreground/75">{heardLine(p.heard, p.confirmed_by)}</div> : null}
                       </div>
                       <span className={p.status === "success" ? "font-medium text-primary" : p.status === "initiated" ? "text-foreground/75" : "font-medium text-destructive"}>{p.status}</span>
                     </div>

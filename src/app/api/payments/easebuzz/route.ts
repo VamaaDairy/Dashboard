@@ -17,9 +17,11 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ ok: false, error: "Unreadable body" }, { status: 400 });
   }
-  const r = await applyReply(fields, "callback");
+  // a browser (the customer's phone back from the checkout) asks for a page; Easebuzz's webhook does not
+  const page = (req.headers.get("accept") ?? "").includes("text/html");
+  const r = await applyReply(fields, page ? "payment page" : "webhook");
 
-  if ((req.headers.get("accept") ?? "").includes("text/html")) {
+  if (page) {
     const paid = r.ok && r.status === "success";
     const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gaia</title></head>
 <body style="font-family:system-ui,sans-serif;text-align:center;padding:48px 20px;color:#111827">
