@@ -1,5 +1,6 @@
 import "server-only";
 import { one, query, tx } from "@/lib/db";
+import { notifyStaff, pushToRole } from "@/lib/push";
 import type { PayLine } from "@/lib/employee";
 
 /** The office side of the Gaia Salesforce staff app: who is where, and everything employees send that needs an answer. */
@@ -197,11 +198,19 @@ export async function listLeaveRequests(pendingOnly: boolean): Promise<LeaveAdmi
 }
 
 export async function decideLeave(id: number, approve: boolean, by: string, remark: string): Promise<string | null> {
-  const r = await query(
-    `update emp_leave set status = $2, decided_by = $3, decided_at = now(), remark = $4 where id = $1 and status = 'pending' returning id`,
+  const r = await query<{ staff_uid: string; from_date: string; to_date: string }>(
+    `update emp_leave set status = $2, decided_by = $3, decided_at = now(), remark = $4 where id = $1 and status = 'pending'
+     returning staff_uid, to_char(from_date, 'DD Mon') as from_date, to_char(to_date, 'DD Mon') as to_date`,
     [id, approve ? "approved" : "rejected", by, remark.slice(0, 300) || null],
   );
-  return r.length ? null : "This request was already handled.";
+  if (!r.length) return "This request was already handled.";
+  const days = r[0].from_date === r[0].to_date ? r[0].from_date : `${r[0].from_date} to ${r[0].to_date}`;
+  await notifyStaff(r[0].staff_uid, {
+    title: approve ? "Leave approved" : "Leave not approved",
+    body: `${days}${remark.trim() ? `: ${remark.trim().slice(0, 120)}` : ""}`,
+    data: { type: "leave" },
+  });
+  return null;
 }
 
 export interface ClaimAdminRow { id: number; name: string; code: string | null; category: string; amount: number; spentOn: string; description: string; status: string; approvedAmount: number | null; remark: string | null; hasReceipt: boolean; createdAt: string; paidAt: string | null; decidedBy: string | null }
@@ -220,16 +229,25 @@ export const claimReceiptAny = async (id: number) => (await one<{ receipt: strin
 
 export async function decideClaim(id: number, action: "approve" | "reject" | "pay", by: string, amount: number | null, remark: string): Promise<string | null> {
   if (action === "pay") {
-    const r = await query(`update emp_claim set status = 'paid', paid_at = now() where id = $1 and status = 'approved' returning id`, [id]);
-    return r.length ? null : "Only an approved claim can be marked paid.";
+    const r = await query<{ staff_uid: string; amt: number }>(
+      `update emp_claim set status = 'paid', paid_at = now() where id = $1 and status = 'approved' returning staff_uid, coalesce(approved_amount, amount)::float as amt`, [id]);
+    if (!r.length) return "Only an approved claim can be marked paid.";
+    await notifyStaff(r[0].staff_uid, { title: "Claim paid", body: `₹${r[0].amt.toLocaleString("en-IN")} has been paid.`, data: { type: "claim" } });
+    return null;
   }
   if (action === "reject" && !remark.trim()) return "Say why the claim is rejected.";
-  const r = await query(
+  const r = await query<{ staff_uid: string; category: string; amt: number }>(
     `update emp_claim set status = $2, decided_by = $3, decided_at = now(), remark = $4, approved_amount = case when $2 = 'approved' then coalesce($5, amount) else null end
-      where id = $1 and status = 'pending' returning id`,
+      where id = $1 and status = 'pending' returning staff_uid, category, coalesce(approved_amount, amount)::float as amt`,
     [id, action === "approve" ? "approved" : "rejected", by, remark.slice(0, 300) || null, amount],
   );
-  return r.length ? null : "This claim was already handled.";
+  if (!r.length) return "This claim was already handled.";
+  await notifyStaff(r[0].staff_uid, {
+    title: action === "approve" ? "Claim approved" : "Claim not approved",
+    body: action === "approve" ? `${r[0].category}: ₹${r[0].amt.toLocaleString("en-IN")}` : `${r[0].category}: ${remark.trim().slice(0, 120)}`,
+    data: { type: "claim" },
+  });
+  return null;
 }
 
 export interface RequestAdminRow { id: number; name: string; code: string | null; phone: string | null; kind: string; subject: string; message: string; status: string; reply: string | null; createdAt: string }
@@ -243,10 +261,11 @@ export async function listRequestRows(openOnly: boolean): Promise<RequestAdminRo
 }
 
 export async function replyRequest(id: number, by: string, reply: string, close: boolean) {
-  await query(
-    `update emp_request set reply = $2, replied_by = $3, replied_at = now(), status = $4 where id = $1`,
+  const r = await query<{ staff_uid: string; subject: string }>(
+    `update emp_request set reply = $2, replied_by = $3, replied_at = now(), status = $4 where id = $1 returning staff_uid, subject`,
     [id, reply.slice(0, 1500), by, close ? "closed" : "in_progress"],
   );
+  if (r[0]) await notifyStaff(r[0].staff_uid, { title: `Reply: ${r[0].subject.slice(0, 60)}`, body: reply.slice(0, 160), data: { type: "request" } });
 }
 
 // ---------------------------------------------------------------- notices
@@ -269,6 +288,15 @@ export async function createNotice(n: { title: string; body: string; kind: strin
     `insert into emp_notice (title, body, kind, audience, staff_uid, pinned, created_by) values ($1, $2, $3, $4, $5, $6, $7)`,
     [n.title, n.body, n.kind, n.audience, n.audience === "staff" ? n.staffUid : null, n.pinned, by],
   );
+  // to the phones of the people it is for: one employee, the sales side, or everyone with the app
+  const m = { title: n.title.slice(0, 80), body: n.body.slice(0, 160), data: { type: "notice" } };
+  if (n.audience === "staff") await notifyStaff(n.staffUid, m);
+  else if (n.audience === "sales") {
+    const logins = await query<{ id: number }>(
+      `select l.id from emp_login l join fp_staff x on x.uid = l.staff_uid left join fp_designation dg on dg.uid = x.designation_uid where l.active and ${SALES_SIDE("x", "dg")}`,
+    );
+    for (const l of logins) await pushToRole("staff", l.id, m);
+  } else await pushToRole("staff", null, m);
 }
 export const deleteNotice = (id: number) => query(`delete from emp_notice where id = $1`, [id]);
 

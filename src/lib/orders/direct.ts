@@ -6,7 +6,7 @@ import { unitsText, type Units } from "@/lib/distributor/packs";
 import { listAllProducts } from "@/lib/shop/catalog";
 import { redraftInvoice } from "@/lib/distributor/invoice";
 import { syncOrderLedger } from "@/lib/books";
-import { pushToRole } from "@/lib/push";
+import { notifyStaff, pushToRole } from "@/lib/push";
 import { CANCELLED, CONFIRMED, decideOrder } from "./primary";
 
 /**
@@ -163,6 +163,15 @@ const event = (c: PoolClient, uid: string, action: OrderEvent["action"], who: Ac
   );
 
 /** Tells the buyer's phone(s) about an office action. Never throws. */
+/** Tells the sales officer who booked the order (Gaia Salesforce app), with the party's name. */
+async function tellOfficer(uid: string, title: string, body: string) {
+  const o = await one<{ staff: string | null; party: string }>(
+    `select b.staff_uid as staff, f.name as party from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid where b.uid = $1 and b.app_kind = 'salesman'`,
+    [uid],
+  );
+  if (o?.staff) await notifyStaff(o.staff, { title, body: `${o.party} · ${body}`, data: { type: "order" } });
+}
+
 async function tellBuyer(uid: string, title: string, body: string) {
   const o = await one<{ login: number | null; kind: "distributor" | "retailer" | null; orderId: number }>(
     `select app_login_id as login, app_kind as kind, order_id as "orderId" from fp_booking_order where uid = $1`,
@@ -251,6 +260,7 @@ export async function confirmOrders(uids: string[], who: Actor): Promise<{ confi
     await tx((c) => event(c, uid, "confirmed", who));
     const o = await one<{ orderId: number; d: string }>(`select order_id as "orderId", ${DELIVERY}::text as d from fp_booking_order b where uid = $1`, [uid]);
     await tellBuyer(uid, `Order #${o?.orderId} confirmed`, `Gaia has confirmed your order for ${o?.d ?? "delivery"}.`);
+    await tellOfficer(uid, `Order #${o?.orderId} confirmed`, `for ${o?.d ?? "delivery"}`);
   }
   return out;
 }
@@ -264,6 +274,7 @@ export async function cancelOrder(uid: string, who: Actor, reason: string): Prom
   if (who.kind === "office") {
     const o = await one<{ orderId: number }>(`select order_id as "orderId" from fp_booking_order where uid = $1`, [uid]);
     await tellBuyer(uid, `Order #${o?.orderId} cancelled`, why);
+    await tellOfficer(uid, `Order #${o?.orderId} cancelled`, why);
   }
   return { ok: true };
 }
