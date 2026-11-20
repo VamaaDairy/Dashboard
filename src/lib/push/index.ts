@@ -28,13 +28,16 @@ const LIVE: Record<PushRole, string> = {
                join shop_customer_session s on encode(sha256(convert_to(s.token, 'UTF8')), 'hex') = d.session_hash and s.customer_id = d.owner_id
               where d.role = 'customer' and ($1::int is null or d.owner_id = $1)`,
   rider: `select d.token from push_device d
-            join shop_rider r on r.id = d.owner_id and r.active and encode(sha256(convert_to(r.token, 'UTF8')), 'hex') = d.session_hash
+            join shop_rider r on r.id = d.owner_id and r.active
+            join shop_rider_session s on s.rider_id = r.id and encode(sha256(convert_to(s.token, 'UTF8')), 'hex') = d.session_hash
            where d.role = 'rider' and ($1::int is null or d.owner_id = $1)`,
   distributor: `select d.token from push_device d
-                  join dist_login l on l.id = d.owner_id and l.active and encode(sha256(convert_to(l.token, 'UTF8')), 'hex') = d.session_hash
+                  join dist_login l on l.id = d.owner_id and l.active
+                  join dist_session s on s.login_id = l.id and encode(sha256(convert_to(s.token, 'UTF8')), 'hex') = d.session_hash
                  where d.role = 'distributor' and ($1::int is null or d.owner_id = $1) and ($2::text is null or l.kind = $2)`,
   staff: `select d.token from push_device d
-            join emp_login l on l.id = d.owner_id and l.active and encode(sha256(convert_to(l.token, 'UTF8')), 'hex') = d.session_hash
+            join emp_login l on l.id = d.owner_id and l.active
+            join emp_session s on s.login_id = l.id and encode(sha256(convert_to(s.token, 'UTF8')), 'hex') = d.session_hash
            where d.role = 'staff' and ($1::int is null or d.owner_id = $1)`,
 };
 

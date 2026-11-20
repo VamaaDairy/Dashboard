@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson } from "@/lib/shop/api";
-import { empFromRequest, getPhoto, getProfile, homeSummary, saveProfile, signOutEmployee } from "@/lib/employee";
+import { empFromRequest, endEmpSession, getPhoto, getProfile, homeSummary, saveProfile } from "@/lib/employee";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +22,8 @@ export async function PUT(req: NextRequest) {
   return r.ok ? NextResponse.json({ saved: true }) : fail(400, r.error);
 }
 
-/** Signs this phone out. */
+/** Signs this phone out (the employee's other phones stay signed in). Always succeeds. */
 export async function DELETE(req: NextRequest) {
-  const e = await empFromRequest(req);
-  if (!e) return NextResponse.json({ ok: true });
-  await signOutEmployee(e.loginId);
+  await endEmpSession(req);
   return NextResponse.json({ ok: true });
 }

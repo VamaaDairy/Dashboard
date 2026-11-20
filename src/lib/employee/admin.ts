@@ -60,8 +60,11 @@ export async function approveSignup(id: number, staffUid: string): Promise<strin
     if (!g) return "This request was already handled.";
     const taken = (await c.query(`select 1 from emp_login where phone = $1 and staff_uid <> $2`, [g.phone, staffUid])).rows[0];
     if (taken) return "This number already belongs to another employee's login.";
+    // an existing login moves to this number: every phone signed in to it is signed out
     await c.query(
-      `insert into emp_login (staff_uid, phone) values ($1, $2) on conflict (staff_uid) do update set phone = excluded.phone, active = true, token = null`,
+      `with l as (
+         insert into emp_login (staff_uid, phone) values ($1, $2) on conflict (staff_uid) do update set phone = excluded.phone, active = true returning id
+       ) delete from emp_session where login_id in (select id from l)`,
       [staffUid, g.phone],
     );
     await c.query(`update emp_signup set status = 'approved', staff_uid = $2, decided_at = now() where id = $1`, [id, staffUid]);
@@ -83,7 +86,8 @@ export async function listLogins(): Promise<LoginRow[]> {
 }
 
 export async function setLoginActive(id: number, active: boolean) {
-  await query(`update emp_login set active = $2, token = case when $2 then token else null end where id = $1`, [id, active]);
+  // switching a login off signs it out of every phone
+  await query(`with gone as (delete from emp_session where login_id = $1 and not $2::boolean) update emp_login set active = $2 where id = $1`, [id, active]);
 }
 
 // ---------------------------------------------------------------- sites a punch is checked against
