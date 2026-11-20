@@ -177,7 +177,7 @@ export function TripView(p: {
           <div className="min-h-0 flex-1 overflow-y-auto">
             {tab === "stops" ? p.stopsPanel : null}
             {tab === "timeline" ? <Timeline rows={p.timeline} stops={p.stops} onStop={(s) => s.lat !== null && s.lng !== null && zoomTo([[s.lng, s.lat]])} /> : null}
-            {tab === "deviation" ? <Deviation dev={dev} plannedM={p.plannedM} plannedRoad={p.plannedRoad} onZoom={zoomTo} /> : null}
+            {tab === "deviation" ? <Deviation dev={dev} gps={pings.length > 1} plannedM={p.plannedM} plannedRoad={p.plannedRoad} onZoom={zoomTo} /> : null}
           </div>
         </aside>
       </div>
@@ -228,10 +228,13 @@ function Timeline({ rows, stops, onStop }: { rows: TimelineRow[]; stops: Stop[];
 }
 
 /** How the drive went against the plan, with each stretch off the planned road (click to see it on the map). */
-function Deviation({ dev, plannedM, plannedRoad, onZoom }: { dev: TripDeviation | null; plannedM: number; plannedRoad: boolean; onZoom: (pts: LngLat[]) => void }) {
+function Deviation({ dev, gps, plannedM, plannedRoad, onZoom }: { dev: TripDeviation | null; gps: boolean; plannedM: number; plannedRoad: boolean; onZoom: (pts: LngLat[]) => void }) {
   if (!dev) return <p className="px-4 py-8 text-center text-sm text-muted-foreground">This shows once the transporter starts the trip.</p>;
   const facts: Array<[string, React.ReactNode, boolean?]> = [];
-  if (dev.afterM !== null) {
+  if (!gps) {
+    // nothing to measure the drive with: say so rather than "0 m"
+    facts.push(["Road driven", "no GPS from the transporter's phone on this trip", true]);
+  } else if (dev.afterM !== null) {
     const o = dev.overPlanM;
     facts.push(["Driven to the last stop", <>{km(dev.roundM)}{o === null ? "" : ` (plan ${km(plannedM)}, ${o > 0 ? `${km(o)} more` : o < 0 ? `${km(-o)} less` : "as planned"})`}</>, (o ?? 0) > 0]);
     if (dev.afterM > 0) facts.push(["After the last stop", km(dev.afterM)]);

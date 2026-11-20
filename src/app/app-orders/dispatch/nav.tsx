@@ -9,7 +9,11 @@ const BASE = "/app-orders/dispatch";
 const TABS = [
   { href: BASE, label: "Plan", exact: true, dated: true },
   { href: `${BASE}/live`, label: "Live", dated: true },
+  { href: `${BASE}/trips`, label: "Trips" },
+  { href: `${BASE}/reports`, label: "Reports" },
 ];
+/** a trip's own page sits under Trips */
+const TRIP = new RegExp(`^${BASE}/\\d+$`);
 
 /** The Dispatch tabs, under the section's name. */
 export function DispatchNav() {
@@ -19,7 +23,7 @@ export function DispatchNav() {
     <nav className="flex items-center gap-6 overflow-x-auto border-b border-foreground/10" aria-label="Dispatch">
       <Link href={BASE} className="py-2.5 text-[15px] font-semibold text-foreground">Dispatch</Link>
       {TABS.map((t) => {
-        const on = t.exact ? path === t.href : path.startsWith(t.href);
+        const on = t.exact ? path === t.href : path.startsWith(t.href) || (t.label === "Trips" && TRIP.test(path));
         const href = t.dated && date ? `${t.href}?date=${date}` : t.href;
         return (
           <Link key={t.href} href={href} aria-current={on ? "page" : undefined}
