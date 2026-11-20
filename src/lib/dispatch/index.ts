@@ -4,11 +4,12 @@ import { one, query, tx } from "@/lib/db";
 import { pushToRole } from "@/lib/push";
 import { tellOrders } from "@/lib/orders/notify";
 import { haversine, shortestPath } from "@/lib/shop/route-plan";
-import { pingsBetween, toTrack, type LngLat } from "@/lib/shop/track";
+import { pingsBetween, toTrack, type LngLat, type Ping } from "@/lib/shop/track";
 import { roadPlan, roadThrough, type RoadPlan } from "./road";
 import { olaEnabled, route as olaRoute } from "@/lib/shop/ola";
 import type { OrderStep } from "./steps";
 export { ROAD, STEP_LABEL, type OrderStep } from "./steps";
+export { OFF_ROAD_M, tripDeviation, type TripDeviation } from "./deviation";
 
 /**
  * Dispatch -> delivery for trade orders (db/104): the office puts a day's confirmed orders on trips (usually one per
@@ -182,10 +183,12 @@ export async function getTrip(id: number): Promise<Trip | null> {
 }
 
 /** The truck's track while the trip ran (or so far). */
-export async function tripTrack(t: Trip): Promise<{ segments: LngLat[][]; metres: number }> {
-  if (!t.transporter || !t.startedAt) return { segments: [], metres: 0 };
-  const tr = toTrack(await pingsBetween(t.transporter.id, t.startedAt, t.endedAt ?? new Date()));
-  return { segments: tr.segments, metres: tr.metres };
+/** The truck's road on a trip: its phone's positions from the start to the end (or now), as lines and as they came. */
+export async function tripTrack(t: Trip): Promise<{ segments: LngLat[][]; metres: number; pings: Ping[] }> {
+  if (!t.transporter || !t.startedAt) return { segments: [], metres: 0, pings: [] };
+  const pings = await pingsBetween(t.transporter.id, t.startedAt, t.endedAt ?? new Date());
+  const tr = toTrack(pings);
+  return { segments: tr.segments, metres: tr.metres, pings };
 }
 
 export const transporters = () =>

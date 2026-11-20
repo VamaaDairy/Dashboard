@@ -6,7 +6,7 @@ import * as maplibregl from "maplibre-gl";
 import "@/lib/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { LngLat } from "@/lib/shop/track";
-import { GREEN, GREY, NAVY, type MapMarker } from "./route-colors";
+import { AMBER, GREEN, GREY, NAVY, type MapMarker } from "./route-colors";
 
 const line = (paths: LngLat[][]): GeoJSON.FeatureCollection => ({
   type: "FeatureCollection",
@@ -51,9 +51,11 @@ function pin(color: string, label: string) {
 /** The planned road route when it is drawn solid (Dispatch): a light navy under the driven route's dark navy. */
 export const PLAN_SOLID = "#8FA0D8";
 
-export function RouteMap({ track, highlight = [], planned, markers, live = false, height = "65vh", plain = false, solid = false }: {
+export function RouteMap({ track, highlight = [], off = [], planned, markers, live = false, height = "65vh", plain = false, solid = false }: {
   track: LngLat[][];
   highlight?: LngLat[][];
+  /** stretches driven away from the planned road, drawn amber over the track */
+  off?: LngLat[][];
   planned?: LngLat[] | null;
   markers: MapMarker[];
   live?: boolean;
@@ -84,7 +86,7 @@ export function RouteMap({ track, highlight = [], planned, markers, live = false
       m.addControl(new maplibregl.NavigationControl(), "top-right");
       m.on("load", () => {
         const empty = line([]);
-        for (const id of ["planned", "gaps", "track", "highlight"]) m.addSource(id, { type: "geojson", data: empty });
+        for (const id of ["planned", "gaps", "track", "off", "highlight"]) m.addSource(id, { type: "geojson", data: empty });
         // a white casing under the routes so they read cleanly over the streets
         m.addLayer({ id: "planned-casing", type: "line", source: "planned", paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.9 }, layout: { "line-cap": "round", "line-join": "round" } });
         m.addLayer({ id: "track-casing", type: "line", source: "track", paint: { "line-color": "#ffffff", "line-width": 8 }, layout: { "line-cap": "round", "line-join": "round" } });
@@ -95,6 +97,7 @@ export function RouteMap({ track, highlight = [], planned, markers, live = false
           ? { id: "gaps", type: "line", source: "gaps", paint: { "line-color": NAVY, "line-width": 3, "line-opacity": 0.6 }, layout: { "line-cap": "round" } }
           : { id: "gaps", type: "line", source: "gaps", paint: { "line-color": NAVY, "line-width": 2, "line-opacity": 0.6, "line-dasharray": [1, 3] } });
         m.addLayer({ id: "track", type: "line", source: "track", paint: { "line-color": NAVY, "line-width": 4.5 }, layout: { "line-cap": "round", "line-join": "round" } });
+        m.addLayer({ id: "off", type: "line", source: "off", paint: { "line-color": AMBER, "line-width": 5 }, layout: { "line-cap": "round", "line-join": "round" } });
         m.addLayer({ id: "highlight", type: "line", source: "highlight", paint: { "line-color": GREEN, "line-width": 7 }, layout: { "line-cap": "round", "line-join": "round" } });
         setReady(true);
         setNote("");
@@ -108,6 +111,7 @@ export function RouteMap({ track, highlight = [], planned, markers, live = false
     if (!m || !ready) return;
     (m.getSource("track") as maplibregl.GeoJSONSource).setData(line(track));
     (m.getSource("gaps") as maplibregl.GeoJSONSource).setData(line(joints(track)));
+    (m.getSource("off") as maplibregl.GeoJSONSource).setData(line(off));
     (m.getSource("highlight") as maplibregl.GeoJSONSource).setData(line(highlight));
     (m.getSource("planned") as maplibregl.GeoJSONSource).setData(line(planned ? [planned] : []));
     pins.current.forEach((p) => p.remove());
@@ -126,7 +130,7 @@ export function RouteMap({ track, highlight = [], planned, markers, live = false
         m.fitBounds(b, { padding: 60, maxZoom: 16, duration: 0 });
       }
     }
-  }, [ready, track, highlight, planned, markers, plain]);
+  }, [ready, track, highlight, off, planned, markers, plain]);
 
   useEffect(() => {
     if (!live) return;

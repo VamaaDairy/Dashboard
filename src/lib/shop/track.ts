@@ -24,7 +24,7 @@ export interface Track {
   to: string | null;
 }
 
-interface Ping { at: Date; lat: number; lng: number }
+export interface Ping { at: Date; lat: number; lng: number }
 
 const GAP_SECS = 180;
 const GAP_METRES = 1000;
