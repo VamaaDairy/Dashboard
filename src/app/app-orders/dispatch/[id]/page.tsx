@@ -9,7 +9,7 @@ import type { LngLat } from "@/lib/shop/track";
 import { AMBER, GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { dispatchOrders, getTrip, transporters, tripRoadPath, tripTrack } from "@/lib/dispatch";
+import { OFF_ROAD_M, dispatchOrders, getTrip, transporters, tripDeviation, tripRoadPath, tripTrack } from "@/lib/dispatch";
 import { TripStatusPill } from "../board";
 import { TripEditor } from "./editor";
 
@@ -44,6 +44,27 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   const road = await tripRoadPath(t);
   const planned: LngLat[] = road.path;
   const noPin = t.stops.filter((s) => s.lat === null).length;
+  // how the drive went against the plan: km to the last stop, stretches off the planned road, stops out of order
+  const dev = t.startedAt ? tripDeviation(t.stops, road, track.pings) : null;
+  const lateAfter = new Map(dev?.outOfOrder.map((o) => [o.seq, o.after]) ?? []);
+  const facts: Array<[string, React.ReactNode]> = [];
+  if (dev) {
+    const amber = (s: string) => <span className="font-medium text-amber-700">{s}</span>;
+    const plain = (s: string) => <span className="font-medium text-foreground">{s}</span>;
+    if (dev.afterM !== null) {
+      const o = dev.overPlanM;
+      facts.push(["Driven to the last stop", <>{plain(metres(dev.roundM))}{o === null ? null : <> (plan {metres(Math.round(road.metres))}, {o > 0 ? amber(`${metres(o)} more`) : plain(o < 0 ? `${metres(-o)} less` : "as planned")})</>}</>]);
+      if (dev.afterM > 0) facts.push(["After the last stop", plain(metres(dev.afterM))]);
+    }
+    if (dev.checked) {
+      facts.push(["Off the planned road", dev.off.length
+        ? amber(`${dev.off.length} ${dev.off.length === 1 ? "stretch" : "stretches"} · ${metres(dev.offM)} · up to ${metres(dev.maxOffM)} away`)
+        : plain("none")]);
+    }
+    if (dev.visited > 1) {
+      facts.push(["Stop order", dev.outOfOrder.length ? amber(dev.outOfOrder.map((o) => `stop ${o.seq} after stop ${o.after}`).join(", ")) : plain("as planned")]);
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
@@ -70,12 +91,18 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <RouteMap track={track.segments} planned={planned} solid markers={markers} live={t.status === "on_the_way"} height="420px" plain />
+          <RouteMap track={track.segments} off={dev?.off} planned={planned} solid markers={markers} live={t.status === "on_the_way"} height="420px" plain />
           {/* what the two lines are: the planned road route and the road the truck actually took (its phone's GPS) */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
             <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: PLAN_SOLID }} />Planned{road.road ? ` by road: ${metres(road.metres)}` : " (straight lines)"}</span>
             <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: NAVY }} />Driven{track.metres ? `: ${metres(track.metres)}` : t.startedAt ? "" : " (once the trip starts)"}</span>
+            {dev?.off.length ? <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: AMBER }} />Off the planned road (over {OFF_ROAD_M} m)</span> : null}
           </div>
+          {facts.length ? (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
+              {facts.map(([l, v]) => <span key={l}>{l}: {v}</span>)}
+            </div>
+          ) : null}
           {noPin ? <div className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground">{noPin} {noPin === 1 ? "stop has" : "stops have"} no map pin; set it on the customer in Customer Masters.</div> : null}
         </div>
 
@@ -101,6 +128,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{s.deliveredAt ? at(s.deliveredAt) : "-"}</td>
                     <td className="px-3 py-2.5 text-[12px] text-muted-foreground">
+                      {lateAfter.has(s.seq) ? <div className="text-amber-700">Done after stop {lateAfter.get(s.seq)}</div> : null}
                       {s.receivedBy ? <div>Received by {s.receivedBy}</div> : null}
                       {s.note ? <div>{s.note}</div> : null}
                       {/* the transporter's optional photo of the drop */}
