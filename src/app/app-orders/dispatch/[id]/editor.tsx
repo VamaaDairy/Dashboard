@@ -33,7 +33,7 @@ export function TripEditor({ trip, transporters, more }: { trip: Trip; transport
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 @lg:grid-cols-3">
         <label className="text-[12px] text-muted-foreground">Trip name<input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" /></label>
         <label className="text-[12px] text-muted-foreground">Transporter
           <select value={truck} onChange={(e) => { setTruck(e.target.value); const t = transporters.find((x) => String(x.id) === e.target.value); if (t?.vehicleNo) setVehicle(t.vehicleNo); }}

@@ -247,8 +247,14 @@ const WORKING: NavSection[] = [
             ],
           },
           // after the route sheet confirms them: the orders go on trips, and the trips run in the Delivery app
-          // (the same page as Distributor & Retail -> App orders -> Dispatch)
-          { href: "/app-orders/dispatch", key: "apporders", label: "Dispatch", icon: Waypoints },
+          // (the same pages as Distributor & Retail -> App orders -> Dispatch)
+          {
+            href: "/app-orders/dispatch", key: "apporders", label: "Dispatch", icon: Waypoints,
+            children: [
+              { href: "/app-orders/dispatch", key: "apporders", label: "Plan", exact: true },
+              { href: "/app-orders/dispatch/live", key: "apporders", label: "Live" },
+            ],
+          },
           pod,
           // the transporters' accounts (the delivery partners page, showing transporters only)
           { href: "/shop-orders/riders?kind=transporter", key: "shop", label: "Transporters", icon: Truck },

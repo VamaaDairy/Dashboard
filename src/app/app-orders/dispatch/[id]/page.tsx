@@ -2,16 +2,15 @@ import { PhotoStrip } from "@/components/photos/PhotoStrip";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { Truck } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { PLAN_SOLID, RouteMap } from "@/components/shop/RouteMap";
-import type { LngLat } from "@/lib/shop/track";
-import { AMBER, GREEN, GREY, NAVY, type MapMarker } from "@/components/shop/route-colors";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { OFF_ROAD_M, dispatchOrders, getTrip, transporters, tripDeviation, tripRoadPath, tripTrack } from "@/lib/dispatch";
+import { dispatchOrders, getTrip, transporters, tripDeviation, tripRoadPath, tripTrack, type Trip } from "@/lib/dispatch";
+import { tripTimeline } from "@/lib/dispatch/timeline";
+import { cn } from "@/lib/utils";
 import { TripStatusPill } from "../board";
+import { Refresh } from "../screen";
 import { TripEditor } from "./editor";
+import { TripView } from "./view";
 
 export const dynamic = "force-dynamic";
 
@@ -19,129 +18,99 @@ const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const at = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" }) : "-";
 const metres = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`);
+/** No GPS from the truck for over 5 min (or never). */
+const lostSince = (iso: string | null) => !iso || Date.now() - new Date(iso).getTime() > 5 * 60_000;
 
-/** One trip: its stops in order with what happened at each and when, and the truck's road on the map. */
+/**
+ * One trip on the whole screen: the map (planned road, the road driven, stretches off the plan, stops by outcome, the
+ * truck, and a replay of the drive) beside its stops, its timeline and how it went against the plan.
+ */
 export default async function TripPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id < 1) notFound();
   const t = await getTrip(id);
   if (!t) notFound();
-  const [track, me, trucks, day] = await Promise.all([
-    tripTrack(t), userFromToken((await cookies()).get("session")?.value), transporters(),
+  const [track, road, me, trucks, day] = await Promise.all([
+    tripTrack(t), tripRoadPath(t), userFromToken((await cookies()).get("session")?.value), transporters(),
     t.status === "planned" ? dispatchOrders(t.date) : Promise.resolve([]),
   ]);
   const canEdit = !!me && atLeast(levelFor(me, "apporders"), "edit");
-
-  const markers: MapMarker[] = t.stops.flatMap((s) => (s.lat !== null && s.lng !== null
-    ? [{ lat: s.lat, lng: s.lng, label: `${s.seq}. ${s.buyer}`, color: s.status === "delivered" ? GREEN : s.status === "not_delivered" ? AMBER : GREY,
-        popup: `#${s.orderId} · ${s.status.replace("_", " ")}${s.deliveredAt ? ` · ${at(s.deliveredAt)}` : ""}` }]
-    : []));
-  const tr = t.transporter;
-  if (t.status === "on_the_way" && tr?.lat != null && tr?.lng != null) markers.push({ lat: tr.lat, lng: tr.lng, label: `${tr.name}${t.vehicleNo ? ` · ${t.vehicleNo}` : ""}`, color: NAVY });
-  // the plant the truck sets out from, and the planned way round: plant, then the stops in their order
-  markers.unshift({ lat: t.origin.lat, lng: t.origin.lng, label: "Plant", color: NAVY, popup: t.origin.name });
-  // by road through the stops in their order (Ola Maps; straight lines when it can't say)
-  const road = await tripRoadPath(t);
-  const planned: LngLat[] = road.path;
-  const noPin = t.stops.filter((s) => s.lat === null).length;
-  // how the drive went against the plan: km to the last stop, stretches off the planned road, stops out of order
   const dev = t.startedAt ? tripDeviation(t.stops, road, track.pings) : null;
   const lateAfter = new Map(dev?.outOfOrder.map((o) => [o.seq, o.after]) ?? []);
-  const facts: Array<[string, React.ReactNode]> = [];
-  if (dev) {
-    const amber = (s: string) => <span className="font-medium text-amber-700">{s}</span>;
-    const plain = (s: string) => <span className="font-medium text-foreground">{s}</span>;
-    if (dev.afterM !== null) {
-      const o = dev.overPlanM;
-      facts.push(["Driven to the last stop", <>{plain(metres(dev.roundM))}{o === null ? null : <> (plan {metres(Math.round(road.metres))}, {o > 0 ? amber(`${metres(o)} more`) : plain(o < 0 ? `${metres(-o)} less` : "as planned")})</>}</>]);
-      if (dev.afterM > 0) facts.push(["After the last stop", plain(metres(dev.afterM))]);
-    }
-    if (dev.checked) {
-      facts.push(["Off the planned road", dev.off.length
-        ? amber(`${dev.off.length} ${dev.off.length === 1 ? "stretch" : "stretches"} · ${metres(dev.offM)} · up to ${metres(dev.maxOffM)} away`)
-        : plain("none")]);
-    }
-    if (dev.visited > 1) {
-      facts.push(["Stop order", dev.outOfOrder.length ? amber(dev.outOfOrder.map((o) => `stop ${o.seq} after stop ${o.after}`).join(", ")) : plain("as planned")]);
-    }
-  }
+  const tr = t.transporter;
+  const live = t.status === "on_the_way";
+  const facts = [
+    tr ? `${tr.name} · ${tr.phone}` : "No transporter yet",
+    t.vehicleNo,
+    t.startedAt ? `left ${at(t.startedAt)}` : null,
+    t.endedAt ? `back ${at(t.endedAt)}` : null,
+  ].filter(Boolean);
 
   return (
-    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
-      <div className="w-full space-y-4">
-        <PageHeader
-          icon={Truck}
-          title={`${t.route} · Trip ${t.id}`}
-          subtitle={<span className="inline-flex flex-wrap items-center gap-2"><TripStatusPill status={t.status} /> Delivery on {t.date} · {t.stops.length} stops · {inr(t.total)}</span>}
-          actions={<Link href={`/app-orders/dispatch?date=${t.date}`} className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">All trips</Link>}
-        />
-
-        <div className="grid gap-3 md:grid-cols-4">
-          {[
-            ["Transporter", tr ? `${tr.name} · ${tr.phone}` : "Not assigned"],
-            ["Vehicle", t.vehicleNo ?? "-"],
-            ["Left", at(t.startedAt)],
-            [t.endedAt ? "Back" : "Distance so far", t.endedAt ? `${at(t.endedAt)} · ${metres(track.metres)}` : track.metres ? metres(track.metres) : "-"],
-          ].map(([l, v]) => (
-            <div key={l} className="rounded-xl border border-border bg-card px-4 py-3">
-              <div className="text-[12px] text-muted-foreground">{l}</div>
-              <div className="mt-0.5 truncate text-sm font-semibold">{v}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <RouteMap track={track.segments} off={dev?.off} planned={planned} solid markers={markers} live={t.status === "on_the_way"} height="420px" plain />
-          {/* what the two lines are: the planned road route and the road the truck actually took (its phone's GPS) */}
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
-            <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: PLAN_SOLID }} />Planned{road.road ? ` by road: ${metres(road.metres)}` : " (straight lines)"}</span>
-            <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: NAVY }} />Driven{track.metres ? `: ${metres(track.metres)}` : t.startedAt ? "" : " (once the trip starts)"}</span>
-            {dev?.off.length ? <span className="inline-flex items-center gap-2"><span className="h-1 w-6 rounded-full" style={{ background: AMBER }} />Off the planned road (over {OFF_ROAD_M} m)</span> : null}
-          </div>
-          {facts.length ? (
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
-              {facts.map(([l, v]) => <span key={l}>{l}: {v}</span>)}
-            </div>
-          ) : null}
-          {noPin ? <div className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground">{noPin} {noPin === 1 ? "stop has" : "stops have"} no map pin; set it on the customer in Customer Masters.</div> : null}
-        </div>
-
-        {canEdit && t.status === "planned" ? (
-          <TripEditor trip={t} transporters={trucks.filter((x) => x.active)} more={day.filter((o) => o.tripId === null)} />
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left text-[12px] text-muted-foreground">
-                <tr>{["#", "Customer", "Order", "Value", "Outcome", "When", "Details"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {t.stops.map((s) => (
-                  <tr key={s.id} className="border-t border-border align-top">
-                    <td className="num px-3 py-2.5 text-muted-foreground">{s.seq}</td>
-                    <td className="px-3 py-2.5"><div className="font-medium">{s.buyer}</div><div className="text-[12px] text-muted-foreground">{s.address ?? ""}{s.phone ? ` · ${s.phone}` : ""}</div></td>
-                    <td className="px-3 py-2.5"><Link href={`/app-orders/distributors/${s.orderUid}`} className="hover:underline">#{s.orderId}</Link><div className="text-[12px] text-muted-foreground">{s.items} items · {s.qty} pcs</div></td>
-                    <td className="num px-3 py-2.5">{inr(s.total)}</td>
-                    <td className="px-3 py-2.5">
-                      <span className={s.status === "delivered" ? "font-medium text-primary" : s.status === "not_delivered" ? "font-medium text-muted-foreground" : "text-muted-foreground"}>
-                        {s.status === "delivered" ? "Delivered" : s.status === "not_delivered" ? "Not delivered" : t.status === "on_the_way" ? "On the way" : "Waiting"}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{s.deliveredAt ? at(s.deliveredAt) : "-"}</td>
-                    <td className="px-3 py-2.5 text-[12px] text-muted-foreground">
-                      {lateAfter.has(s.seq) ? <div className="text-amber-700">Done after stop {lateAfter.get(s.seq)}</div> : null}
-                      {s.receivedBy ? <div>Received by {s.receivedBy}</div> : null}
-                      {s.note ? <div>{s.note}</div> : null}
-                      {/* the transporter's optional photo of the drop */}
-                      <PhotoStrip kind="delivery_trade" refId={s.orderUid} />
-                      {s.gapM !== null ? <div className={s.gapM > 300 ? "text-muted-foreground" : ""}>{metres(s.gapM)} from the pin</div> : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+    <div className="flex flex-col gap-3 px-4 pt-3 pb-3 md:px-6">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Link href={`/app-orders/dispatch?date=${t.date}`} className="text-sm text-muted-foreground hover:text-foreground">← {t.date}</Link>
+        <h1 className="text-lg font-semibold">{t.route} · Trip {t.id}</h1>
+        <TripStatusPill status={t.status} />
+        <span className="text-sm text-muted-foreground">{t.stops.length} stops · {inr(t.total)} · {facts.join(" · ")}</span>
+        {live ? <Link href={`/app-orders/dispatch/live?date=${t.date}`} className="ml-auto text-sm font-medium text-primary hover:underline">Live view</Link> : null}
       </div>
+      <TripView
+        plant={t.origin}
+        startedAt={t.startedAt}
+        endedAt={t.endedAt}
+        stops={t.stops.map((s) => ({ id: s.id, seq: s.seq, orderId: s.orderId, buyer: s.buyer, lat: s.lat, lng: s.lng, status: s.status, deliveredAt: s.deliveredAt, note: s.note }))}
+        truck={live && tr && tr.lat != null && tr.lng != null ? { lat: tr.lat, lng: tr.lng, name: tr.name, seenAt: tr.locationAt, lost: lostSince(tr.locationAt) } : null}
+        planned={road.path}
+        plannedRoad={road.road}
+        plannedM={Math.round(road.metres)}
+        drivenM={track.metres}
+        pings={track.pings.map((p) => [p.lng, p.lat, new Date(p.at).getTime()] as [number, number, number])}
+        dev={dev}
+        timeline={tripTimeline(t, track.pings)}
+        noPin={t.stops.filter((s) => s.lat === null).length}
+        stopsPanel={canEdit && t.status === "planned"
+          ? <div className="p-3"><TripEditor trip={t} transporters={trucks.filter((x) => x.active)} more={day.filter((o) => o.tripId === null)} /></div>
+          : <StopsList t={t} lateAfter={lateAfter} />}
+      />
+      {live ? <Refresh seconds={20} /> : null}
     </div>
+  );
+}
+
+/** Each stop: who, where, what goes there, and what happened (with the drop photo). */
+function StopsList({ t, lateAfter }: { t: Trip; lateAfter: Map<number, number> }) {
+  return (
+    <ul className="divide-y divide-border">
+      {t.stops.map((s) => (
+        <li key={s.id} className="flex gap-3 px-4 py-3">
+          <span className={cn(
+            "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+            s.status === "delivered" ? "bg-primary text-primary-foreground" : s.status === "not_delivered" ? "bg-amber-600 text-white" : "border border-border text-muted-foreground",
+          )}>{s.seq}</span>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-0 truncate font-medium">{s.buyer}</span>
+              <span className="num ml-auto shrink-0 text-sm">{inr(s.total)}</span>
+            </div>
+            <div className="text-[12px] text-muted-foreground">{s.address ?? ""}{s.phone ? ` · ${s.phone}` : ""}</div>
+            <div className="text-[12px]">
+              <Link href={`/app-orders/distributors/${s.orderUid}`} className="hover:underline">#{s.orderId}</Link>
+              <span className="text-muted-foreground"> · {s.lines.map((l) => `${l.qty} ${l.name}`).join(", ") || `${s.items} items · ${s.qty} pcs`}</span>
+            </div>
+            <div className={cn("text-[12px] font-medium", s.status === "delivered" ? "text-primary" : s.status === "not_delivered" ? "text-amber-700" : "text-muted-foreground")}>
+              {s.status === "delivered" ? `Delivered ${at(s.deliveredAt)}` : s.status === "not_delivered" ? `Not delivered ${at(s.deliveredAt)}` : t.status === "on_the_way" ? "Still to do" : "Waiting"}
+            </div>
+            {lateAfter.has(s.seq) ? <div className="text-[12px] text-amber-700">Done after stop {lateAfter.get(s.seq)}</div> : null}
+            {s.receivedBy ? <div className="text-[12px] text-muted-foreground">Received by {s.receivedBy}</div> : null}
+            {s.note ? <div className="text-[12px] text-muted-foreground">{s.note}</div> : null}
+            {s.gapM !== null ? <div className={cn("text-[12px]", s.gapM > 300 ? "text-amber-700" : "text-muted-foreground")}>Marked {metres(s.gapM)} from the pin</div> : null}
+            {s.lat === null ? <div className="text-[12px] text-amber-700">No map pin: set it on the customer in Customer Masters</div> : null}
+            {/* the transporter's optional photo of the drop */}
+            <PhotoStrip kind="delivery_trade" refId={s.orderUid} />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
