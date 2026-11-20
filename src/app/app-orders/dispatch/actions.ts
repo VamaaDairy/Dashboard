@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { cancelTrip, createTrip, routeRoadPlan, updateTrip, type TripInput } from "@/lib/dispatch";
+import { cancelTrip, createTrip, previewTripRoad, routeRoadPlan, updateTrip, type TripInput } from "@/lib/dispatch";
 import { approveFirmRequest, rejectFirmRequest } from "@/lib/distributor/requests";
 
 type R = { ok: true; id?: number } | { ok: false; error: string };
@@ -53,6 +53,14 @@ export async function rejectRequestAction(id: number, reason: string): Promise<R
   const r = await rejectFirmRequest(id, reason, who);
   revalidatePath("/app-orders/new-customers");
   return r;
+}
+
+/** The road a new trip would take with these orders (Plan, before Plan trip): their road order, the path, km and time. */
+export async function previewTripRoadAction(orderUids: string[]) {
+  const me = await userFromToken((await cookies()).get("session")?.value);
+  if (!me || !atLeast(levelFor(me, "apporders"), "view")) return null;
+  const uids = [...new Set(orderUids)].filter((u) => /^[0-9a-f-]{36}$/i.test(u)).slice(0, 60);
+  return uids.length ? previewTripRoad(uids) : null;
 }
 
 /** One route's outlets in their road order from the plant, with the road path (Routes map). Anyone who can see Dispatch. */

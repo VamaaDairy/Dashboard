@@ -254,6 +254,7 @@ const WORKING: NavSection[] = [
               { href: "/app-orders/dispatch", key: "apporders", label: "Plan", exact: true },
               { href: "/app-orders/dispatch/live", key: "apporders", label: "Live" },
               { href: "/app-orders/dispatch/trips", key: "apporders", label: "Trips" },
+              { href: "/app-orders/dispatch/routes", key: "apporders", label: "Routes" },
               { href: "/app-orders/dispatch/reports", key: "apporders", label: "Reports" },
             ],
           },

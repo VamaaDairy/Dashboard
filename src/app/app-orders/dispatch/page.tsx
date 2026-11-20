@@ -2,10 +2,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { dispatchOrders, plant, routesOnMap, transporters, tripsOn } from "@/lib/dispatch";
+import { dispatchOrders, plant, transporters, tripsOn } from "@/lib/dispatch";
 import { todayIst } from "@/lib/orders/direct";
-import { DispatchBoard } from "./board";
-import { RoutesMap } from "./routes-map";
+import { DispatchBoard, type PlanView } from "./board";
 import { DayStepper } from "./screen";
 
 export const dynamic = "force-dynamic";
@@ -17,14 +16,16 @@ const nextDay = (d: string) => {
 };
 
 /**
- * Dispatch: the day's confirmed trade orders go on trips (one per route, usually), each given to a transporter who
- * runs it in the Gaia Delivery app. Orders waiting for a trip on the left, the day's trips on the right.
+ * Plan: the day's confirmed trade orders go on trips (one per route, usually), each given to a transporter who runs it
+ * in the Gaia Delivery app. The orders waiting for a trip by route, on the map or as a table (?view=), the day's trips
+ * beside them. The routes themselves are on the Routes tab.
  */
-export default async function DispatchPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+export default async function DispatchPage({ searchParams }: { searchParams: Promise<{ date?: string; view?: string }> }) {
   const sp = await searchParams;
   // by default tomorrow's deliveries: orders are for the day after they are placed
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : nextDay(todayIst());
-  const [orders, trips, trucks, routes, me] = await Promise.all([dispatchOrders(date), tripsOn(date), transporters(), routesOnMap(), userFromToken((await cookies()).get("session")?.value)]);
+  const view: PlanView = sp.view === "map" || sp.view === "table" ? sp.view : "routes";
+  const [orders, trips, trucks, me] = await Promise.all([dispatchOrders(date), tripsOn(date), transporters(), userFromToken((await cookies()).get("session")?.value)]);
   const canEdit = !!me && atLeast(levelFor(me, "apporders"), "edit");
 
   return (
@@ -36,8 +37,7 @@ export default async function DispatchPage({ searchParams }: { searchParams: Pro
           <DayStepper date={date} base="/app-orders/dispatch" />
           <Link href="/app-orders/distributors" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm hover:bg-muted">Orders</Link>
         </div>
-        <DispatchBoard date={date} orders={orders} trips={trips} transporters={trucks.filter((t) => t.active)} canEdit={canEdit} />
-        <RoutesMap routes={routes} plant={plant()} />
+        <DispatchBoard date={date} orders={orders} trips={trips} transporters={trucks.filter((t) => t.active)} canEdit={canEdit} view={view} plant={plant()} />
       </div>
     </div>
   );

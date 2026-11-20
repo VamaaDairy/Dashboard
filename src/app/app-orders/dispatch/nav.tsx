@@ -10,6 +10,7 @@ const TABS = [
   { href: BASE, label: "Plan", exact: true, dated: true },
   { href: `${BASE}/live`, label: "Live", dated: true },
   { href: `${BASE}/trips`, label: "Trips" },
+  { href: `${BASE}/routes`, label: "Routes" },
   { href: `${BASE}/reports`, label: "Reports" },
 ];
 /** a trip's own page sits under Trips */

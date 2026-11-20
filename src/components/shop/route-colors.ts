@@ -11,3 +11,6 @@ export interface MapMarker { lng: number; lat: number; label: string; color: str
  * not delivered / off the planned road. They repeat after eight.
  */
 export const TRIP_COLOURS = ["#2B3990", "#7C3AED", "#0E7490", "#BE185D", "#1D4ED8", "#9A3412", "#6B21A8", "#B91C1C"];
+
+/** One colour per route when all routes share a map (Dispatch: Routes, the Plan map). They repeat after twelve. */
+export const ROUTE_COLOURS = ["#2B3990", "#1E8E3E", "#D97706", "#B91C1C", "#7C3AED", "#0E7490", "#BE185D", "#4D7C0F", "#9A3412", "#1D4ED8", "#047857", "#6B21A8"];

@@ -615,6 +615,26 @@ async function byRoadFromPlant(uids: string[]): Promise<string[]> {
   return [...plan.order.map((i) => pinned[i]), ...rest];
 }
 
+/**
+ * The road a new trip would take (Plan): the orders in the shortest way round from the plant by road (those without a
+ * pin last), with the road's path, length and driving time. Null when none of them has a pin.
+ */
+export async function previewTripRoad(uids: string[]): Promise<{ order: string[]; path: LngLat[]; metres: number; seconds: number; road: boolean } | null> {
+  const pins = await query<{ uid: string; lat: number | null; lng: number | null }>(
+    `select b.uid, ${PIN("f")} then f.latitude::float end as lat, ${PIN("f")} then f.longitude::float end as lng
+       from fp_booking_order b join fp_firm f on f.uid = b.from_firm_uid where b.uid = any($1::uuid[])`,
+    [uids],
+  );
+  const at = new Map(pins.map((p) => [p.uid, p]));
+  const pinned = uids.filter((u) => at.get(u)?.lat != null);
+  if (!pinned.length) return null;
+  const plan = await roadPlan(plant(), pinned.map((u) => ({ lat: at.get(u)!.lat!, lng: at.get(u)!.lng! })));
+  return {
+    order: [...plan.order.map((i) => pinned[i]), ...uids.filter((u) => at.get(u)?.lat == null)],
+    path: plan.path, metres: Math.round(plan.metres), seconds: Math.round(plan.seconds), road: plan.road,
+  };
+}
+
 /** One route's outlets on the map in their road order from the plant, with the road path through them. */
 export async function routeRoadPlan(routeId: number): Promise<{ customers: RouteCustomer[]; plan: RoadPlan } | null> {
   const r = (await routesOnMap()).find((x) => x.id === routeId);
