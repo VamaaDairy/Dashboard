@@ -60,10 +60,16 @@ export async function setRiderAction(id: number, patch: { active?: boolean; pin?
   if (!(await canEdit())) return NO;
   if (patch.pin !== undefined) {
     if (!/^\d{4,8}$/.test(patch.pin)) return { ok: false, error: "The PIN must be 4 to 8 digits." };
-    // a new PIN also signs the rider out of any phone still holding the old session
-    await query(`update shop_rider set pin_hash = $2, token = null where id = $1`, [id, hashPin(patch.pin)]);
+    // a new PIN also signs the rider out of every phone
+    await query(`with gone as (delete from shop_rider_session where rider_id = $1) update shop_rider set pin_hash = $2 where id = $1`, [id, hashPin(patch.pin)]);
   }
-  if (patch.active !== undefined) await query(`update shop_rider set active = $2, token = case when $2 then token else null end where id = $1`, [id, patch.active]);
+  if (patch.active !== undefined) {
+    // switching a rider off signs them out of every phone
+    await query(
+      `with gone as (delete from shop_rider_session where rider_id = $1 and not $2::boolean) update shop_rider set active = $2 where id = $1`,
+      [id, patch.active],
+    );
+  }
   if (patch.pay !== undefined) {
     if (!Number.isFinite(patch.pay) || patch.pay < 0 || patch.pay > 10000) return { ok: false, error: "Enter the pay per delivery in rupees, e.g. 25." };
     const pay = Math.round(patch.pay * 100) / 100;

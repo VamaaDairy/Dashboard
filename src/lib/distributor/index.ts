@@ -83,9 +83,16 @@ const LOGIN_SELECT = `
 /** A distributor can use the app only while its customer record is active; a sales officer's login is not tied to one. */
 const FIRM_ACTIVE = `(l.kind = 'salesman' or f.active = 1)`;
 
+/** A new session for one phone; the login's other phones stay signed in. */
+async function openSession(loginId: number): Promise<string> {
+  const token = randomBytes(32).toString("hex");
+  await query(`insert into dist_session (token, login_id) values ($1, $2)`, [token, loginId]);
+  return token;
+}
+
 /**
- * Phone + PIN -> a fresh session token (replaces any earlier one), null for a wrong number or PIN, or "inactive"
- * when the details are right but the customer is switched off in Customer Masters.
+ * Phone + PIN -> a new session token for this phone (other phones stay signed in), null for a wrong number or PIN,
+ * or "inactive" when the details are right but the customer is switched off in Customer Masters.
  */
 export async function distLogin(phone: string, pin: string, kind?: DistLogin["kind"]): Promise<{ token: string; login: DistLogin } | "inactive" | null> {
   // sales officers have their own app (Gaia Salesforce, /api/salesforce): the partner app (no kind given) never opens their logins
@@ -97,8 +104,7 @@ export async function distLogin(phone: string, pin: string, kind?: DistLogin["ki
   );
   if (!r || !pinMatches(pin, r.pin_hash)) return null;
   if (!r.open) return "inactive";
-  const token = randomBytes(32).toString("hex");
-  await query(`update dist_login set token = $2 where id = $1`, [r.id, token]);
+  const token = await openSession(r.id);
   const login = await one<DistLogin>(`${LOGIN_SELECT} where l.id = $1`, [r.id]);
   return login ? { token, login } : null;
 }
@@ -115,11 +121,15 @@ export async function distResetPin(phone: string, pin: string, kind?: "distribut
     [phone, kind ?? null],
   );
   if (!rows.length) return null;
-  await query(`update dist_login set pin_hash = $2, token = null where id = any($1::int[])`, [rows.map((r) => r.id), hashPin(pin)]);
+  // the new PIN signs every phone out of these sign-ins; this one gets a session again below
+  await query(
+    `with gone as (delete from dist_session where login_id = any($1::int[]))
+     update dist_login set pin_hash = $2 where id = any($1::int[])`,
+    [rows.map((r) => r.id), hashPin(pin)],
+  );
   const first = rows.find((r) => r.open);
   if (!first) return "inactive";
-  const token = randomBytes(32).toString("hex");
-  await query(`update dist_login set token = $2 where id = $1`, [first.id, token]);
+  const token = await openSession(first.id);
   const login = await one<DistLogin>(`${LOGIN_SELECT} where l.id = $1`, [first.id]);
   return login ? { token, login } : null;
 }
@@ -137,8 +147,20 @@ export async function distFromRequest(req: NextRequest, scope: "partner" | "sale
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;
   const kindOk = scope === "any" ? "true" : scope === "salesman" ? "l.kind = 'salesman'" : "l.kind <> 'salesman'";
-  // checked on every call, so switching a customer off in the masters signs its phone out at once
-  return one<DistLogin>(`${LOGIN_SELECT} where l.token = $1 and l.active and ${FIRM_ACTIVE} and ${kindOk}`, [t]);
+  // checked on every call, so switching a customer off in the masters signs its phones out at once
+  const login = await one<DistLogin>(
+    `${LOGIN_SELECT} join dist_session ds on ds.login_id = l.id where ds.token = $1 and l.active and ${FIRM_ACTIVE} and ${kindOk}`,
+    [t],
+  );
+  // "last seen" at most once an hour - enough to tell live sessions from forgotten phones
+  if (login) await query(`update dist_session set last_seen = now() where token = $1 and last_seen < now() - interval '1 hour'`, [t]);
+  return login;
+}
+
+/** Signs this phone out: its session ends; the login's other phones stay signed in. */
+export async function endDistSession(req: NextRequest): Promise<void> {
+  const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
+  if (t) await query(`delete from dist_session where token = $1`, [t]);
 }
 
 /** The distributors this login may order for: its own firm, or (sales officer) the firms they are the sales contact of; a sales officer with none mapped can book for any distributor. */

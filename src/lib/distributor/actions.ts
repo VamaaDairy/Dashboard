@@ -63,10 +63,19 @@ export async function setAppLoginAction(kind: Kind, uid: string, patch: { active
   const col = SCREEN[kind].col;
   if (patch.pin !== undefined) {
     if (!/^\d{4,8}$/.test(patch.pin)) return { ok: false, error: "The PIN must be 4 to 8 digits." };
-    await query(`update dist_login set pin_hash = $2, token = null where ${col} = $1`, [uid, hashPin(patch.pin)]);
+    await query(
+      `with l as (update dist_login set pin_hash = $2 where ${col} = $1 returning id)
+       delete from dist_session where login_id in (select id from l)`,
+      [uid, hashPin(patch.pin)],
+    );
   }
   if (patch.active !== undefined) {
-    await query(`update dist_login set active = $2, token = case when $2 then token else null end where ${col} = $1`, [uid, patch.active]);
+    // switching a login off signs it out of every phone
+    await query(
+      `with l as (update dist_login set active = $2 where ${col} = $1 returning id)
+       delete from dist_session where not $2::boolean and login_id in (select id from l)`,
+      [uid, patch.active],
+    );
   }
   return done(kind);
 }

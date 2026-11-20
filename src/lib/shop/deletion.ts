@@ -65,6 +65,6 @@ export async function requestPartnerDeletion(riderId: number, reason: string): P
      on conflict (kind, phone) where status = 'pending' do nothing returning id`,
     [riderId, r.name, r.phone, reason.trim().slice(0, 500) || null],
   );
-  await query(`update shop_rider set active = false, token = null where id = $1`, [riderId]);
+  await query(`with gone as (delete from shop_rider_session where rider_id = $1) update shop_rider set active = false where id = $1`, [riderId]);
   return { already: !ins };
 }

@@ -155,7 +155,8 @@ export async function verifyEmployee(
 
   if (login) {
     if (newPin) {
-      await query(`update emp_login set pin_hash = $2 where id = $1`, [login.id, hashPin(newPin)]);
+      // the new PIN signs every phone out; this one signs straight back in below
+      await query(`with gone as (delete from emp_session where login_id = $1) update emp_login set pin_hash = $2 where id = $1`, [login.id, hashPin(newPin)]);
       await pinCleared("emp", phone); // a PIN set with an SMS code ends any wrong-PIN lock
     }
     return signIn(login, device);
@@ -174,13 +175,17 @@ export async function verifyEmployee(
   return { ok: true, status: "pending" };
 }
 
-/** Gives the employee's login a fresh session token (replacing any other phone's), if the person is still active. */
+/** Signs this phone in with a new session (the employee's other phones stay signed in), if the person is still active. */
 async function signIn(login: { id: number; staff_uid: string; active: boolean }, device: string | null): Promise<VerifyOutcome> {
   if (!login.active) return fail("This account is switched off. Please contact HR.");
   const live = await one(`select 1 from fp_staff where uid = $1 and active = 1`, [login.staff_uid]);
   if (!live) return fail("This employee record is not active. Please contact HR.");
   const token = randomBytes(32).toString("hex");
-  await query(`update emp_login set token = $2, last_login = now(), device = $3 where id = $1`, [login.id, token, device?.slice(0, 120) ?? null]);
+  await query(
+    `with s as (insert into emp_session (token, login_id, device) values ($2, $1, $3))
+     update emp_login set last_login = now(), device = $3 where id = $1`,
+    [login.id, token, device?.slice(0, 120) ?? null],
+  );
   const employee = await one<Employee>(`${EMP_SELECT} where l.id = $1`, [login.id]);
   return employee ? { ok: true, status: "signed_in", token, employee } : fail("Could not sign you in.");
 }
@@ -221,12 +226,17 @@ export async function signupPending(phoneRaw: string): Promise<boolean> {
 export async function empFromRequest(req: NextRequest): Promise<Employee | null> {
   const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
   if (!t) return null;
-  // read on every call, so switching a person off in the staff master signs their phone out at once
-  return one<Employee>(`${EMP_SELECT} where l.token = $1 and l.active and s.active = 1`, [t]);
+  // read on every call, so switching a person off in the staff master signs their phones out at once
+  const e = await one<Employee>(`${EMP_SELECT} join emp_session es on es.login_id = l.id where es.token = $1 and l.active and s.active = 1`, [t]);
+  // "last seen" at most once an hour - enough to tell live sessions from forgotten phones
+  if (e) await query(`update emp_session set last_seen = now() where token = $1 and last_seen < now() - interval '1 hour'`, [t]);
+  return e;
 }
 
-export async function signOutEmployee(loginId: number) {
-  await query(`update emp_login set token = null where id = $1`, [loginId]);
+/** Signs this phone out: its session ends; the employee's other phones stay signed in. */
+export async function endEmpSession(req: NextRequest): Promise<void> {
+  const t = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.get("authorization") ?? "")?.[1];
+  if (t) await query(`delete from emp_session where token = $1`, [t]);
 }
 
 // ---------------------------------------------------------------- profile
