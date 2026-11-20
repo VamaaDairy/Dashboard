@@ -1,4 +1,4 @@
-import { toTrack, type LngLat, type Ping } from "@/lib/shop/track";
+import { GAP_METRES, GAP_SECS, toTrack, type LngLat, type Ping } from "@/lib/shop/track";
 
 /**
  * How a trip went against its plan (the road from the plant through the stops in their order):
@@ -16,6 +16,9 @@ const MIN_STRETCH_POINTS = 3;
 
 export interface StopDone { seq: number; status: string; deliveredAt: string | null; note: string | null; lat: number | null }
 
+/** One stretch off the planned road: its line (with the last point on the road before it and the first after), length, farthest point, and when. */
+export interface OffStretch { path: LngLat[]; m: number; max: number; from: string; to: string }
+
 export interface TripDeviation {
   /** driven from the start to the last stop done (the whole drive while stops are still pending) */
   roundM: number;
@@ -25,7 +28,8 @@ export interface TripDeviation {
   overPlanM: number | null;
   /** the drive could be checked against the planned road (false for a straight-line plan, or before there is a drive) */
   checked: boolean;
-  /** the stretches further than OFF_ROAD_M from the planned road ([lng, lat]), their total length and the farthest point */
+  /** the stretches further than OFF_ROAD_M from the planned road, their lines ([lng, lat]), total length and the farthest point */
+  stretches: OffStretch[];
   off: LngLat[][];
   offM: number;
   maxOffM: number;
@@ -36,6 +40,43 @@ export interface TripDeviation {
 }
 
 const time = (v: string | Date) => new Date(v).getTime();
+
+/** Distances to a planned road on a flat map around it (fine at a city's scale): 0 when within OFF_ROAD_M, else how far. */
+function meter(path: LngLat[]) {
+  const kx = 111_320 * Math.cos((path[0][1] * Math.PI) / 180), ky = 110_574;
+  const xy = ([lng, lat]: LngLat) => [lng * kx, lat * ky] as const;
+  // each stretch of the road, with its box grown by OFF_ROAD_M for a quick "near enough" test
+  const segs = path.slice(1).map((b, i) => {
+    const [ax, ay] = xy(path[i]), [bx, by] = xy(b);
+    return { ax, ay, bx, by, x0: Math.min(ax, bx) - OFF_ROAD_M, x1: Math.max(ax, bx) + OFF_ROAD_M, y0: Math.min(ay, by) - OFF_ROAD_M, y1: Math.max(ay, by) + OFF_ROAD_M };
+  });
+  const toSeg = (x: number, y: number, s: (typeof segs)[number]) => {
+    const dx = s.bx - s.ax, dy = s.by - s.ay, len = dx * dx + dy * dy;
+    const k = len ? Math.max(0, Math.min(1, ((x - s.ax) * dx + (y - s.ay) * dy) / len)) : 0;
+    return Math.hypot(x - (s.ax + k * dx), y - (s.ay + k * dy));
+  };
+  const distance = (p: LngLat) => {
+    const [x, y] = xy(p);
+    let min = Infinity;
+    for (const s of segs) min = Math.min(min, toSeg(x, y, s));
+    return min;
+  };
+  return {
+    distance,
+    offBy: (p: LngLat) => {
+      const [x, y] = xy(p);
+      for (const s of segs) if (x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1 && toSeg(x, y, s) <= OFF_ROAD_M) return 0;
+      return distance(p);
+    },
+    step: (a: LngLat, b: LngLat) => Math.hypot((a[0] - b[0]) * kx, (a[1] - b[1]) * ky),
+  };
+}
+
+/** How far a point is from a planned road, in metres. */
+export function distanceToPath(path: LngLat[], p: LngLat): number {
+  if (path.length < 2) return Infinity;
+  return meter(path).distance(p);
+}
 
 export function tripDeviation(stops: StopDone[], plan: { path: LngLat[]; metres: number; road: boolean }, pings: Ping[]): TripDeviation {
   // the stops the truck went to, in the order it did them (End trip closes the rest as "Not visited")
@@ -63,6 +104,7 @@ export function tripDeviation(stops: StopDone[], plan: { path: LngLat[]; metres:
     afterM: roundEnd === null ? null : toTrack(after).metres,
     overPlanM: comparable ? roundTrack.metres - Math.round(plan.metres) : null,
     checked: plan.road && plan.path.length > 1 && round.length > 1,
+    stretches: [],
     off: [],
     offM: 0,
     maxOffM: 0,
@@ -71,59 +113,47 @@ export function tripDeviation(stops: StopDone[], plan: { path: LngLat[]; metres:
   };
   if (!res.checked) return res;
 
-  // metres on a flat map around the plan (fine at a city's scale)
-  const kx = 111_320 * Math.cos((plan.path[0][1] * Math.PI) / 180), ky = 110_574;
-  const xy = ([lng, lat]: LngLat) => [lng * kx, lat * ky] as const;
-  // each stretch of the planned road, with its box grown by OFF_ROAD_M for a quick "near enough" test
-  const segs = plan.path.slice(1).map((b, i) => {
-    const [ax, ay] = xy(plan.path[i]), [bx, by] = xy(b);
-    return { ax, ay, bx, by, x0: Math.min(ax, bx) - OFF_ROAD_M, x1: Math.max(ax, bx) + OFF_ROAD_M, y0: Math.min(ay, by) - OFF_ROAD_M, y1: Math.max(ay, by) + OFF_ROAD_M };
-  });
-  const toSeg = (x: number, y: number, s: (typeof segs)[number]) => {
-    const dx = s.bx - s.ax, dy = s.by - s.ay, len = dx * dx + dy * dy;
-    const k = len ? Math.max(0, Math.min(1, ((x - s.ax) * dx + (y - s.ay) * dy) / len)) : 0;
-    return Math.hypot(x - (s.ax + k * dx), y - (s.ay + k * dy));
-  };
-  /** 0 when within OFF_ROAD_M of the planned road, else how far from it. */
-  const offBy = (p: LngLat) => {
-    const [x, y] = xy(p);
-    for (const s of segs) if (x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1 && toSeg(x, y, s) <= OFF_ROAD_M) return 0;
-    let min = Infinity;
-    for (const s of segs) min = Math.min(min, toSeg(x, y, s));
-    return min;
-  };
-  const step = (a: LngLat, b: LngLat) => Math.hypot((a[0] - b[0]) * kx, (a[1] - b[1]) * ky);
-
+  const { offBy, step } = meter(plan.path);
   /** pts: the drive off the road with the last point on it before and the first after; n: how many of them are off it */
-  type Stretch = { pts: LngLat[]; n: number; m: number; max: number };
+  type Stretch = { pts: LngLat[]; n: number; m: number; max: number; from: number; to: number };
   const keep = (s: Stretch) => {
     if (s.m < MIN_STRETCH_M || s.n < MIN_STRETCH_POINTS) return;
+    res.stretches.push({ path: s.pts, m: Math.round(s.m), max: Math.round(s.max), from: new Date(s.from).toISOString(), to: new Date(s.to).toISOString() });
     res.off.push(s.pts);
     res.offM += s.m;
     res.maxOffM = Math.max(res.maxOffM, s.max);
   };
-  for (const seg of roundTrack.segments) {
-    let cur: Stretch | null = null;
-    for (let i = 0; i < seg.length; i++) {
-      const p = seg[i], d = offBy(p);
-      if (d > 0) {
-        // a stretch starts at the last point still on the road
-        cur ??= { pts: i > 0 ? [seg[i - 1]] : [], n: 0, m: 0, max: 0 };
-        const last = cur.pts[cur.pts.length - 1];
-        if (last) cur.m += step(last, p);
-        cur.pts.push(p);
-        cur.n++;
-        cur.max = Math.max(cur.max, d);
-      } else if (cur) {
-        // back on the road: the stretch ends here
-        cur.m += step(cur.pts[cur.pts.length - 1], p);
-        cur.pts.push(p);
-        keep(cur);
-        cur = null;
-      }
+  let cur: Stretch | null = null;
+  let prev: { pt: LngLat; at: number } | null = null;
+  for (const ping of round) {
+    const pt: LngLat = [ping.lng, ping.lat], at = time(ping.at);
+    // a signal gap (where the drawn line breaks too) ends a stretch: nothing is known about the road in between
+    if (prev && (at - prev.at > GAP_SECS * 1000 || step(prev.pt, pt) > GAP_METRES)) {
+      if (cur) keep(cur);
+      cur = null;
+      prev = null;
     }
-    if (cur) keep(cur);
+    const d = offBy(pt);
+    if (d > 0) {
+      // a stretch starts at the last point still on the road
+      cur ??= { pts: prev ? [prev.pt] : [], n: 0, m: 0, max: 0, from: prev?.at ?? at, to: at };
+      const last = cur.pts[cur.pts.length - 1];
+      if (last) cur.m += step(last, pt);
+      cur.pts.push(pt);
+      cur.n++;
+      cur.max = Math.max(cur.max, d);
+      cur.to = at;
+    } else if (cur) {
+      // back on the road: the stretch ends here
+      cur.m += step(cur.pts[cur.pts.length - 1], pt);
+      cur.pts.push(pt);
+      cur.to = at;
+      keep(cur);
+      cur = null;
+    }
+    prev = { pt, at };
   }
+  if (cur) keep(cur);
   res.offM = Math.round(res.offM);
   res.maxOffM = Math.round(res.maxOffM);
   return res;

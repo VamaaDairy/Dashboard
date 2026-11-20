@@ -177,6 +177,15 @@ export async function tripsOn(date: string): Promise<Trip[]> {
   return (await query<Omit<Trip, "qty" | "total" | "origin">>(`${TRIP_SELECT} where t.trip_date = $1 and t.status <> 'cancelled' order by t.route_name, t.id`, [date])).map(finish);
 }
 
+/** The day's trips (not cancelled), and any trip still on the road from another day: what the Live view follows. */
+export async function liveTrips(date: string): Promise<Trip[]> {
+  return (await query<Omit<Trip, "qty" | "total" | "origin">>(
+    `${TRIP_SELECT} where (t.trip_date = $1 and t.status <> 'cancelled') or t.status = 'on_the_way'
+      order by (t.status = 'on_the_way') desc, (t.status = 'planned') desc, t.route_name, t.id`,
+    [date],
+  )).map(finish);
+}
+
 export async function getTrip(id: number): Promise<Trip | null> {
   const t = await one<Omit<Trip, "qty" | "total" | "origin">>(`${TRIP_SELECT} where t.id = $1`, [id]);
   return t ? finish(t) : null;
@@ -542,7 +551,7 @@ export async function trackingOf(orderUids: string[]): Promise<Map<string, Order
 /** Road distances from the truck to a stop, kept two minutes per truck position (the app looks every 30 s). */
 const awayKept = new Map<string, { at: number; v: { metres: number; road: boolean } }>();
 
-async function truckAway(tripId: number, truck: { lat: number; lng: number }, to: { lat: number; lng: number }): Promise<{ metres: number; road: boolean }> {
+export async function truckAway(tripId: number, truck: { lat: number; lng: number }, to: { lat: number; lng: number }): Promise<{ metres: number; road: boolean }> {
   const k = `${tripId}|${truck.lat.toFixed(4)},${truck.lng.toFixed(4)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}`;
   const kept = awayKept.get(k);
   if (kept && Date.now() - kept.at < 120_000) return kept.v;

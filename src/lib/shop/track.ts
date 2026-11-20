@@ -26,8 +26,8 @@ export interface Track {
 
 export interface Ping { at: Date; lat: number; lng: number }
 
-const GAP_SECS = 180;
-const GAP_METRES = 1000;
+export const GAP_SECS = 180;
+export const GAP_METRES = 1000;
 
 export function toTrack(pings: Ping[]): Track {
   const segments: LngLat[][] = [];

@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Truck } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { dispatchOrders, plant, routesOnMap, transporters, tripsOn } from "@/lib/dispatch";
 import { todayIst } from "@/lib/orders/direct";
 import { DispatchBoard } from "./board";
 import { RoutesMap } from "./routes-map";
+import { DayStepper } from "./screen";
 
 export const dynamic = "force-dynamic";
 
@@ -29,21 +28,14 @@ export default async function DispatchPage({ searchParams }: { searchParams: Pro
   const canEdit = !!me && atLeast(levelFor(me, "apporders"), "edit");
 
   return (
-    <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
+    <div className="flex flex-1 flex-col bg-background px-4 pt-3 pb-6 md:px-6">
       <div className="w-full space-y-4">
-        <PageHeader
-          icon={Truck}
-          title="Dispatch"
-          subtitle="Confirmed distributor orders go on trips; the transporter starts the trip, delivers each stop and ends it in the Gaia Delivery app."
-          actions={
-            <form className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Delivery on</span>
-              <input type="date" name="date" defaultValue={date} className="h-8 rounded-md border border-border bg-background px-2" />
-              <button className="h-8 rounded-md border border-border px-3 hover:bg-muted">Show</button>
-              <Link href="/app-orders/distributors" className="inline-flex h-8 items-center rounded-md border border-border px-3 hover:bg-muted">Orders</Link>
-            </form>
-          }
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="mr-auto text-sm text-tertiary-foreground">Confirmed orders go on trips; the transporter starts the trip, delivers each stop and ends it in the Gaia Delivery app.</p>
+          <span className="text-sm text-muted-foreground">Delivery on</span>
+          <DayStepper date={date} base="/app-orders/dispatch" />
+          <Link href="/app-orders/distributors" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm hover:bg-muted">Orders</Link>
+        </div>
         <DispatchBoard date={date} orders={orders} trips={trips} transporters={trucks.filter((t) => t.active)} canEdit={canEdit} />
         <RoutesMap routes={routes} plant={plant()} />
       </div>
