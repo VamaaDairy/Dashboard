@@ -58,12 +58,16 @@ const sig = (p: MapPin) => [p.kind, p.color, p.label, p.popup, p.hollow, p.dim, 
  * The Ola map with any number of lines and pins (Dispatch: Live, a trip, the Plan map). It fits itself to everything
  * the first time there is something to show, and to `focus` whenever its key changes. It fills its parent.
  */
-export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
+export function DispatchMap({ lines, pins, focus, onPin, className = "", controls = "top-right", fitPadding = 60 }: {
   lines: MapLine[];
   pins: MapPin[];
   focus?: { key: string; points: LngLat[] } | null;
   onPin?: (id: string) => void;
   className?: string;
+  /** where the zoom buttons sit (keep them clear of a floating panel) */
+  controls?: "top-right" | "bottom-right" | "top-left" | "bottom-left";
+  /** room kept clear when fitting the view, e.g. the width of a floating panel on one side */
+  fitPadding?: number | { top: number; right: number; bottom: number; left: number };
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -71,9 +75,12 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
   const fitted = useRef(false);
   const lastFocus = useRef<string | null>(null);
   const clicked = useRef(onPin);
+  const padding = useRef(fitPadding);
+  const corner = useRef(controls);
   const [ready, setReady] = useState(false);
   const [note, setNote] = useState("Loading map…");
   useEffect(() => { clicked.current = onPin; }, [onPin]);
+  useEffect(() => { padding.current = fitPadding; }, [fitPadding]);
 
   useEffect(() => {
     let dead = false;
@@ -84,7 +91,7 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
       if (!cfg.enabled || !cfg.styleUrl) { setNote("Maps are not switched on: set OLA_MAPS_API_KEY on the server."); return; }
       const m = new maplibregl.Map({ container: box.current, style: cfg.stylePath ? `${location.origin}${cfg.stylePath}` : cfg.styleUrl, center: [81.647, 21.2554], zoom: 10 });
       map.current = m;
-      m.addControl(new maplibregl.NavigationControl(), "top-right");
+      m.addControl(new maplibregl.NavigationControl(), corner.current);
       m.on("load", () => {
         m.addSource("lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         const round = { "line-cap": "round", "line-join": "round" } as const;
@@ -155,7 +162,7 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
       if (!pts.length) return false;
       const b = new maplibregl.LngLatBounds(pts[0], pts[0]);
       pts.forEach((p) => b.extend(p));
-      m.fitBounds(b, { padding: 60, maxZoom, duration: fitted.current ? 600 : 0 });
+      m.fitBounds(b, { padding: padding.current, maxZoom, duration: fitted.current ? 600 : 0 });
       return true;
     };
     if (focus && focus.key !== lastFocus.current) {

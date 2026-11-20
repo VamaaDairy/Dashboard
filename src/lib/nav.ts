@@ -11,7 +11,7 @@
  */
 import {
   Archive, BadgePercent, BarChart3, Beaker, Bike, Boxes, CalendarDays, ClipboardCheck, Contact, Cylinder, Database, Droplets, Factory,
-  Briefcase, FileClock, Fuel, Gift, HardHat, Home, IndianRupee, MapPin, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
+  Briefcase, FileClock, Fuel, Gift, HardHat, Home, IndianRupee, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
   ReceiptText, Route, Scale, Settings2, ShoppingBag, Smartphone, Star, Store, Tags, Target, Truck, UserPlus, Users, Wallet, Warehouse, Waypoints, Zap,
 } from "lucide-react";
 import ordersSidebar from "@/lib/orders/sidebar.json";
@@ -263,7 +263,6 @@ const WORKING: NavSection[] = [
           { href: "/shop-orders/riders?kind=transporter", key: "shop", label: "Transporters", icon: Truck },
         ],
       },
-      { label: "Van sales", items: items(orders("Van & dispatch", MapPin, ["delivery", "loadSheet", "stockTransferView", "vanMaster"])) },
     ],
   },
   {

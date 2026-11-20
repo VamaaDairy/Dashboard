@@ -2,18 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Truck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Navigation, Phone, Signal } from "lucide-react";
 import { DispatchMap, type MapLine, type MapPin } from "@/components/shop/DispatchMap";
 import { AMBER, GREEN, GREY, NAVY, TRIP_COLOURS } from "@/components/shop/route-colors";
 import type { LiveDispatch, LiveTrip } from "@/lib/dispatch/live";
 import type { LngLat } from "@/lib/shop/track";
 import { cn } from "@/lib/utils";
-import { TripStatusPill } from "../board";
 import { DayStepper, ScreenBox } from "../screen";
+import { clock, EmptyState, floating, InlineStats, inr, km, Person, Plate, StatusBadge, StopBar } from "../ui";
 
-const km = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
-const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
-const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }) : "");
 const ago = (s: number) => (s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`);
 const doneColour = (s: string) => (s === "delivered" ? GREEN : s === "not_delivered" ? AMBER : null);
 
@@ -26,15 +23,24 @@ const pointsOf = (t: LiveTrip): LngLat[] => [
 ];
 
 /**
- * The control tower: the day's trips on one full-screen map (each its own colour: the planned road faint, the road
- * driven solid, off-road stretches amber, a dashed line from the truck to its next stop) and a card per trip with what
- * needs a look. Asks for fresh data every 15 s.
+ * The control tower: the day's trips on one full-width map (each its own colour: the planned road faint, the road
+ * driven solid, off-road stretches amber, a dashed line from the truck to its next stop), with the trips in a panel
+ * floating on the left. Asks for fresh data every 15 s.
  */
-export function LiveBoard({ date, initial }: { date: string; initial: LiveDispatch }) {
+export function LiveBoard({ date, today, initial }: { date: string; today: string; initial: LiveDispatch }) {
   const [data, setData] = useState(initial);
   const [pick, setPick] = useState<number | null>(null);
   const [focus, setFocus] = useState<{ key: string; points: LngLat[] } | null>(null);
   const [stale, setStale] = useState(false);
+  const [wide, setWide] = useState(false);
+
+  useEffect(() => {
+    const q = window.matchMedia("(min-width: 1024px)");
+    const on = () => setWide(q.matches);
+    on();
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
 
   useEffect(() => {
     let dead = false;
@@ -54,12 +60,13 @@ export function LiveBoard({ date, initial }: { date: string; initial: LiveDispat
   }, [date]);
 
   const colour = useMemo(() => new Map(data.trips.map((t, i) => [t.id, TRIP_COLOURS[i % TRIP_COLOURS.length]])), [data.trips]);
+  // keep the fitted view clear of the floating panel on wide screens
+  const fitPadding = useMemo(() => ({ top: 64, right: 72, bottom: 64, left: wide ? 420 : 48 }), [wide]);
 
   const choose = (id: number | null) => {
     setPick(id);
     const t = data.trips.find((x) => x.id === id);
-    const pts = t ? pointsOf(t) : data.trips.flatMap(pointsOf);
-    setFocus({ key: `${id ?? "all"}-${Date.now()}`, points: pts });
+    setFocus({ key: `${id ?? "all"}-${Date.now()}`, points: t ? pointsOf(t) : data.trips.flatMap(pointsOf) });
   };
 
   const { lines, pins } = useMemo(() => {
@@ -68,8 +75,8 @@ export function LiveBoard({ date, initial }: { date: string; initial: LiveDispat
     for (const t of data.trips) {
       const c = colour.get(t.id)!;
       const dim = pick !== null && pick !== t.id;
-      const o = dim ? 0.25 : 1;
-      lines.push({ id: `plan-${t.id}`, paths: [t.planned], color: c, width: 4, opacity: 0.35 * o });
+      const o = dim ? 0.22 : 1;
+      lines.push({ id: `plan-${t.id}`, paths: [t.planned], color: c, width: 5, opacity: 0.28 * o });
       lines.push({ id: `drive-${t.id}`, paths: t.track, color: c, width: 4.5, opacity: o });
       if (t.off.length) lines.push({ id: `off-${t.id}`, paths: t.off, color: AMBER, width: 5, opacity: o });
       if (t.truck && t.next && t.next.lat !== null && t.next.lng !== null) {
@@ -80,14 +87,14 @@ export function LiveBoard({ date, initial }: { date: string; initial: LiveDispat
         const done = doneColour(s.status);
         pins.push({
           id: `s${s.id}`, lat: s.lat, lng: s.lng, kind: "num", label: String(s.seq), color: done ?? c, hollow: !done, dim,
-          popup: `${t.route}, stop ${s.seq}\n${s.buyer} · #${s.orderId}\n${s.status === "delivered" ? `Delivered ${clock(s.deliveredAt)}` : s.status === "not_delivered" ? `Not delivered ${clock(s.deliveredAt)}` : "Still to do"}`,
+          popup: `${t.route}, stop ${s.seq}: ${s.buyer} · #${s.orderId} · ${s.status === "delivered" ? `delivered ${clock(s.deliveredAt)}` : s.status === "not_delivered" ? `not delivered ${clock(s.deliveredAt)}` : "still to do"}`,
         });
       }
       if (t.truck) {
         pins.push({
           id: `truck-${t.id}`, lat: t.truck.lat, lng: t.truck.lng, kind: "pill", top: true, dim, color: t.truck.seenSecs > 300 ? GREY : c,
           label: `${t.transporter?.name.split(" ")[0] ?? "Truck"}${t.vehicleNo ? ` · ${t.vehicleNo}` : ""}`,
-          popup: `${t.transporter ? `${t.transporter.name} · ${t.transporter.phone}\n` : ""}${t.route} · GPS ${ago(t.truck.seenSecs)}`,
+          popup: `${t.transporter ? `${t.transporter.name} · ${t.transporter.phone} · ` : ""}${t.route} · GPS ${ago(t.truck.seenSecs)}`,
         });
       }
     }
@@ -104,98 +111,109 @@ export function LiveBoard({ date, initial }: { date: string; initial: LiveDispat
   const done = data.trips.reduce((n, t) => n + t.done, 0);
   const notDelivered = data.trips.reduce((n, t) => n + t.notDelivered, 0);
   const alerts = data.trips.reduce((n, t) => n + t.alerts.length, 0);
-  const counters: Array<[string, string, boolean?]> = [
-    ["On the road", String(by("on_the_way"))],
-    ["Not started", String(by("planned"))],
-    ["Completed", String(by("completed"))],
-    ["Stops done", `${done}/${stops}`],
-    ["Not delivered", String(notDelivered), notDelivered > 0],
-    ["Need a look", String(alerts), alerts > 0],
-  ];
+
+  const list = data.trips.length ? (
+    <div className="divide-y divide-border">
+      {data.trips.map((t) => <TripCard key={t.id} t={t} colour={colour.get(t.id)!} picked={pick === t.id} onPick={() => choose(pick === t.id ? null : t.id)} />)}
+    </div>
+  ) : (
+    <EmptyState title="No trips for this day" hint="Trips appear here once they are planned." action={<Link href={`/app-orders/dispatch?date=${date}`} className="text-[13px] font-medium text-foreground underline-offset-4 hover:underline">Plan trips</Link>} />
+  );
 
   return (
-    <div className="flex flex-col gap-3 px-4 pt-3 pb-3 md:px-6">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-        {counters.map(([l, v, warn]) => (
-          <span key={l} className="text-muted-foreground">{l} <b className={cn("num text-foreground", warn && "text-amber-700")}>{v}</b></span>
-        ))}
-        <span className="ml-auto text-[12px] text-muted-foreground">{stale ? "Could not refresh, trying again" : `Updated ${clock(data.at)} · every 15 s`}</span>
-        <DayStepper date={date} base="/app-orders/dispatch/live" />
+    <div className="flex flex-col gap-3 px-4 pt-4 pb-4 md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <InlineStats items={[
+          { label: "On the road", value: by("on_the_way") },
+          { label: "Not started", value: by("planned") },
+          { label: "Completed", value: by("completed") },
+          { label: "Stops done", value: `${done}/${stops}` },
+          { label: "Not delivered", value: notDelivered, warn: notDelivered > 0 },
+          { label: "Need a look", value: alerts, warn: alerts > 0 },
+        ]} />
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-tertiary-foreground">
+            <span className="relative flex size-2">
+              {!stale ? <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/50" /> : null}
+              <span className={cn("relative inline-flex size-2 rounded-full", stale ? "bg-amber-500" : "bg-emerald-500")} />
+            </span>
+            {stale ? "Reconnecting…" : `Live · ${clock(data.at)}`}
+          </span>
+          <DayStepper date={date} base="/app-orders/dispatch/live" today={today} />
+        </div>
       </div>
 
-      <ScreenBox className="rounded-xl border border-border">
-        <div className="grid h-full grid-rows-[3fr_2fr] lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-1">
-          <div className="relative min-h-0">
-            <DispatchMap lines={lines} pins={pins} focus={focus} onPin={onPin} />
-            <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-background/90 px-3 py-1.5 text-[11px] text-muted-foreground shadow-sm">
-              <span className="inline-flex items-center gap-1.5"><i className="h-1 w-5 rounded-full opacity-40" style={{ background: NAVY }} />Planned road</span>
-              <span className="inline-flex items-center gap-1.5"><i className="h-1 w-5 rounded-full" style={{ background: NAVY }} />Driven</span>
-              <span className="inline-flex items-center gap-1.5"><i className="h-1 w-5 rounded-full" style={{ background: AMBER }} />Off the planned road</span>
-              <span className="inline-flex items-center gap-1.5"><i className="w-5 border-t-2 border-dashed" style={{ borderColor: NAVY }} />To the next stop</span>
-              <span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full" style={{ background: GREEN }} />Delivered</span>
-            </div>
+      <ScreenBox className="rounded-xl border border-border" button="top-right">
+        <DispatchMap lines={lines} pins={pins} focus={focus} onPin={onPin} controls="bottom-right" fitPadding={fitPadding} />
+        {/* the trips, floating over the map on wide screens */}
+        <aside className={cn(floating, "absolute top-3 bottom-3 left-3 z-10 hidden w-[384px] flex-col overflow-hidden lg:flex")}>
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <span className="text-[13px] font-semibold">Trips <span className="font-normal tabular-nums text-tertiary-foreground">{data.trips.length}</span></span>
+            {pick !== null ? <button type="button" onClick={() => choose(null)} className="text-[12px] text-tertiary-foreground hover:text-foreground">Show all</button> : null}
           </div>
-          <aside className="min-h-0 overflow-y-auto border-t border-border lg:border-t-0 lg:border-l">
-            <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-muted-foreground">
-              <span>{data.trips.length} {data.trips.length === 1 ? "trip" : "trips"}</span>
-              {pick !== null ? <button type="button" onClick={() => choose(null)} className="font-medium text-primary hover:underline">Show all</button> : null}
-            </div>
-            {data.trips.length ? (
-              data.trips.map((t) => <TripCard key={t.id} t={t} colour={colour.get(t.id)!} picked={pick === t.id} onPick={() => choose(pick === t.id ? null : t.id)} />)
-            ) : (
-              <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-                <Truck className="mx-auto mb-2 size-6" />No trips for this day.{" "}
-                <Link href={`/app-orders/dispatch?date=${date}`} className="font-medium text-primary hover:underline">Plan them</Link>
-              </div>
-            )}
-          </aside>
+          <div className="min-h-0 flex-1 overflow-y-auto">{list}</div>
+        </aside>
+        <div className={cn(floating, "pointer-events-none absolute bottom-3 z-10 hidden flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-[11px] text-tertiary-foreground sm:flex", wide ? "left-[408px]" : "left-3")}>
+          <span className="inline-flex items-center gap-1.5"><i className="h-1 w-5 rounded-full opacity-35" style={{ background: NAVY }} />Planned road</span>
+          <span className="inline-flex items-center gap-1.5"><i className="h-1 w-5 rounded-full" style={{ background: NAVY }} />Driven</span>
+          <span className="inline-flex items-center gap-1.5"><i className="h-1 w-5 rounded-full" style={{ background: AMBER }} />Off the plan</span>
+          <span className="inline-flex items-center gap-1.5"><i className="w-5 border-t-2 border-dashed" style={{ borderColor: NAVY }} />To the next stop</span>
+          <span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full" style={{ background: GREEN }} />Delivered</span>
         </div>
       </ScreenBox>
+
+      {/* on narrow screens the trips come under the map */}
+      <section className="lg:hidden">{list}</section>
     </div>
   );
 }
 
 function TripCard({ t, colour, picked, onPick }: { t: LiveTrip; colour: string; picked: boolean; onPick: () => void }) {
-  const pct = t.stops.length ? (t.done / t.stops.length) * 100 : 0;
   return (
-    <div className={cn("border-b border-border px-4 py-3", picked && "bg-muted/60")}>
-      <button type="button" onClick={onPick} className="w-full text-left">
+    <div className={cn("relative transition-colors", picked ? "bg-muted/70" : "hover:bg-muted/40")}>
+      <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full" style={{ background: colour }} />
+      <button type="button" onClick={onPick} className="block w-full px-4 pt-3 pb-2 text-left">
         <div className="flex items-center gap-2">
-          <span className="size-2.5 shrink-0 rounded-full" style={{ background: colour }} />
-          <span className="min-w-0 truncate font-semibold">{t.route}</span>
-          <TripStatusPill status={t.status} />
-          <span className="ml-auto shrink-0 text-[12px] text-muted-foreground">Trip {t.id}</span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">{t.route}</span>
+          <StatusBadge status={t.status} />
         </div>
-        <div className="mt-1 text-[13px] text-muted-foreground">
-          {t.transporter ? t.transporter.name : "No transporter yet"}{t.vehicleNo ? ` · ${t.vehicleNo}` : ""}{t.date ? ` · for ${t.date}` : ""}
+        <div className="mt-2 flex items-center gap-2">
+          <Person name={t.transporter?.name} size={24} />
+          <Plate no={t.vehicleNo} className="ml-auto" />
         </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: colour }} />
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-muted-foreground">
-          <span>{t.delivered}/{t.stops.length} delivered{t.notDelivered ? `, ${t.notDelivered} not` : ""}</span>
-          <span>{inr(t.deliveredValue)} of {inr(t.total)}</span>
-          {t.drivenM ? <span>{km(t.drivenM)} driven</span> : null}
-          {t.plannedRoad && t.plannedM ? <span>plan {km(t.plannedM)}</span> : null}
-          {t.startedAt ? <span>left {clock(t.startedAt)}</span> : null}
-          {t.endedAt ? <span>back {clock(t.endedAt)}</span> : null}
+        <StopBar stops={t.stops} className="mt-3" />
+        <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[12px] text-tertiary-foreground tabular-nums">
+          <span>{t.delivered}/{t.stops.length} delivered{t.notDelivered ? <span className="text-amber-700"> · {t.notDelivered} not</span> : null}</span>
+          <span>{inr(t.deliveredValue)} <span className="opacity-70">of {inr(t.total)}</span></span>
         </div>
         {t.next ? (
-          <div className="mt-1.5 text-[13px]">
-            Next: <span className="font-medium">{t.next.seq}. {t.next.buyer}</span>
-            {t.next.away ? <span className="text-muted-foreground"> · {km(t.next.away.metres)}{t.next.away.road ? " by road" : " away"}</span> : null}
+          <div className="mt-2 flex items-center gap-1.5 text-[12.5px] text-foreground">
+            <Navigation className="size-3.5 shrink-0 text-blue-600" />
+            <span className="min-w-0 truncate">Next: <span className="font-medium">{t.next.seq}. {t.next.buyer}</span></span>
+            {t.next.away ? <span className="ml-auto shrink-0 tabular-nums text-tertiary-foreground">{km(t.next.away.metres)}{t.next.away.road ? "" : " away"}</span> : null}
           </div>
         ) : null}
-        {t.truck ? <div className="text-[12px] text-muted-foreground">GPS {ago(t.truck.seenSecs)}</div> : null}
-        {t.alerts.map((a) => (
-          <div key={`${a.kind}-${a.text}`} className="mt-1 flex items-start gap-1.5 text-[12px] font-medium text-amber-700">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{a.text}
-          </div>
-        ))}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-tertiary-foreground tabular-nums">
+          {t.startedAt ? <span>Left {clock(t.startedAt)}{t.endedAt ? ` · back ${clock(t.endedAt)}` : ""}</span> : <span>For {t.date}</span>}
+          {t.drivenM ? <span>{km(t.drivenM)} driven{t.plannedRoad && t.plannedM ? ` of ${km(t.plannedM)}` : ""}</span> : t.plannedRoad && t.plannedM ? <span>Plan {km(t.plannedM)}</span> : null}
+          {t.truck ? <span className="inline-flex items-center gap-1"><Signal className="size-3" />{ago(t.truck.seenSecs)}</span> : null}
+        </div>
+        {t.alerts.length ? (
+          <ul className="mt-2 space-y-1">
+            {t.alerts.map((a) => (
+              <li key={`${a.kind}-${a.text}`} className="flex items-start gap-1.5 text-[12px] font-medium text-amber-700">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{a.text}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </button>
-      <div className="mt-2 flex gap-4 text-[12px]">
-        <Link href={`/app-orders/dispatch/${t.id}`} className="font-medium text-primary hover:underline">Open trip</Link>
-        {t.transporter?.phone ? <a href={`tel:${t.transporter.phone}`} className="text-muted-foreground hover:text-foreground">Call {t.transporter.name.split(" ")[0]}</a> : null}
+      <div className="flex items-center gap-4 px-4 pb-3 text-[12px]">
+        <Link href={`/app-orders/dispatch/${t.id}`} className="inline-flex items-center gap-0.5 font-medium text-foreground hover:underline underline-offset-4">Open trip<ArrowUpRight className="size-3.5" /></Link>
+        {t.transporter?.phone ? (
+          <a href={`tel:${t.transporter.phone}`} className="inline-flex items-center gap-1 text-tertiary-foreground hover:text-foreground"><Phone className="size-3" />Call {t.transporter.name.split(" ")[0]}</a>
+        ) : null}
+        <span className="ml-auto text-tertiary-foreground">Trip {t.id}</span>
       </div>
     </div>
   );

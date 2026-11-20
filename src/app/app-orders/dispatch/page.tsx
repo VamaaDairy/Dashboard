@@ -34,7 +34,7 @@ export default async function DispatchPage({ searchParams }: { searchParams: Pro
         <div className="flex flex-wrap items-center gap-3">
           <p className="mr-auto text-sm text-tertiary-foreground">Confirmed orders go on trips; the transporter starts the trip, delivers each stop and ends it in the Gaia Delivery app.</p>
           <span className="text-sm text-muted-foreground">Delivery on</span>
-          <DayStepper date={date} base="/app-orders/dispatch" />
+          <DayStepper date={date} base="/app-orders/dispatch" today={todayIst()} />
           <Link href="/app-orders/distributors" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm hover:bg-muted">Orders</Link>
         </div>
         <DispatchBoard date={date} orders={orders} trips={trips} transporters={trucks.filter((t) => t.active)} canEdit={canEdit} view={view} plant={plant()} />

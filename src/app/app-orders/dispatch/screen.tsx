@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { control, iconButton } from "./ui";
 
 /**
  * A box that fills the rest of the screen below where it starts (at least `min` px), with a button (top left) for the
  * browser's own full screen. Maps inside it follow its size.
  */
-export function ScreenBox({ children, className, min = 480 }: { children: React.ReactNode; className?: string; min?: number }) {
+export function ScreenBox({ children, className, min = 480, button = "top-left" }: {
+  children: React.ReactNode; className?: string; min?: number; button?: "top-left" | "top-right";
+}) {
   const box = useRef<HTMLDivElement>(null);
   const [h, setH] = useState<number | null>(null);
   const [full, setFull] = useState(false);
@@ -17,7 +20,7 @@ export function ScreenBox({ children, className, min = 480 }: { children: React.
     const fit = () => {
       const el = box.current;
       if (!el || document.fullscreenElement) return;
-      setH(Math.max(min, Math.round(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - 12)));
+      setH(Math.max(min, Math.round(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - 16)));
     };
     const onFull = () => setFull(document.fullscreenElement === box.current);
     fit();
@@ -33,7 +36,7 @@ export function ScreenBox({ children, className, min = 480 }: { children: React.
     <div ref={box} style={full ? undefined : { height: h ?? min }} className={cn("relative overflow-hidden bg-background", full && "h-screen w-screen", className)}>
       {children}
       <button type="button" onClick={toggle} title={full ? "Leave full screen" : "Full screen"} aria-label={full ? "Leave full screen" : "Full screen"}
-        className="absolute top-3 left-3 z-20 inline-flex size-9 items-center justify-center rounded-lg border border-border bg-background/95 shadow-sm hover:bg-muted">
+        className={cn(iconButton, "absolute top-3 z-20 shadow-sm", button === "top-left" ? "left-3" : "right-3")}>
         {full ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
       </button>
     </div>
@@ -50,8 +53,8 @@ export function Refresh({ seconds }: { seconds: number }) {
   return null;
 }
 
-/** ‹ date › with a date box: moves the page to another day (?date=), keeping its other settings. */
-export function DayStepper({ date, base }: { date: string; base: string }) {
+/** ‹ date › with a date box and a Today shortcut: moves the page to another day (?date=), keeping its other settings. */
+export function DayStepper({ date, base, today }: { date: string; base: string; today: string }) {
   const router = useRouter();
   const go = (d: string) => {
     const q = new URLSearchParams(window.location.search);
@@ -63,13 +66,14 @@ export function DayStepper({ date, base }: { date: string; base: string }) {
     x.setUTCDate(x.getUTCDate() + n);
     go(x.toISOString().slice(0, 10));
   };
-  const btn = "inline-flex size-8 items-center justify-center rounded-lg border border-input text-sm hover:bg-muted";
   return (
-    <div className="flex items-center gap-1.5">
-      <button type="button" onClick={() => step(-1)} className={btn} aria-label="Day before">‹</button>
-      <input type="date" value={date} onChange={(e) => e.target.value && go(e.target.value)} aria-label="Delivery day"
-        className="h-8 rounded-lg border border-input bg-background px-2 text-sm" />
-      <button type="button" onClick={() => step(1)} className={btn} aria-label="Next day">›</button>
+    <div className="inline-flex items-center gap-1">
+      <button type="button" onClick={() => step(-1)} className={iconButton} aria-label="Day before"><ChevronLeft className="size-4" /></button>
+      <input type="date" value={date} onChange={(e) => e.target.value && go(e.target.value)} aria-label="Delivery day" className={cn(control, "w-[9.25rem] tabular-nums")} />
+      <button type="button" onClick={() => step(1)} className={iconButton} aria-label="Next day"><ChevronRight className="size-4" /></button>
+      {date !== today ? (
+        <button type="button" onClick={() => go(today)} className="ml-1 h-8 rounded-lg px-2.5 text-[13px] text-tertiary-foreground transition-colors hover:bg-muted hover:text-foreground">Today</button>
+      ) : null}
     </div>
   );
 }
