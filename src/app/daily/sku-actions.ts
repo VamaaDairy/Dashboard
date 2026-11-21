@@ -24,27 +24,47 @@ export interface MaterialLine {
 }
 
 /**
- * Saves one day's SKU packing - full cases and loose pieces per SKU, and the
- * packing material that went into it. A SKU left at 0 wasn't packed that day
- * and has no row; its material lines replace whatever it had that day. A SKU
- * packed with no material entered gets its standing packing list - quantity
- * per piece / per case times what was packed, at the Packaging master rate.
+ * Saves one day's SKU packing - the batch each SKU came from, full cases and loose pieces per SKU, and the packing
+ * material that went into it. A SKU left at 0 wasn't packed that day and has no row; its material lines replace
+ * whatever it had that day. A SKU packed with no material entered gets its standing packing list - quantity per
+ * piece / per case times what was packed, at the Packaging master rate. A packed SKU must name its batch (one of its
+ * bulk product's, when it has any in the 14 days up to the day); a SKU counted in whole cases takes no loose pieces.
  */
 export async function saveSkuDay(
-  date: string, rows: { sku_id: string; cases: string; loose_pcs: string; materials: MaterialLine[] }[],
+  date: string, rows: { sku_id: string; cases: string; loose_pcs: string; bulk_batch_id?: string | null; materials: MaterialLine[] }[],
 ): Promise<Result> {
   try {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Pick a date");
     const scenario = await activeScenarioId();
     await tx(async (client) => {
       for (const r of rows) {
-        const sku = await client.query<{ name: string; pcs_per_case: number; pack_rate_per_pc: string | null }>(
-          `select name, pcs_per_case, pack_rate_per_pc from sku where id = $1 and scenario_id = $2`, [r.sku_id, scenario]);
+        const sku = await client.query<{ name: string; pcs_per_case: number; pack_rate_per_pc: string | null; cases_only: boolean; case_unit: string; bulk_product_id: string | null }>(
+          `select name, pcs_per_case, pack_rate_per_pc, cases_only, case_unit, bulk_product_id from sku where id = $1 and scenario_id = $2`, [r.sku_id, scenario]);
         const name = sku.rows[0]?.name;
         const packRate = sku.rows[0]?.pack_rate_per_pc == null ? null : Number(sku.rows[0].pack_rate_per_pc);
         if (!name) throw new Error("A SKU in the list no longer exists - reload the page");
         const cases = amount(r.cases, `${name}: cases`);
         const loose = amount(r.loose_pcs, `${name}: loose pieces`);
+        if (sku.rows[0].cases_only && loose > 0) throw new Error(`${name} is counted in whole boxes only - enter the number of boxes, no loose pieces`);
+        if (sku.rows[0].cases_only && !Number.isInteger(cases)) throw new Error(`${name}: enter a whole number of boxes`);
+
+        // the batch it was packed from: required once its bulk product (or, unlinked, any product) has a batch to pick
+        let batch: string | null = null;
+        if (cases > 0 || loose > 0) {
+          const product = sku.rows[0].bulk_product_id;
+          if (r.bulk_batch_id) {
+            const b = await client.query<{ bulk_product_id: string }>(
+              `select bulk_product_id from bulk_batch where id = $1 and scenario_id = $2`, [r.bulk_batch_id, scenario]);
+            if (!b.rows.length) throw new Error(`${name}: that batch no longer exists - reload the page`);
+            if (product && b.rows[0].bulk_product_id !== product) throw new Error(`${name}: pick a batch of the bulk product it is filled from`);
+            batch = r.bulk_batch_id;
+          } else {
+            const any = await client.query(
+              `select 1 from bulk_batch where scenario_id = $1 and batch_date between $2::date - 14 and $2::date and ($3::uuid is null or bulk_product_id = $3) limit 1`,
+              [scenario, date, product]);
+            if (any.rows.length) throw new Error(`${name}: choose the batch it was packed from`);
+          }
+        }
 
         await client.query(`delete from sku_pack_material where sku_id = $1 and day = $2`, [r.sku_id, date]);
         let materials = r.materials ?? [];
@@ -89,9 +109,9 @@ export async function saveSkuDay(
           continue;
         }
         await client.query(
-          `insert into sku_pack_day (scenario_id, sku_id, day, cases, loose_pcs) values ($1, $2, $3, $4, $5)
-           on conflict (sku_id, day) do update set cases = excluded.cases, loose_pcs = excluded.loose_pcs`,
-          [scenario, r.sku_id, date, cases, loose],
+          `insert into sku_pack_day (scenario_id, sku_id, day, cases, loose_pcs, bulk_batch_id) values ($1, $2, $3, $4, $5, $6)
+           on conflict (sku_id, day) do update set cases = excluded.cases, loose_pcs = excluded.loose_pcs, bulk_batch_id = excluded.bulk_batch_id`,
+          [scenario, r.sku_id, date, cases, loose, batch],
         );
       }
     });
@@ -103,12 +123,12 @@ export async function saveSkuDay(
 }
 
 /**
- * A SKU's setup: pieces per case, which bulk product fills it and how much one
- * piece holds, its packing cost per piece (blank = use the packing list), on the list or not.
+ * A SKU's setup: pieces per case, whether it is counted in whole cases only, which bulk product fills it and how much
+ * one piece holds, its packing cost per piece (blank = use the packing list), on the list or not.
  */
 export async function saveSku(
   id: string,
-  v: { pcs_per_case: string; bulk_product_id: string; bulk_qty_per_pc: string; pack_rate_per_pc: string; is_active: boolean },
+  v: { pcs_per_case: string; cases_only?: boolean; bulk_product_id: string; bulk_qty_per_pc: string; pack_rate_per_pc: string; is_active: boolean },
 ): Promise<Result> {
   try {
     const scenario = await activeScenarioId();
@@ -122,9 +142,10 @@ export async function saveSku(
       if (!ok.length) throw new Error("That bulk product no longer exists - reload the page");
     }
     await query(
-      `update sku set pcs_per_case = $2, bulk_product_id = $3, bulk_qty_per_pc = $4, is_active = $5, pack_rate_per_pc = $7
+      `update sku set pcs_per_case = $2, bulk_product_id = $3, bulk_qty_per_pc = $4, is_active = $5, pack_rate_per_pc = $7,
+              cases_only = coalesce($8::boolean, cases_only)
         where id = $1 and scenario_id = $6`,
-      [id, pcs, bulk, perPc, v.is_active, scenario, packRate],
+      [id, pcs, bulk, perPc, v.is_active, scenario, packRate, v.cases_only ?? null],
     );
     revalidatePath("/daily", "layout");
     return { ok: true };

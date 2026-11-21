@@ -16,9 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
 import type { BulkProduct } from "@/lib/production/data";
-import type { BulkYield, PackMaterial, PackagingOption, PackingListLine, PackTemplate, SkuDayRow, SkuHistoryDay } from "@/lib/production/sku";
+import type { BatchChoice, BulkYield, PackMaterial, PackagingOption, PackingListLine, PackTemplate, SkuDayRow, SkuHistoryDay } from "@/lib/production/sku";
 
-type Entry = { cases: string; loose_pcs: string };
+/** cases and loose pieces as typed, and the batch picked (a bulk_batch id, or "" for none yet) */
+type Entry = { cases: string; loose_pcs: string; batch: string };
 type MLine = MaterialLine & { custom?: boolean };
 const toLine = (m: PackMaterial): MLine => ({ packaging_id: m.packaging_id, name: m.name, qty: String(Number(m.qty)), unit: m.unit, price: String(Number(m.price)) });
 const lineAmount = (l: MLine) => val(l.qty) * val(l.price);
@@ -29,10 +30,13 @@ const val = (s: string) => {
   return s.trim() === "" || !Number.isFinite(v) ? 0 : v;
 };
 const cell = "w-20 rounded-md border border-border bg-white px-1.5 py-1 text-right text-[13px] focus:border-foreground/40 focus:outline-none disabled:bg-muted/50 disabled:text-tertiary-foreground";
+const dayMonth = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { timeZone: "UTC", day: "numeric", month: "short" });
 
 export function SkuPackingDay({
-  date, today, skus, bulkProducts, yields, history, materials, lastMaterials, packaging, packingLists, templates,
+  date, today, skus, bulkProducts, yields, history, materials, lastMaterials, packaging, packingLists, templates, batches,
 }: {
+  /** the batches of the 14 days up to this day - one list; each SKU is offered its own bulk product's */
+  batches: BatchChoice[];
   templates: PackTemplate[];
   packingLists: Record<string, PackingListLine[]>;
   date: string;
@@ -47,7 +51,7 @@ export function SkuPackingDay({
 }) {
   const router = useRouter();
   const [entries, setEntries] = useState<Record<string, Entry>>(() =>
-    Object.fromEntries(skus.map((s) => [s.sku_id, { cases: String(Number(s.cases)), loose_pcs: String(Number(s.loose_pcs)) }])));
+    Object.fromEntries(skus.map((s) => [s.sku_id, { cases: String(Number(s.cases)), loose_pcs: String(Number(s.loose_pcs)), batch: s.bulk_batch_id ?? "" }])));
   const [mats, setMats] = useState<Record<string, MLine[]>>(() =>
     Object.fromEntries(skus.map((s) => [s.sku_id, (materials[s.sku_id] ?? []).map(toLine)])));
   const [packing, setPacking] = useState<SkuDayRow | null>(null);   // SKU whose packing material is open
@@ -76,6 +80,12 @@ export function SkuPackingDay({
   const effective = (s: SkuDayRow) => (mats[s.sku_id].length ? mats[s.sku_id] : pcsOf(s) > 0 ? stdLines(s) : []);
   const bulkOf = (s: SkuDayRow) => (s.bulk_qty_per_pc === null ? null : pcsOf(s) * Number(s.bulk_qty_per_pc));
   const productById = useMemo(() => new Map(bulkProducts.map((p) => [p.id, p])), [bulkProducts]);
+  // the batches a SKU can be packed from: its bulk product's (all of them when it isn't linked to one)
+  const batchesFor = (s: SkuDayRow) => (s.bulk_product_id ? batches.filter((b) => b.bulk_product_id === s.bulk_product_id) : batches);
+  const batchLabel = (b: BatchChoice, withProduct: boolean) =>
+    `${withProduct ? `${b.product} · ` : ""}${dayMonth(b.batch_date)}${b.batch_date === today ? " (today)" : b.batch_date === date ? " (same day)" : ""}${b.batch_no ? ` · #${b.batch_no}` : ""}${b.output_qty ? ` · ${formatNumber(b.output_qty, 1)} ${b.unit}` : ""}`;
+  // packed, with batches to pick from, but none picked yet
+  const needsBatch = (s: SkuDayRow) => pcsOf(s) > 0 && !entries[s.sku_id].batch && batchesFor(s).length > 0;
   const categories = useMemo(() => ["All", ...new Set(skus.map((s) => s.category))], [skus]);
 
   const shown = skus.filter((s) =>
@@ -99,34 +109,46 @@ export function SkuPackingDay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, mats, skus]);
 
-  // packed against yield, per bulk product: what the SKUs took (in the bulk unit) vs what the batch gave
+  // packed against yield, per batch: what the SKUs took out of it (in the bulk unit) vs what it gave, less what other
+  // days already packed from it; today's batches show even before anything is packed from them
   const reconcile = useMemo(() => {
-    const byProduct = new Map<string, { packed: number; skus: number }>();
+    type Line = { key: string; name: string; when: string | null; unit: "kg" | "L"; yieldQty: number | null; batch: boolean; before: number; packed: number; skus: number };
+    const lines = new Map<string, Line>();
     let unlinked = 0;
+    for (const b of batches) {
+      if (b.batch_date === date) lines.set(b.id, { key: b.id, name: b.product, when: b.batch_date, unit: b.unit, yieldQty: b.output_qty, batch: true, before: b.packed_elsewhere, packed: 0, skus: 0 });
+    }
     for (const s of skus) {
       if (pcsOf(s) <= 0) continue;
-      const b = bulkOf(s);
-      if (!s.bulk_product_id || b === null) { unlinked += 1; continue; }
-      const r = byProduct.get(s.bulk_product_id) ?? { packed: 0, skus: 0 };
-      r.packed += b;
-      r.skus += 1;
-      byProduct.set(s.bulk_product_id, r);
+      const q = bulkOf(s);
+      if (!s.bulk_product_id || q === null) { unlinked += 1; continue; }
+      const chosen = batches.find((b) => b.id === entries[s.sku_id].batch);
+      const key = chosen ? chosen.id : `product:${s.bulk_product_id}`;
+      let l = lines.get(key);
+      if (!l) {
+        const p = productById.get(s.bulk_product_id);
+        l = chosen
+          ? { key, name: chosen.product, when: chosen.batch_date, unit: chosen.unit, yieldQty: chosen.output_qty, batch: true, before: chosen.packed_elsewhere, packed: 0, skus: 0 }
+          : { key, name: p?.name ?? "Bulk product", when: null, unit: p?.unit ?? "kg", yieldQty: null, batch: false, before: 0, packed: 0, skus: 0 };
+        lines.set(key, l);
+      }
+      l.packed += q;
+      l.skus += 1;
     }
-    const ids = new Set([...yields.map((y) => y.bulk_product_id), ...byProduct.keys()]);
-    const lines = bulkProducts.filter((p) => ids.has(p.id)).map((p) => {
-      const y = yields.find((x) => x.bulk_product_id === p.id);
-      const r = byProduct.get(p.id);
-      const yieldQty = y?.output_qty == null ? null : Number(y.output_qty);
-      return { id: p.id, name: p.name, unit: p.unit, yieldQty, batch: Boolean(y), packed: r?.packed ?? 0, skus: r?.skus ?? 0 };
-    });
-    return { lines, unlinked };
+    return { lines: [...lines.values()], unlinked };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, skus, yields, bulkProducts]);
+  }, [entries, skus, batches, date, bulkProducts]);
 
   function save() {
+    // every packed SKU names the batch it came from
+    const missing = skus.filter(needsBatch);
+    if (missing.length) {
+      setError(`Choose the batch for ${missing.slice(0, 3).map((s) => s.name).join(", ")}${missing.length > 3 ? ` and ${missing.length - 3} more` : ""}`);
+      return;
+    }
     start(async () => {
       const res = await saveSkuDay(date, skus.map((s) => ({
-        sku_id: s.sku_id, ...entries[s.sku_id],
+        sku_id: s.sku_id, cases: entries[s.sku_id].cases, loose_pcs: entries[s.sku_id].loose_pcs, bulk_batch_id: entries[s.sku_id].batch || null,
         materials: mats[s.sku_id].map(({ packaging_id, name, qty, unit, price }) => ({ packaging_id, name, qty, unit, price })),
       })));
       if (!res.ok) { setError(res.error); return; }
@@ -171,7 +193,7 @@ export function SkuPackingDay({
 
       <Section
         title={`SKU packing · ${date}`}
-        description="Every SKU, by category. Enter full cases and any loose pieces packed today, and the packing material used - item, quantity, per kg or per piece, and price. A SKU left at 0 wasn't packed. Save day when done."
+        description="Every SKU, by category. Pick the batch each SKU was packed from, enter full cases (boxes) and any loose pieces, and the packing material used - item, quantity, per kg or per piece, and price. A SKU left at 0 wasn't packed. Save day when done."
         actions={
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -200,6 +222,7 @@ export function SkuPackingDay({
               <Th align="left">Pack qty</Th>
               <Th align="left">Unit</Th>
               <Th align="left">Case</Th>
+              <Th align="left">Batch</Th>
               <Th>Cases</Th>
               <Th>Loose pcs</Th>
               <Th>Total pcs</Th>
@@ -218,6 +241,10 @@ export function SkuPackingDay({
                     const bulk = bulkOf(s);
                     const product = s.bulk_product_id ? productById.get(s.bulk_product_id) : undefined;
                     const single = s.pcs_per_case === 1;
+                    const opts = batchesFor(s);
+                    const need = needsBatch(s);
+                    // counted in whole boxes: no loose pieces (left open only to clear any from before)
+                    const noLoose = single || (s.cases_only && val(e.loose_pcs) === 0);
                     return (
                       <tr key={s.sku_id} className={`border-b border-border/70 hover:bg-muted/40 ${pcs > 0 ? "" : "text-muted-foreground"}`}>
                         <td className="max-w-80 px-3 py-1.5 text-foreground" title={s.name}><ProductCell p={s.label} size={28} /></td>
@@ -225,17 +252,35 @@ export function SkuPackingDay({
                         <td className="px-3 py-1.5 text-[12px]">{s.label.unit ?? "—"}</td>
                         <td className="px-3 py-1.5 text-[12px]">
                           {single ? s.case_unit : `${s.case_unit} · ${s.pcs_per_case} pcs`}
+                          {s.cases_only ? <span className="block text-[11px] text-muted-foreground">whole boxes only</span> : null}
+                        </td>
+                        <td className="px-1.5 py-1">
+                          {opts.length ? (
+                            <select value={e.batch} onChange={(ev) => set(s.sku_id, { batch: ev.target.value })} aria-label={`${s.name} batch`}
+                              title={need ? "Choose the batch this SKU was packed from" : undefined}
+                              className={`h-7 max-w-56 rounded-md border bg-white px-1.5 text-[12px] focus:border-foreground/40 focus:outline-none ${need ? "border-destructive font-semibold text-destructive" : "border-border text-foreground"}`}>
+                              <option value="">{need ? "Choose batch" : "Batch…"}</option>
+                              {opts.map((b) => <option key={b.id} value={b.id}>{batchLabel(b, !s.bulk_product_id)}</option>)}
+                            </select>
+                          ) : (
+                            <span className="text-[12px] text-muted-foreground" title="No batch of this bulk product in the 14 days up to this day">No batch</span>
+                          )}
                         </td>
                         <td className="px-1.5 py-1 text-right">
-                          <input inputMode="decimal" value={e.cases} onFocus={(ev) => ev.target.select()}
-                            onChange={(ev) => set(s.sku_id, { cases: ev.target.value })} className={cell} aria-label={`${s.name} cases`} />
+                          <input inputMode={s.cases_only ? "numeric" : "decimal"} value={e.cases} onFocus={(ev) => ev.target.select()}
+                            onChange={(ev) => set(s.sku_id, { cases: ev.target.value })} className={cell} aria-label={`${s.name} ${s.cases_only ? "boxes" : "cases"}`} />
                         </td>
                         <td className="px-1.5 py-1 text-right">
-                          <input inputMode="decimal" value={single ? "—" : e.loose_pcs} disabled={single} onFocus={(ev) => ev.target.select()}
+                          <input inputMode="decimal" value={noLoose ? "—" : e.loose_pcs} disabled={noLoose} onFocus={(ev) => ev.target.select()}
                             onChange={(ev) => set(s.sku_id, { loose_pcs: ev.target.value })} className={cell}
-                            title={single ? "Counted one piece at a time - enter it under Cases" : undefined} aria-label={`${s.name} loose pieces`} />
+                            title={single ? "Counted one piece at a time - enter it under Cases" : s.cases_only ? "Counted in whole boxes only - enter the boxes under Cases" : undefined}
+                            aria-label={`${s.name} loose pieces`} />
                         </td>
-                        <td className="num px-3 py-1.5 text-right font-semibold text-foreground">{pcs > 0 ? formatNumber(pcs, 0) : "—"}</td>
+                        <td className="num px-3 py-1.5 text-right font-semibold text-foreground">
+                          {pcs <= 0 ? "—" : s.cases_only
+                            ? <span title={`${formatNumber(pcs, 0)} pieces`}>{formatNumber(val(e.cases), 0)} {val(e.cases) === 1 ? "box" : "boxes"}<span className="block text-[11px] font-normal text-muted-foreground">{formatNumber(pcs, 0)} pcs</span></span>
+                            : formatNumber(pcs, 0)}
+                        </td>
                         <td className="num px-3 py-1.5 text-right">
                           {bulk !== null && pcs > 0 ? `${formatNumber(bulk, 1)} ${product?.unit ?? ""}` : "—"}
                         </td>
@@ -269,11 +314,11 @@ export function SkuPackingDay({
                   })}
                 </GroupRows>
               ))}
-              {groups.length === 0 ? <Empty colSpan={12}>No SKU matches.</Empty> : null}
+              {groups.length === 0 ? <Empty colSpan={13}>No SKU matches.</Empty> : null}
             </tbody>
             <tfoot>
               <tr className="bg-muted/50 font-semibold">
-                <td className="px-3 py-2" colSpan={7}>{totals.packed} SKUs packed · each counted in its own unit above</td>
+                <td className="px-3 py-2" colSpan={8}>{totals.packed} SKUs packed · each counted in its own unit above</td>
                 <td className="num px-3 py-2 text-right" colSpan={3}>{formatNumber(totals.kg, 0)} kg + {formatNumber(totals.litres, 0)} L of product</td>
                 <td className="num px-3 py-2 text-right">{formatNumber(totals.material, 0)}</td>
                 <td />
@@ -286,12 +331,12 @@ export function SkuPackingDay({
       <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
         <Section
           title="Packed against yield"
-          description="What the SKUs took out of each bulk product today, against the batch's yield on Daily batches."
+          description="What the SKUs took out of each batch, against its yield on Daily batches, less what other days already packed from it."
         >
           <div className="overflow-x-auto">
             <table className="w-full whitespace-nowrap text-[13px]">
               <THead>
-                <Th align="left">Bulk product</Th>
+                <Th align="left">Batch</Th>
                 <Th>Yield</Th>
                 <Th>Packed</Th>
                 <Th>Left unpacked</Th>
@@ -299,10 +344,16 @@ export function SkuPackingDay({
               </THead>
               <tbody>
                 {reconcile.lines.map((l) => {
-                  const left = l.yieldQty === null ? null : l.yieldQty - l.packed;
+                  const left = l.yieldQty === null ? null : l.yieldQty - l.before - l.packed;
                   return (
-                    <tr key={l.id} className="border-b border-border/70">
-                      <td className="px-3 py-1.5 font-semibold text-foreground">{l.name}</td>
+                    <tr key={l.key} className="border-b border-border/70">
+                      <td className="px-3 py-1.5 font-semibold text-foreground">
+                        {l.name}
+                        <span className="ml-1.5 text-[12px] font-normal text-muted-foreground">
+                          {l.when ? `${dayMonth(l.when)}${l.when === today ? " (today)" : l.when === date ? " (same day)" : ""}` : "no batch picked"}
+                          {l.before > 0 ? ` · ${formatNumber(l.before, 1)} ${l.unit} packed other days` : ""}
+                        </span>
+                      </td>
                       <td className="num px-3 py-1.5 text-right">
                         {l.yieldQty !== null && l.yieldQty > 0 ? `${formatNumber(l.yieldQty, 1)} ${l.unit}`
                           : <Link href={`/daily?date=${date}`} className="text-[12px] text-muted-foreground underline">{l.batch ? "Yield not entered" : "No batch"}</Link>}
@@ -388,7 +439,7 @@ function GroupRows({ category, rows, children }: { category: string; rows: SkuDa
   return (
     <>
       <tr className="bg-muted/40">
-        <td colSpan={12} className="px-3 pt-3 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        <td colSpan={13} className="px-3 pt-3 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
           {category} <span className="font-normal normal-case tracking-normal">· {rows.length} SKU{rows.length > 1 ? "s" : ""}</span>
         </td>
       </tr>
@@ -424,6 +475,7 @@ function SkuSetup({
     return t + (o?.last_price ?? 0) * (l.per === "case" ? q / Math.max(1, Number(sku.pcs_per_case)) : q);
   }, 0);
   const [pcs, setPcs] = useState(String(sku.pcs_per_case));
+  const [casesOnly, setCasesOnly] = useState(sku.cases_only);
   const [bulk, setBulk] = useState(sku.bulk_product_id ?? "");
   const [perPc, setPerPc] = useState(sku.bulk_qty_per_pc === null ? "" : String(Number(sku.bulk_qty_per_pc)));
   const [packRate, setPackRate] = useState(sku.pack_rate_per_pc === null ? "" : String(Number(sku.pack_rate_per_pc)));
@@ -437,7 +489,7 @@ function SkuSetup({
     <form onSubmit={(e) => {
       e.preventDefault();
       start(async () => {
-        const res = await saveSku(sku.sku_id, { pcs_per_case: pcs, bulk_product_id: bulk, bulk_qty_per_pc: perPc, pack_rate_per_pc: packRate, is_active: active });
+        const res = await saveSku(sku.sku_id, { pcs_per_case: pcs, cases_only: casesOnly, bulk_product_id: bulk, bulk_qty_per_pc: perPc, pack_rate_per_pc: packRate, is_active: active });
         if (!res.ok) { setError(res.error); return; }
         const res2 = await saveSkuPacking(sku.sku_id, packList);
         if (!res2.ok) { setError(res2.error); return; }
@@ -452,6 +504,10 @@ function SkuSetup({
         <label>
           <span className={label}>Pieces per {sku.case_unit}</span>
           <Input inputMode="numeric" value={pcs} onChange={(e) => setPcs(e.target.value)} className="h-9" />
+        </label>
+        <label className="flex items-center gap-2 self-end pb-2 text-[13px] text-foreground">
+          <input type="checkbox" checked={casesOnly} onChange={(e) => setCasesOnly(e.target.checked)} className="size-4 accent-foreground" />
+          Counted in whole boxes only (no loose pieces)
         </label>
         <label>
           <span className={label}>Filled from bulk product</span>
