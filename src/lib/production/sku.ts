@@ -21,6 +21,8 @@ export interface SkuDayRow {
   pack_rate_per_pc: number | null;   // ₹ packing cost per piece; replaces the packing list when set
   /** counted in whole cases only, no loose pieces (Peda: boxes of 20) */
   cases_only: boolean;
+  /** made outside and bought in packed (UHT): no batch of ours to pick, its batches are entered separately */
+  made_outside: boolean;
   is_active: boolean;
   saved: boolean;
   cases: number;
@@ -57,7 +59,7 @@ export async function getSkuDay(date: string): Promise<SkuDayRow[]> {
 async function getSkuDayRows(date: string) {
   return query<Omit<SkuDayRow, "label"> & { label_code: string | null }>(
     `select s.id as sku_id, s.code, coalesce(s.master_sku_no::text, s.code) as label_code, s.name, s.category, s.case_unit, s.pcs_per_case, s.shelf_life_days,
-            s.bulk_product_id, s.bulk_qty_per_pc, s.pack_rate_per_pc, s.cases_only, s.is_active,
+            s.bulk_product_id, s.bulk_qty_per_pc, s.pack_rate_per_pc, s.cases_only, s.made_outside, s.is_active,
             (d.id is not null) as saved, coalesce(d.cases, 0) as cases, coalesce(d.loose_pcs, 0) as loose_pcs, d.bulk_batch_id
        from sku s
        left join sku_pack_day d on d.sku_id = s.id and d.day = $2
