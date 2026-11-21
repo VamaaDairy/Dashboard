@@ -1,6 +1,7 @@
 import { CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { BulkProductionDay } from "@/components/production/BulkProductionDay";
+import { DayReportButton } from "@/components/production/DayReportButton";
 import { getBatches, getBulkProducts, getIngredientOptions, getProductionDays } from "@/lib/production/data";
 import { kgPerLitre } from "@/lib/procurement/data";
 import { getTanksOnDate } from "@/lib/tanks/data";
@@ -24,6 +25,7 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
           icon={CalendarDays}
           title="Production"
           subtitle="Bulk batches made each day - milk drawn from the tanks, the ingredients and labour that went into every product before packing, and the yield."
+          actions={<DayReportButton date={date} />}
         />
         {/* keyed by date so the table starts from that day's saved values */}
         <BulkProductionDay
