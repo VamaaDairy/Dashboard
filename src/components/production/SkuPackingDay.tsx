@@ -80,8 +80,10 @@ export function SkuPackingDay({
   const effective = (s: SkuDayRow) => (mats[s.sku_id].length ? mats[s.sku_id] : pcsOf(s) > 0 ? stdLines(s) : []);
   const bulkOf = (s: SkuDayRow) => (s.bulk_qty_per_pc === null ? null : pcsOf(s) * Number(s.bulk_qty_per_pc));
   const productById = useMemo(() => new Map(bulkProducts.map((p) => [p.id, p])), [bulkProducts]);
-  // the batches a SKU can be packed from: its bulk product's (all of them when it isn't linked to one)
-  const batchesFor = (s: SkuDayRow) => (s.bulk_product_id ? batches.filter((b) => b.bulk_product_id === s.bulk_product_id) : batches);
+  // the batches a SKU can be packed from: its bulk product's (all of them when it isn't linked to one); none for a SKU
+  // made outside (UHT), whose batches are entered separately
+  const batchesFor = (s: SkuDayRow) =>
+    (s.made_outside ? [] : s.bulk_product_id ? batches.filter((b) => b.bulk_product_id === s.bulk_product_id) : batches);
   const batchLabel = (b: BatchChoice, withProduct: boolean) =>
     `${withProduct ? `${b.product} · ` : ""}${dayMonth(b.batch_date)}${b.batch_date === today ? " (today)" : b.batch_date === date ? " (same day)" : ""}${b.batch_no ? ` · #${b.batch_no}` : ""}${b.output_qty ? ` · ${formatNumber(b.output_qty, 1)} ${b.unit}` : ""}`;
   // packed, with batches to pick from, but none picked yet
@@ -115,11 +117,14 @@ export function SkuPackingDay({
     type Line = { key: string; name: string; when: string | null; unit: "kg" | "L"; yieldQty: number | null; batch: boolean; before: number; packed: number; skus: number };
     const lines = new Map<string, Line>();
     let unlinked = 0;
+    let outside = 0;
     for (const b of batches) {
       if (b.batch_date === date) lines.set(b.id, { key: b.id, name: b.product, when: b.batch_date, unit: b.unit, yieldQty: b.output_qty, batch: true, before: b.packed_elsewhere, packed: 0, skus: 0 });
     }
     for (const s of skus) {
       if (pcsOf(s) <= 0) continue;
+      // made outside: none of it came out of our batches
+      if (s.made_outside) { outside += 1; continue; }
       const q = bulkOf(s);
       if (!s.bulk_product_id || q === null) { unlinked += 1; continue; }
       const chosen = batches.find((b) => b.id === entries[s.sku_id].batch);
@@ -135,7 +140,7 @@ export function SkuPackingDay({
       l.packed += q;
       l.skus += 1;
     }
-    return { lines: [...lines.values()], unlinked };
+    return { lines: [...lines.values()], unlinked, outside };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, skus, batches, date, bulkProducts]);
 
@@ -255,7 +260,9 @@ export function SkuPackingDay({
                           {s.cases_only ? <span className="block text-[11px] text-muted-foreground">whole boxes only</span> : null}
                         </td>
                         <td className="px-1.5 py-1">
-                          {opts.length ? (
+                          {s.made_outside ? (
+                            <span className="text-[12px] text-muted-foreground" title="Made outside - its batches are entered separately">Made outside</span>
+                          ) : opts.length ? (
                             <select value={e.batch} onChange={(ev) => set(s.sku_id, { batch: ev.target.value })} aria-label={`${s.name} batch`}
                               title={need ? "Choose the batch this SKU was packed from" : undefined}
                               className={`h-7 max-w-56 rounded-md border bg-white px-1.5 text-[12px] focus:border-foreground/40 focus:outline-none ${need ? "border-destructive font-semibold text-destructive" : "border-border text-foreground"}`}>
@@ -370,6 +377,11 @@ export function SkuPackingDay({
               </tbody>
             </table>
           </div>
+          {reconcile.outside ? (
+            <p className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
+              {reconcile.outside} packed SKU{reconcile.outside > 1 ? "s are" : " is"} made outside (UHT), so not taken out of our batches.
+            </p>
+          ) : null}
           {reconcile.unlinked ? (
             <p className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
               {reconcile.unlinked} packed SKU{reconcile.unlinked > 1 ? "s aren't" : " isn't"} linked to a bulk product, so {reconcile.unlinked > 1 ? "they're" : "it's"} not counted above.
@@ -476,6 +488,7 @@ function SkuSetup({
   }, 0);
   const [pcs, setPcs] = useState(String(sku.pcs_per_case));
   const [casesOnly, setCasesOnly] = useState(sku.cases_only);
+  const [madeOutside, setMadeOutside] = useState(sku.made_outside);
   const [bulk, setBulk] = useState(sku.bulk_product_id ?? "");
   const [perPc, setPerPc] = useState(sku.bulk_qty_per_pc === null ? "" : String(Number(sku.bulk_qty_per_pc)));
   const [packRate, setPackRate] = useState(sku.pack_rate_per_pc === null ? "" : String(Number(sku.pack_rate_per_pc)));
@@ -489,7 +502,7 @@ function SkuSetup({
     <form onSubmit={(e) => {
       e.preventDefault();
       start(async () => {
-        const res = await saveSku(sku.sku_id, { pcs_per_case: pcs, cases_only: casesOnly, bulk_product_id: bulk, bulk_qty_per_pc: perPc, pack_rate_per_pc: packRate, is_active: active });
+        const res = await saveSku(sku.sku_id, { pcs_per_case: pcs, cases_only: casesOnly, made_outside: madeOutside, bulk_product_id: bulk, bulk_qty_per_pc: perPc, pack_rate_per_pc: packRate, is_active: active });
         if (!res.ok) { setError(res.error); return; }
         const res2 = await saveSkuPacking(sku.sku_id, packList);
         if (!res2.ok) { setError(res2.error); return; }
@@ -508,6 +521,10 @@ function SkuSetup({
         <label className="flex items-center gap-2 self-end pb-2 text-[13px] text-foreground">
           <input type="checkbox" checked={casesOnly} onChange={(e) => setCasesOnly(e.target.checked)} className="size-4 accent-foreground" />
           Counted in whole boxes only (no loose pieces)
+        </label>
+        <label className="flex items-center gap-2 text-[13px] text-foreground sm:col-span-2">
+          <input type="checkbox" checked={madeOutside} onChange={(e) => setMadeOutside(e.target.checked)} className="size-4 accent-foreground" />
+          Made outside and bought in packed (like UHT) - no batch is asked when it is packed
         </label>
         <label>
           <span className={label}>Filled from bulk product</span>

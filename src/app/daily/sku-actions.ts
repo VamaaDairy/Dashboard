@@ -38,8 +38,8 @@ export async function saveSkuDay(
     const scenario = await activeScenarioId();
     await tx(async (client) => {
       for (const r of rows) {
-        const sku = await client.query<{ name: string; pcs_per_case: number; pack_rate_per_pc: string | null; cases_only: boolean; case_unit: string; bulk_product_id: string | null }>(
-          `select name, pcs_per_case, pack_rate_per_pc, cases_only, case_unit, bulk_product_id from sku where id = $1 and scenario_id = $2`, [r.sku_id, scenario]);
+        const sku = await client.query<{ name: string; pcs_per_case: number; pack_rate_per_pc: string | null; cases_only: boolean; made_outside: boolean; case_unit: string; bulk_product_id: string | null }>(
+          `select name, pcs_per_case, pack_rate_per_pc, cases_only, made_outside, case_unit, bulk_product_id from sku where id = $1 and scenario_id = $2`, [r.sku_id, scenario]);
         const name = sku.rows[0]?.name;
         const packRate = sku.rows[0]?.pack_rate_per_pc == null ? null : Number(sku.rows[0].pack_rate_per_pc);
         if (!name) throw new Error("A SKU in the list no longer exists - reload the page");
@@ -48,9 +48,10 @@ export async function saveSkuDay(
         if (sku.rows[0].cases_only && loose > 0) throw new Error(`${name} is counted in whole boxes only - enter the number of boxes, no loose pieces`);
         if (sku.rows[0].cases_only && !Number.isInteger(cases)) throw new Error(`${name}: enter a whole number of boxes`);
 
-        // the batch it was packed from: required once its bulk product (or, unlinked, any product) has a batch to pick
+        // the batch it was packed from: required once its bulk product (or, unlinked, any product) has a batch to pick;
+        // a SKU made outside (UHT) has none of ours - its batches are entered separately
         let batch: string | null = null;
-        if (cases > 0 || loose > 0) {
+        if ((cases > 0 || loose > 0) && !sku.rows[0].made_outside) {
           const product = sku.rows[0].bulk_product_id;
           if (r.bulk_batch_id) {
             const b = await client.query<{ bulk_product_id: string }>(
@@ -128,7 +129,7 @@ export async function saveSkuDay(
  */
 export async function saveSku(
   id: string,
-  v: { pcs_per_case: string; cases_only?: boolean; bulk_product_id: string; bulk_qty_per_pc: string; pack_rate_per_pc: string; is_active: boolean },
+  v: { pcs_per_case: string; cases_only?: boolean; made_outside?: boolean; bulk_product_id: string; bulk_qty_per_pc: string; pack_rate_per_pc: string; is_active: boolean },
 ): Promise<Result> {
   try {
     const scenario = await activeScenarioId();
@@ -143,9 +144,9 @@ export async function saveSku(
     }
     await query(
       `update sku set pcs_per_case = $2, bulk_product_id = $3, bulk_qty_per_pc = $4, is_active = $5, pack_rate_per_pc = $7,
-              cases_only = coalesce($8::boolean, cases_only)
+              cases_only = coalesce($8::boolean, cases_only), made_outside = coalesce($9::boolean, made_outside)
         where id = $1 and scenario_id = $6`,
-      [id, pcs, bulk, perPc, v.is_active, scenario, packRate, v.cases_only ?? null],
+      [id, pcs, bulk, perPc, v.is_active, scenario, packRate, v.cases_only ?? null, v.made_outside ?? null],
     );
     revalidatePath("/daily", "layout");
     return { ok: true };
