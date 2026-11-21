@@ -19,10 +19,14 @@ export interface SkuDayRow {
   bulk_product_id: string | null;
   bulk_qty_per_pc: number | null;
   pack_rate_per_pc: number | null;   // ₹ packing cost per piece; replaces the packing list when set
+  /** counted in whole cases only, no loose pieces (Peda: boxes of 20) */
+  cases_only: boolean;
   is_active: boolean;
   saved: boolean;
   cases: number;
   loose_pcs: number;
+  /** the bulk batch this day's packing came out of (none on days saved before batches were asked for) */
+  bulk_batch_id: string | null;
 }
 
 /** A bulk product's yield on a day, from its batch - what the SKUs are packed from. */
@@ -53,8 +57,8 @@ export async function getSkuDay(date: string): Promise<SkuDayRow[]> {
 async function getSkuDayRows(date: string) {
   return query<Omit<SkuDayRow, "label"> & { label_code: string | null }>(
     `select s.id as sku_id, s.code, coalesce(s.master_sku_no::text, s.code) as label_code, s.name, s.category, s.case_unit, s.pcs_per_case, s.shelf_life_days,
-            s.bulk_product_id, s.bulk_qty_per_pc, s.pack_rate_per_pc, s.is_active,
-            (d.id is not null) as saved, coalesce(d.cases, 0) as cases, coalesce(d.loose_pcs, 0) as loose_pcs
+            s.bulk_product_id, s.bulk_qty_per_pc, s.pack_rate_per_pc, s.cases_only, s.is_active,
+            (d.id is not null) as saved, coalesce(d.cases, 0) as cases, coalesce(d.loose_pcs, 0) as loose_pcs, d.bulk_batch_id
        from sku s
        left join sku_pack_day d on d.sku_id = s.id and d.day = $2
       where s.scenario_id = $1 and (s.is_active or d.id is not null)
@@ -71,6 +75,40 @@ export async function getBulkYields(date: string): Promise<BulkYield[]> {
       where b.scenario_id = $1 and b.batch_date = $2
       order by p.sort_order, p.name`,
     [await activeScenarioId(), date],
+  );
+}
+
+/** A batch packing can be entered against: one bulk product's batch of one day. */
+export interface BatchChoice {
+  id: string;
+  bulk_product_id: string;
+  product: string;
+  unit: "kg" | "L";
+  batch_date: string;
+  batch_no: string | null;
+  output_qty: number | null;
+  /** bulk already packed out of it on other days (kg or L), so what is left can be shown */
+  packed_elsewhere: number;
+}
+
+/**
+ * The batches packing on `date` can come from: every bulk batch of the 14 days up to that day, newest first (and any
+ * older batch that day's packing already names). One list; the page shows each SKU the ones of its own bulk product.
+ */
+export async function getBatchChoices(date: string): Promise<BatchChoice[]> {
+  const scenario = await activeScenarioId();
+  return query<BatchChoice>(
+    `select b.id, b.bulk_product_id, p.name as product, p.unit, to_char(b.batch_date, 'YYYY-MM-DD') as batch_date, b.batch_no,
+            b.output_qty::float as output_qty,
+            coalesce((select sum((d.cases * s.pcs_per_case + d.loose_pcs) * coalesce(s.bulk_qty_per_pc, 0))
+                        from sku_pack_day d join sku s on s.id = d.sku_id
+                       where d.bulk_batch_id = b.id and d.day <> $2::date), 0)::float as packed_elsewhere
+       from bulk_batch b join bulk_product p on p.id = b.bulk_product_id
+      where b.scenario_id = $1
+        and ((b.batch_date between $2::date - 14 and $2::date)
+             or b.id in (select bulk_batch_id from sku_pack_day where scenario_id = $1 and day = $2::date and bulk_batch_id is not null))
+      order by b.batch_date desc, p.sort_order, p.name`,
+    [scenario, date],
   );
 }
 
