@@ -13,3 +13,12 @@ update sku set pcs_per_case = 6
 -- Peda is packed in boxes of 20 and counted in boxes only.
 update sku set cases_only = true
  where (category ilike '%peda%' or name ilike '%peda%') and pcs_per_case = 20 and upper(case_unit) in ('CBX', 'BOX');
+
+-- Ghee boxes as the plant packs them (21 Nov 2026): 20 ml 6 a box, 200 ml 90, 500 ml 36, 1 litre 18, 5 litre 4 (already
+-- right). Matched by SKU code; past days are recounted at these too, as for Rabdi. The Ceka packs (1 litre, 900 ml)
+-- and the 15 kg tin were not in the list and are left as they are.
+update sku set pcs_per_case = 6  where code = '1055' and category ilike '%ghee%';
+update sku set pcs_per_case = 90 where code in ('1029', '1039') and category ilike '%ghee%';
+update sku set pcs_per_case = 36 where code in ('1030', '1040') and category ilike '%ghee%';
+update sku set pcs_per_case = 18 where code in ('1031', '1041') and category ilike '%ghee%';
+update sku set pcs_per_case = 4  where code = '1032' and category ilike '%ghee%';
