@@ -34,6 +34,10 @@ export interface FirmRequest {
   lat: number | null;
   lng: number | null;
   gstin: string | null;
+  /** given by a distributor that signs up itself in the app */
+  area: string | null;
+  pan: string | null;
+  licenceNo: string | null;
   kind: string;
   notes: string | null;
   status: "pending" | "approved" | "rejected";
@@ -47,7 +51,7 @@ export interface FirmRequest {
 
 const SELECT = `
   select r.id, r.staff_uid as "staffUid", r.source, nullif(trim(concat_ws(' ', s.first_name, s.last_name)), '') as officer, r.name,
-         r.contact_person as "contactPerson", r.phone, r.email, r.address, r.city, r.pincode, r.state, r.lat, r.lng, r.gstin, r.kind, r.notes,
+         r.contact_person as "contactPerson", r.phone, r.email, r.address, r.city, r.pincode, r.state, r.lat, r.lng, r.gstin, r.area, r.pan, r.licence_no as "licenceNo", r.kind, r.notes,
          r.status, r.firm_uid as "firmUid", f.firm_code as "firmCode", r.reason, r.decided_by as "decidedBy",
          r.decided_at as "decidedAt", r.created_at as "createdAt"
     from dist_firm_request r
@@ -109,7 +113,7 @@ export async function createFirmRequest(
 // ---------------------------------------------------------------- self sign-up (Gaia Distributors app)
 
 export type SelfKind = "distributor" | "retailer";
-type SignupResult = { ok: true } | { ok: false; status: number; error: string; fields?: Record<string, string> };
+type SignupResult = { ok: true; status: "pending" | "active" } | { ok: false; status: number; error: string; fields?: Record<string, string> };
 
 /**
  * Why this number cannot ask for an account, or null when it can: it already signs in, or it is already waiting.
@@ -128,9 +132,18 @@ export async function selfSignupBlocked(phone: string): Promise<string | null> {
   return null;
 }
 
+const PAN = /^[A-Z]{5}\d{4}[A-Z]$/;
+const GSTIN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const coord = (v: unknown, max: number) => (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= max && v !== 0 ? v : null);
+
 /**
- * A distributor or retailer asks for an account: firm name, owner's name, mobile (proved with the SMS code), city and
- * the PIN they will sign in with. It waits for the office on App orders > New customers.
+ * Someone creates an account in the Gaia Distributors app (mobile proved with the SMS code, and the PIN they will sign
+ * in with):
+ *  - a retailer: shop name, owner, city (address, pincode, GSTIN and map pin optional). The account is ready at once:
+ *    the customer is added to Customer Masters (Retail channel, code RT + mobile) and the login is switched on.
+ *  - a distributor: every detail the customer master needs - firm and owner's name, full address, area, city, state,
+ *    pincode, GSTIN, PAN, FSSAI licence and the map pin (email optional). It waits for the office on App orders >
+ *    New customers, and cannot sign in until it is approved.
  */
 export async function createSelfSignup(b: Record<string, unknown>): Promise<SignupResult> {
   const kind: SelfKind | null = b.kind === "distributor" || b.kind === "retailer" ? b.kind : null;
@@ -140,6 +153,16 @@ export async function createSelfSignup(b: Record<string, unknown>): Promise<Sign
   const phone = text(b.phone, 20).replace(/\D/g, "").slice(-10);
   const code = text(b.code, 10).replace(/\D/g, "");
   const pin = text(b.pin, 10);
+  const address = text(b.address, 300);
+  const area = text(b.area, 80);
+  const state = text(b.state, 60);
+  const pincode = text(b.pincode, 10).replace(/\D/g, "");
+  const gstin = text(b.gstin, 15).toUpperCase();
+  const pan = text(b.pan, 10).toUpperCase();
+  const licence = text(b.licenceNo, 30).replace(/\s/g, "");
+  const email = text(b.email, 120);
+  const lat = coord(b.lat, 90);
+  const lng = coord(b.lng, 180);
   const fields: Record<string, string> = {};
   if (!kind) return { ok: false, status: 400, error: "Choose Distributor or Retailer." };
   if (name.length < 3) fields.firmName = kind === "retailer" ? "Enter your shop's name" : "Enter your firm's name";
@@ -147,6 +170,22 @@ export async function createSelfSignup(b: Record<string, unknown>): Promise<Sign
   if (city.length < 2) fields.city = "Enter your city";
   if (!/^[6-9]\d{9}$/.test(phone)) fields.phone = "Enter a valid 10-digit mobile number";
   if (!/^\d{4,8}$/.test(pin)) fields.pin = "The PIN must be 4 to 8 digits";
+  if (pincode && pincode.length !== 6) fields.pincode = "Pincode must be 6 digits";
+  if (gstin && !GSTIN.test(gstin)) fields.gstin = "Check the GSTIN";
+  if (pan && !PAN.test(pan)) fields.pan = "Check the PAN (like ABCDE1234F)";
+  if (licence && !/^\d{14}$/.test(licence)) fields.licenceNo = "The FSSAI licence number has 14 digits";
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fields.email = "Check the email";
+  if (kind === "distributor") {
+    // the customer master's details: all needed before the office can approve
+    if (address.length < 10) fields.address = "Enter the full address";
+    if (area.length < 2) fields.area = "Enter the area / locality";
+    if (state.length < 2) fields.state = "Choose the state";
+    if (pincode.length !== 6) fields.pincode = "Enter the 6-digit pincode";
+    if (!gstin) fields.gstin = "Enter the GSTIN";
+    if (!pan) fields.pan = "Enter the PAN";
+    if (!licence) fields.licenceNo = "Enter the FSSAI licence number";
+    if (lat === null || lng === null) fields.location = "Mark the firm's location on the map";
+  }
   if (Object.keys(fields).length) return { ok: false, status: 400, error: Object.values(fields)[0], fields };
   if (code.length !== 6) return { ok: false, status: 400, error: "Enter the 6-digit code we sent by SMS." };
 
@@ -154,12 +193,22 @@ export async function createSelfSignup(b: Record<string, unknown>): Promise<Sign
   if (blocked) return { ok: false, status: 409, error: blocked };
   if (!(await consumeOtp(phone, code))) return { ok: false, status: 401, error: "That code is wrong or has expired. Ask for a new one." };
 
-  await query(
-    `insert into dist_firm_request (source, name, contact_person, phone, city, kind, pin_hash)
-     values ('app', $1, $2, $3, $4, $5, $6)`,
-    [name, owner, phone, city, kind === "retailer" ? "Retailer" : "Distributor", hashPin(pin)],
+  const r = await one<{ id: number }>(
+    `insert into dist_firm_request (source, name, contact_person, phone, email, address, area, city, state, pincode, lat, lng, gstin, pan, licence_no, kind, pin_hash)
+     values ('app', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) returning id`,
+    [name, owner, phone, email || null, address || null, area || null, city, state || null, pincode || null, lat, lng,
+      gstin || null, pan || null, licence || null, kind === "retailer" ? "Retailer" : "Distributor", hashPin(pin)],
   );
-  return { ok: true };
+  if (kind === "distributor") return { ok: true, status: "pending" };
+
+  // a retailer needs no approval: added to Customer Masters on the Retail channel and signed up at once
+  const rt = await one<{ uid: string }>(`select uid from fp_channel where upper(channel_code) = 'RT' order by level nulls last limit 1`);
+  if (!rt) return { ok: true, status: "pending" }; // no Retail channel set up: the office approves it as before
+  let firmCode = `RT${phone}`;
+  for (let i = 2; await one(`select 1 from fp_firm where upper(firm_code) = $1`, [firmCode]); i++) firmCode = `RT${phone}-${i}`;
+  const done = await approveFirmRequest(r!.id, { code: firmCode, channelUid: rt.uid }, "Retailer sign-up (automatic)");
+  // should that fail the request stays pending for the office, and the retailer is told it is waiting
+  return { ok: true, status: done.ok ? "active" : "pending" };
 }
 
 /**
@@ -222,7 +271,10 @@ export async function approveFirmRequest(
   put("city", r.city);
   put("pincode", r.pincode);
   put("address", r.address);
+  put("place", r.area);
   put("gstin", r.gstin);
+  put("pan", r.pan);
+  put("license_no", r.licenceNo);
   put("latitude", r.lat);
   put("longitude", r.lng);
   const saved = await saveRecord(MASTERS.distribution, null, f, who);

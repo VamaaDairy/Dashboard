@@ -123,6 +123,10 @@ export interface TripStop {
   receivedBy: string | null;
   note: string | null;
   gapM: number | null;
+  /** how a delivered stop was proved: "code", "photo" or "code+photo" */
+  proof: string | null;
+  /** photos the transporter took for this order */
+  photos: number;
   lines: Array<{ name: string; qty: number }>;
 }
 
@@ -154,7 +158,8 @@ const TRIP_SELECT = `
            select json_agg(json_build_object(
              'id', s.id, 'seq', s.seq, 'orderUid', s.order_uid, 'orderId', b.order_id, 'buyer', f.name, 'phone', f.phone, 'address', f.address,
              'lat', f.latitude::float, 'lng', f.longitude::float, 'items', b.total_item::int, 'qty', b.total_quantity::float, 'total', b.total_cost::float,
-             'status', s.status, 'deliveredAt', s.delivered_at, 'receivedBy', s.received_by, 'note', s.note, 'gapM', s.gap_m,
+             'status', s.status, 'deliveredAt', s.delivered_at, 'receivedBy', s.received_by, 'note', s.note, 'gapM', s.gap_m, 'proof', s.proof,
+             'photos', (select count(*)::int from app_photo p where p.kind = 'delivery_trade' and p.ref = s.order_uid::text),
              'lines', coalesce((select json_agg(json_build_object('name', p.sku_name, 'qty', i.quantity::float) order by i.order_item_number)
                                   from fp_booking_order_item i join fp_product p on p.uid = i.product_uid where i.booking_order_uid = b.uid), '[]'::json)
            ) order by s.seq)
@@ -391,11 +396,13 @@ export async function startTrip(riderId: number, tripId: number, pos: Pos): Prom
 export async function finishStop(
   riderId: number,
   stopId: number,
-  input: { delivered: boolean; receivedBy?: string | null; note?: string | null } & Pos,
+  input: { delivered: boolean; receivedBy?: string | null; note?: string | null; code?: string | null; legacy?: boolean } & Pos,
 ): Promise<Result> {
   const r = await tx(async (c) => {
-    const s = (await c.query<{ order_uid: string; status: string; trip_status: string; transporter_id: number | null; flat: number | null; flng: number | null; name: string }>(
-      `select s.order_uid, s.status, t.status as trip_status, t.transporter_id, f.latitude::float as flat, f.longitude::float as flng, r.name
+    const s = (await c.query<{ order_uid: string; status: string; trip_status: string; transporter_id: number | null; flat: number | null; flng: number | null; name: string; code: string | null; photo: boolean }>(
+      `select s.order_uid, s.status, t.status as trip_status, t.transporter_id, f.latitude::float as flat, f.longitude::float as flng, r.name,
+              b.delivery_code as code,
+              exists (select 1 from app_photo p where p.kind = 'delivery_trade' and p.ref = s.order_uid::text and p.created_at >= coalesce(t.started_at, t.created_at)) as photo
          from dist_trip_stop s join dist_trip t on t.id = s.trip_id join fp_booking_order b on b.uid = s.order_uid
          join fp_firm f on f.uid = b.from_firm_uid left join shop_rider r on r.id = t.transporter_id
         where s.id = $1 for update of s`,
@@ -406,14 +413,22 @@ export async function finishStop(
     if (s.status !== "pending") return { ok: false as const, error: "This stop is already done." };
     const note = input.note?.trim().slice(0, 300) || null;
     if (!input.delivered && !note) return { ok: false as const, error: "Say why it was not delivered." };
+    // delivered needs proof: the buyer's delivery code, or a photo taken at the stop - the transporter chooses
+    const code = input.code?.replace(/\D/g, "") || null;
+    if (input.delivered && code && code !== s.code) return { ok: false as const, error: "That delivery code is wrong. Check it with the buyer, or take a photo instead." };
+    const proof = input.delivered ? [code ? "code" : null, s.photo ? "photo" : null].filter(Boolean).join("+") || null : null;
+    // Delivery app 1.0.9 and older cannot send proof (it asks for the photo after): accepted until every phone is updated
+    if (input.delivered && !proof && !input.legacy) return { ok: false as const, error: "Enter the buyer's delivery code, or take a photo of the delivery." };
     const gap = okPos(input) && s.flat !== null && s.flng !== null ? Math.round(haversine({ lat: input.lat!, lng: input.lng! }, { lat: s.flat, lng: s.flng })) : null;
     await c.query(
-      `update dist_trip_stop set status = $2, delivered_at = now(), lat = $3, lng = $4, gap_m = $5, received_by = $6, note = $7, updated_at = now() where id = $1`,
+      `update dist_trip_stop set status = $2, delivered_at = now(), lat = $3, lng = $4, gap_m = $5, received_by = $6, note = $7, proof = $8, updated_at = now() where id = $1`,
       [stopId, input.delivered ? "delivered" : "not_delivered", okPos(input) ? input.lat : null, okPos(input) ? input.lng : null, gap,
-        input.receivedBy?.trim().slice(0, 80) || null, note],
+        input.receivedBy?.trim().slice(0, 80) || null, note, proof],
     );
     const received = input.receivedBy?.trim() ? `Received by ${input.receivedBy.trim().slice(0, 80)}` : null;
-    await event(c, s.order_uid, input.delivered ? "delivered" : "not_delivered", s.name ?? "Transporter", "transporter", input.delivered ? received : note);
+    const proved = proof === "code+photo" ? "Delivery code checked, photo taken" : proof === "code" ? "Delivery code checked" : proof === "photo" ? "Photo taken" : null;
+    await event(c, s.order_uid, input.delivered ? "delivered" : "not_delivered", s.name ?? "Transporter", "transporter",
+      input.delivered ? [received, proved].filter(Boolean).join(". ") || null : note);
     // the truck heads for the next stop: that order is now out for delivery
     const next = (await c.query<{ order_uid: string }>(
       `select x.order_uid from dist_trip_stop x where x.trip_id = (select trip_id from dist_trip_stop where id = $1) and x.status = 'pending' order by x.seq limit 1`,

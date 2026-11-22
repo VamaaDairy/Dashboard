@@ -7,7 +7,7 @@ import { decodeImage, folderFor, savePhoto } from "@/lib/photos";
 export const dynamic = "force-dynamic";
 
 /**
- * The transporter's photo of a trip stop's drop (optional): a stop on one of their own trips, on the road or ended in the
+ * The transporter's photo of a trip stop's drop - proof of delivery when the buyer's code is not entered: a stop on one of their own trips, on the road or ended in the
  * last day. Body: { image: base64 JPEG / PNG }. Saved in deliveries/trade/<month>/<day>/order-<no>/ on the server.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

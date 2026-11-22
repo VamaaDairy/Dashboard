@@ -424,6 +424,8 @@ export interface DistOrderRow {
   placedBy: string;
   /** the party it is for (Customer Masters uid) */
   firmUid: string;
+  /** the 4-digit code the buyer gives the transporter at delivery; null once it is delivered or cancelled */
+  deliveryCode: string | null;
   /** units: the split as ordered, e.g. { CRT: 2, PCS: 5 }; null when ordered by the piece only */
   lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number; units: Units | null }>;
   /** internal: the API adds the order's delivery date, edit window and history from it, then drops it */
@@ -453,6 +455,8 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
     `select b.uid, b.order_id as "orderId", b.booking_time as date, f.name as distributor, f.uid as "firmUid", b.status,
             b.total_item as items, b.total_quantity as qty, b.total_cost as total,
             nullif(trim(b.rejection_reason), '') as reason,
+            case when lower(b.status) in ('cancelled', 'rejected') or exists (select 1 from dist_trip_stop x where x.order_uid = b.uid and x.status = 'delivered')
+                 then null else b.delivery_code end as "deliveryCode",
             (select v.invoice_no from dist_invoice v where v.booking_order_uid = b.uid) as "invoiceNo",
             case b.app_kind when 'distributor' then 'Distributor' when 'retailer' then 'Retailer'
                  when 'salesman' then 'Sales officer' || coalesce(' ' || nullif(trim(so.first_name || ' ' || coalesce(so.last_name, '')), ''), '')
