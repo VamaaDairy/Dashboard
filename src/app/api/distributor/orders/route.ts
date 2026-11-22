@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
  * Orders this login placed (a distributor: its own; a salesman: the ones he booked). Each carries deliveryDate,
  * editableUntil (ISO time, or null when the buyer can no longer change it) and history (placed / edited by Gaia /
  * confirmed ..., with what changed) and tracking: { stage: placed | confirmed | dispatched | delivered | not_delivered |
- * cancelled, trip: { route, vehicleNo, transporter, truck (live position while on the way), stopsBefore, stop } | null }.
+ * cancelled, trip: { route, vehicleNo, transporter, truck (live position while on the way), stopsBefore, stop } | null },
+ * and deliveryCode: the 4-digit code to give the transporter at delivery (null once delivered or cancelled).
  */
 export async function GET(req: NextRequest) {
   const login = await distFromRequest(req);

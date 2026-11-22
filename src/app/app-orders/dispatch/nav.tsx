@@ -9,6 +9,7 @@ const BASE = "/app-orders/dispatch";
 const TABS = [
   { href: BASE, label: "Plan", exact: true, dated: true },
   { href: `${BASE}/live`, label: "Live", dated: true },
+  { href: `${BASE}/load`, label: "Load sheet", dated: true },
   { href: `${BASE}/trips`, label: "Trips" },
   { href: `${BASE}/routes`, label: "Routes" },
   { href: `${BASE}/reports`, label: "Reports" },

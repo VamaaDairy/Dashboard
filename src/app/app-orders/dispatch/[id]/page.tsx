@@ -102,11 +102,16 @@ function StopsList({ t, lateAfter }: { t: Trip; lateAfter: Map<number, number> }
               {s.status === "delivered" ? `Delivered ${at(s.deliveredAt)}` : s.status === "not_delivered" ? `Not delivered ${at(s.deliveredAt)}` : t.status === "on_the_way" ? "Still to do" : "Waiting"}
             </div>
             {lateAfter.has(s.seq) ? <div className="text-[12px] text-amber-700">Done after stop {lateAfter.get(s.seq)}</div> : null}
+            {s.status === "delivered" ? (
+              <div className={cn("text-[12px]", s.proof ? "text-muted-foreground" : "text-amber-700")}>
+                {s.proof === "code+photo" ? "Proof: delivery code + photo" : s.proof === "code" ? "Proof: delivery code" : s.proof === "photo" ? "Proof: photo" : "No proof (older app)"}
+              </div>
+            ) : null}
             {s.receivedBy ? <div className="text-[12px] text-muted-foreground">Received by {s.receivedBy}</div> : null}
             {s.note ? <div className="text-[12px] text-muted-foreground">{s.note}</div> : null}
             {s.gapM !== null ? <div className={cn("text-[12px]", s.gapM > 300 ? "text-amber-700" : "text-muted-foreground")}>Marked {metres(s.gapM)} from the pin</div> : null}
             {s.lat === null ? <div className="text-[12px] text-amber-700">No map pin: set it on the customer in Customer Masters</div> : null}
-            {/* the transporter's optional photo of the drop */}
+            {/* the transporter's photo of the drop (proof when the code was not entered) */}
             <PhotoStrip kind="delivery_trade" refId={s.orderUid} />
           </div>
         </li>

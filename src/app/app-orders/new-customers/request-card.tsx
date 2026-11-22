@@ -44,7 +44,11 @@ export function RequestCard({ r, channels, parents, beats, canEdit }: { r: FirmR
       <dl className="mt-2 grid gap-x-6 gap-y-1 text-[13px] sm:grid-cols-2">
         <div><dt className="inline text-muted-foreground">Contact: </dt><dd className="inline">{r.contactPerson ?? "-"} · {r.phone}{r.email ? ` · ${r.email}` : ""}</dd></div>
         <div><dt className="inline text-muted-foreground">GSTIN: </dt><dd className="inline font-mono">{r.gstin ?? "-"}</dd></div>
-        <div className="sm:col-span-2"><dt className="inline text-muted-foreground">Address: </dt><dd className="inline">{[r.address, r.city, r.state, r.pincode].filter(Boolean).join(", ")}
+        {r.pan || r.licenceNo ? (
+          <div className="sm:col-span-2"><dt className="inline text-muted-foreground">PAN: </dt><dd className="inline font-mono">{r.pan ?? "-"}</dd>
+            <dt className="ml-4 inline text-muted-foreground">FSSAI licence: </dt><dd className="inline font-mono">{r.licenceNo ?? "-"}</dd></div>
+        ) : null}
+        <div className="sm:col-span-2"><dt className="inline text-muted-foreground">Address: </dt><dd className="inline">{[r.address, r.area, r.city, r.state, r.pincode].filter(Boolean).join(", ")}
           {r.lat !== null && r.lng !== null ? <a className="ml-2 text-primary hover:underline" href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer">Map pin</a> : <span className="ml-2 text-muted-foreground">no pin</span>}</dd></div>
         {r.notes ? <div className="sm:col-span-2"><dt className="inline text-muted-foreground">Note: </dt><dd className="inline">{r.notes}</dd></div> : null}
         {r.status === "approved" ? <div className="sm:col-span-2 text-primary">Created as <Link className="font-mono hover:underline" href={`/customers/firm/${r.firmUid}`}>{r.firmCode}</Link> by {r.decidedBy}</div> : null}

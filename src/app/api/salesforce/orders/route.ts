@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
     trackingOf(orders.map((o) => o.uid)),
   ]);
   return NextResponse.json({
-    orders: orders.map(({ uid, ...o }) => ({
+    // the delivery code is the buyer's to give the transporter, not the officer's
+    orders: orders.map(({ uid, deliveryCode: _code, ...o }) => ({
       ...o,
       ...(extras.get(uid) ?? { deliveryDate: null, editableUntil: null, history: [] }),
       // where it is on its road: placed, confirmed, dispatched, out_for_delivery, delivered, not_delivered, cancelled
