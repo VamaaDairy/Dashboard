@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { customerFromRequest } from "@/lib/shop/customer";
-import { mandateLimit, required as autopayRequired, subscriptionMandate } from "@/lib/shop/autopay";
+import { mandateLimit, requiredForNew, subscriptionMandate } from "@/lib/shop/autopay";
 import { nextPack, packState, parsePeriod, periodLabel, periodOf, raisePack, refreshPack, setPeriod } from "@/lib/shop/packs";
 import { rupees } from "@/lib/shop/pricing";
 import { createSubscription, customerCalendar, parsePlan, setDay, todayIST, type PlanInput } from "@/lib/shop/subscriptions";
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   // subscriptions are paid by autopay (UPI or eNACH), never cash: the app sets autopay up first ({ code } tells it
   // to). An eNACH mandate the bank is still approving is enough to save the plan; deliveries start once it is approved.
   const mandate = await subscriptionMandate(c.id);
-  if (autopayRequired() && !mandate) {
+  if (requiredForNew() && !mandate) {
     return NextResponse.json({ error: "Set up autopay to start a subscription.", code: "autopay_required" }, { status: 402 });
   }
   // on autopay it is paid a period at a time (4 weeks, a month, up to a date - body.period { unit, len }, or the

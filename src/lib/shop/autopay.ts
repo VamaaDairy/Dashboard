@@ -36,6 +36,11 @@ export const MIN_MAX = 500;
 /** UPI Autopay debits above ₹15,000 need the customer's PIN each time, so this is the ceiling. */
 export const MAX_MAX = 15000;
 export const required = () => process.env.AUTOPAY_REQUIRED === "1";
+/**
+ * A NEW subscription is started with autopay whenever autopay is switched on: the customer sets it up while
+ * subscribing. (AUTOPAY_REQUIRED additionally stops orders for older subscriptions that still pay cash.)
+ */
+export const requiredForNew = () => required() || eb.autocollectReady();
 const fast = () => process.env.AUTOPAY_FAST === "1" && !eb.isLive();
 const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy.in").replace(/\/+$/, "");
 const EMAIL = process.env.EASEBUZZ_EMAIL ?? "payments@vamaadairy.com";
@@ -241,7 +246,7 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
   const hasPacks = st.paidDays > 0 || !!st.open || st.lastUnpaid;
   return {
     state: active ? "active" : fresh ? "pending" : "none",
-    required: required(),
+    required: requiredForNew(),
     available: eb.autocollectReady(),
     maxAmount: last?.max_amount ?? null,
     kind: last?.kind ?? null,
