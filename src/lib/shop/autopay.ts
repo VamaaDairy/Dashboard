@@ -2,6 +2,7 @@ import "server-only";
 import { one, query } from "@/lib/db";
 import * as eb from "@/lib/payments/autocollect";
 import { notify } from "@/lib/push";
+import * as packs from "./packs";
 
 /**
  * Subscription deliveries paid by autopay (migration 087, issue #65; eNACH added in migration 118).
@@ -17,6 +18,9 @@ import { notify } from "@/lib/push";
  *      Easebuzz's API, never taken from what was posted to us.
  *      eNACH has no notice: the evening a charge is due its debit is raised straight away; Easebuzz hands it to the
  *      bank at 7 AM and the bank's answer comes 24-48 h later.
+ *   Subscriptions are paid in packs of 30 deliveries (src/lib/shop/packs.ts): a pack is a charge with kind 'pack'
+ *   and no order, debited the same way; its days are used by 'prepaid' subscription orders. ('delivery' charges -
+ *   one per delivered 'autopay' order - are the old way, kept only for such orders made before packs.)
  *   4. A failed notice or debit is tried again the next evening; after [MAX_ATTEMPTS] the charge is 'unpaid' and the
  *      customer is asked to pay it in the app.
  *
@@ -26,7 +30,11 @@ import { notify } from "@/lib/push";
  */
 
 export const MAX_ATTEMPTS = 3;
-export const DEFAULT_MAX = 2000;
+/** The mandate's limit is per debit - a whole pack (30 deliveries), so a month's milk, not a day's. */
+export const DEFAULT_MAX = 5000;
+export const MIN_MAX = 500;
+/** UPI Autopay debits above ₹15,000 need the customer's PIN each time, so this is the ceiling. */
+export const MAX_MAX = 15000;
 export const required = () => process.env.AUTOPAY_REQUIRED === "1";
 const fast = () => process.env.AUTOPAY_FAST === "1" && !eb.isLive();
 const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy.in").replace(/\/+$/, "");
@@ -96,6 +104,17 @@ export async function subscriptionMandate(customerId: number): Promise<"active" 
   return m ? "approving" : null;
 }
 
+/** The limit per debit of the mandate that pays the customer's packs (authorised, or eNACH being approved). */
+export async function mandateLimit(customerId: number): Promise<number | null> {
+  const m = await one<{ max_amount: number }>(
+    `select max_amount::float as max_amount from shop_mandate
+      where customer_id = $1 and ((status = '${ACTIVE}' and end_date >= current_date) or (kind = 'enach' and status = any($2) and created_at > now() - interval '3 days'))
+      order by (status = '${ACTIVE}') desc, created_at desc limit 1`,
+    [customerId, PENDING_STATES],
+  );
+  return m?.max_amount ?? null;
+}
+
 const latestMandate = (customerId: number) =>
   one<Mandate>(`select ${M_COLS} from shop_mandate where customer_id = $1 order by created_at desc limit 1`, [customerId]);
 
@@ -107,7 +126,7 @@ export type StartMandate = { ok: true; url: string; txnId: string } | { ok: fals
 export async function startMandate(c: { id: number; name: string; phone: string }, maxAmount = DEFAULT_MAX): Promise<StartMandate> {
   if (!eb.autocollectReady()) return { ok: false, status: 503, error: "Autopay is not available right now." };
   const max = Math.round(Number(maxAmount));
-  if (!Number.isFinite(max) || max < 200 || max > 10000) return { ok: false, status: 400, error: "Choose a limit between ₹200 and ₹10,000 a day." };
+  if (!Number.isFinite(max) || max < MIN_MAX || max > MAX_MAX) return { ok: false, status: 400, error: `Choose a limit between ${rupees(MIN_MAX)} and ${rupees(MAX_MAX)}.` };
   if (await activeMandate(c.id)) return { ok: false, status: 409, error: "Autopay is already set up." };
   const phone = c.phone.replace(/\D/g, "").slice(-10);
   if (!/^[2-9]\d{9}$/.test(phone)) return { ok: false, status: 400, error: "Your account needs a valid mobile number." };
@@ -192,7 +211,17 @@ export interface AutopayView {
   bankAccount: string | null;
   validTill: string | null;
   lastStatus: string | null;
-  charges: Array<{ orderNo: string; day: string | null; amount: number; status: string; failure: string | null; paidAt: string | null }>;
+  /** orderNo is a label for a pack ("30 deliveries"), kept for apps that always expect one */
+  charges: Array<{ kind: "delivery" | "pack"; days: number | null; orderNo: string; day: string | null; amount: number; status: string; failure: string | null; paidAt: string | null }>;
+  /** subscription packs: paid delivery days left, until when, and the next pack */
+  pack: {
+    daysLeft: number;
+    paidTill: string | null;
+    balance: number;
+    open: { status: string; amount: number; days: number } | null;
+    /** the last pack could not be collected: the app offers "Try again" */
+    unpaid: boolean;
+  } | null;
   unpaid: number;
 }
 
@@ -200,11 +229,14 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
   const active = await activeMandate(customerId);
   const last = active ?? (await latestMandate(customerId));
   const fresh = last && PENDING_STATES.includes(last.status) && Date.now() - new Date(last.created_at).getTime() < PENDING_FOR[last.kind ?? "upi"];
-  const charges = await query<{ order_no: string; day: string | null; amount: number; status: string; failure: string | null; paid_at: Date | null }>(
-    `select o.order_no, o.subscription_day::text as day, c.amount::float as amount, c.status, c.failure, c.paid_at
-       from shop_charge c join shop_order o on o.id = c.order_id where c.customer_id = $1 order by c.created_at desc limit 30`,
+  const charges = await query<{ kind: "delivery" | "pack"; days: number | null; order_no: string | null; day: string | null; amount: number; status: string; failure: string | null; paid_at: Date | null }>(
+    `select c.kind, c.days, o.order_no, o.subscription_day::text as day, c.amount::float as amount, c.status, c.failure, c.paid_at
+       from shop_charge c left join shop_order o on o.id = c.order_id
+      where c.customer_id = $1 and c.status <> 'cancelled' order by c.created_at desc limit 30`,
     [customerId],
   );
+  const st = await packs.packState(customerId);
+  const hasPacks = st.paidDays > 0 || !!st.open || st.lastUnpaid;
   return {
     state: active ? "active" : fresh ? "pending" : "none",
     required: required(),
@@ -215,8 +247,21 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
     bankAccount: active?.bank_account ?? null,
     validTill: active?.end_date ?? null,
     lastStatus: last?.status ?? null,
-    charges: charges.map((c) => ({ orderNo: c.order_no, day: c.day, amount: c.amount, status: c.status, failure: c.failure, paidAt: c.paid_at ? new Date(c.paid_at).toISOString() : null })),
-    unpaid: charges.filter((c) => c.status === "unpaid").reduce((n, c) => n + c.amount, 0),
+    charges: charges.map((c) => ({
+      kind: c.kind, days: c.days, orderNo: c.order_no ?? `${c.days} deliveries`, day: c.day, amount: c.amount, status: c.status, failure: c.failure,
+      paidAt: c.paid_at ? new Date(c.paid_at).toISOString() : null,
+    })),
+    // a pack that could not be collected is not a debt (nothing was delivered for it): only delivery charges count
+    unpaid: charges.filter((c) => c.status === "unpaid" && c.kind === "delivery").reduce((n, c) => n + c.amount, 0),
+    pack: hasPacks
+      ? {
+          daysLeft: st.daysLeft,
+          paidTill: await packs.paidTill(customerId, st),
+          balance: st.balance,
+          open: st.open ? { status: st.open.status, amount: st.open.amount, days: st.open.days } : null,
+          unpaid: st.lastUnpaid,
+        }
+      : null,
   };
 }
 
@@ -238,7 +283,10 @@ export async function chargeDelivered(orderId: number): Promise<void> {
 
 interface Charge {
   id: number;
-  order_id: number;
+  order_id: number | null;
+  /** 'delivery' (one order) or 'pack' ([days] deliveries) */
+  ckind: "delivery" | "pack";
+  days: number | null;
   customer_id: number;
   amount: number;
   status: string;
@@ -252,9 +300,9 @@ interface Charge {
   max_amount: number | null;
   order_no: string;
 }
-const C_SELECT = `select c.id, c.order_id, c.customer_id, c.amount::float as amount, c.status, c.attempts, c.notify_no, c.debit_no, c.notified_at,
-                         am.txn_id, am.kind, am.max_amount, o.order_no
-                    from shop_charge c join shop_order o on o.id = c.order_id
+const C_SELECT = `select c.id, c.order_id, c.kind as ckind, c.days, c.customer_id, c.amount::float as amount, c.status, c.attempts, c.notify_no, c.debit_no, c.notified_at,
+                         am.txn_id, am.kind, am.max_amount, coalesce(o.order_no, 'pack') as order_no
+                    from shop_charge c left join shop_order o on o.id = c.order_id
                     left join lateral (select m.txn_id, m.kind, m.max_amount::float as max_amount from shop_mandate m
                                         where m.customer_id = c.customer_id and m.status = '${ACTIVE}' and m.end_date >= current_date
                                         order by m.authorized_at desc nulls last limit 1) am on true`;
@@ -269,17 +317,31 @@ async function failed(c: Charge, reason: string): Promise<void> {
   const last = c.attempts >= MAX_ATTEMPTS;
   await query(`update shop_charge set status = $2, failure = $3, updated_at = now() where id = $1`, [c.id, last ? "unpaid" : "pending", reason.slice(0, 200)]);
   if (last) {
-    await notify("customer", c.customer_id, {
-      title: "Payment due",
-      body: `We couldn't collect ${rupees(c.amount)} for order ${c.order_no} by autopay. Please pay it in the Gaia app.`,
-      data: { screen: "autopay" },
-    });
+    await notify("customer", c.customer_id, c.ckind === "pack"
+      ? {
+          title: "Subscription payment failed",
+          body: `We couldn't collect ${rupees(c.amount)} for your next ${c.days ?? packs.PACK_DAYS} deliveries. Deliveries stop after the days already paid. Open the Gaia app to try again.`,
+          data: { screen: "autopay" },
+        }
+      : {
+          title: "Payment due",
+          body: `We couldn't collect ${rupees(c.amount)} for order ${c.order_no} by autopay. Please pay it in the Gaia app.`,
+          data: { screen: "autopay" },
+        });
   }
 }
 
 async function paid(c: Charge, raw: unknown): Promise<void> {
   const r = await query(`update shop_charge set status = 'paid', paid_at = now(), failure = null, raw = $2, updated_at = now() where id = $1 and status <> 'paid' returning id`, [c.id, JSON.stringify(raw)]);
   if (!r.length) return;
+  if (c.ckind === "pack") {
+    await notify("customer", c.customer_id, {
+      title: "Subscription paid",
+      body: `${rupees(c.amount)} was paid by autopay from ${by(c.kind)} for your next ${c.days ?? packs.PACK_DAYS} deliveries.`,
+      data: { screen: "autopay" },
+    });
+    return;
+  }
   await query(`update shop_order set payment_status = 'paid', updated_at = now() where id = $1`, [c.order_id]);
   await notify("customer", c.customer_id, {
     title: "Paid by autopay",
@@ -288,17 +350,31 @@ async function paid(c: Charge, raw: unknown): Promise<void> {
   });
 }
 
+/**
+ * A pack is priced again just before it goes to the bank (things may have changed since it was raised). False when
+ * it is no longer to be sent (nothing renews, or the balance covers it); otherwise [c] carries the amount to send.
+ */
+async function packReady(c: Charge): Promise<boolean> {
+  if (c.ckind !== "pack" || c.status !== "pending") return true;
+  const next = await packs.refreshPack(c.id, c.customer_id);
+  if (!next) return false;
+  c.amount = next.amount;
+  c.days = next.days;
+  return true;
+}
+
 /** A debit above the mandate's limit is refused by the bank every time: no point trying (or bouncing) it. */
 async function overLimit(c: Charge): Promise<boolean> {
   if (c.max_amount == null || c.amount <= c.max_amount) return false;
   await query(`update shop_charge set attempts = $2 where id = $1`, [c.id, MAX_ATTEMPTS]);
-  await failed({ ...c, attempts: MAX_ATTEMPTS }, `More than the autopay limit of ${rupees(c.max_amount)} a day`);
+  await failed({ ...c, attempts: MAX_ATTEMPTS }, `More than the autopay limit of ${rupees(c.max_amount)}`);
   return true;
 }
 
 /** Sends the bank its notice for a pending charge (opens the 24-hour wait). */
 async function sendNotice(c: Charge): Promise<void> {
   if (!c.txn_id) return; // no active mandate: the charge waits until the customer sets autopay up again
+  if (!(await packReady(c))) return;
   if (await overLimit(c)) return;
   const attempt = c.attempts + 1;
   const notifyNo = `GN${c.id}A${attempt}`;
@@ -337,6 +413,7 @@ async function debit(c: Charge): Promise<void> {
 /** eNACH: raises the debit for a pending charge straight away (no notice). The bank answers in 24-48 h. */
 async function presentEnach(c: Charge): Promise<void> {
   if (!c.txn_id) return;
+  if (!(await packReady(c))) return;
   if (await overLimit(c)) return;
   const m = await eb.getMandate(c.txn_id).catch(() => null);
   if (m && m.status !== ACTIVE) {
@@ -406,6 +483,26 @@ export async function runAutopay(now = new Date()): Promise<{ notified: number; 
     [PENDING_STATES],
   );
   for (const m of approving) await refreshMandate(m.txn_id);
+
+  // packs: cancelled subscriptions end once their paid days are used; the next pack is raised a few days before
+  // the paid days run out (not again by itself after one could not be collected - the customer tries again in the
+  // app, or a new mandate starts it)
+  const payers = await query<{ customer_id: number }>(
+    `select distinct s.customer_id from shop_subscription s
+      where s.status = 'active'
+        and (exists (select 1 from shop_charge c where c.customer_id = s.customer_id and c.kind = 'pack')
+             or exists (select 1 from shop_mandate m where m.customer_id = s.customer_id and m.status = '${ACTIVE}' and m.end_date >= current_date))`,
+  );
+  for (const { customer_id } of payers) {
+    await packs.endFinished(customer_id);
+    const st = await packs.packState(customer_id);
+    if (st.open || st.daysLeft > packs.LEAD_DAYS) continue;
+    if (st.lastUnpaid) {
+      const m = await activeMandate(customer_id);
+      if (!m?.authorized_at || !st.lastUnpaidAt || new Date(m.authorized_at) <= new Date(st.lastUnpaidAt)) continue;
+    }
+    await packs.raisePack(customer_id);
+  }
   if (!inDebitWindow(now)) return out;
 
   // (fast test mode: due at once - the cutoff is a minute ahead so database and server clocks never disagree)
@@ -483,7 +580,7 @@ export const allMandates = () =>
 
 export const recentCharges = () =>
   query<{ id: number; order_no: string; customer: string; day: string | null; amount: number; status: string; attempts: number; failure: string | null; notified_at: Date | null; paid_at: Date | null }>(
-    `select ch.id, o.order_no, c.name as customer, o.subscription_day::text as day, ch.amount::float as amount, ch.status, ch.attempts, ch.failure, ch.notified_at, ch.paid_at
-       from shop_charge ch join shop_order o on o.id = ch.order_id join shop_customer c on c.id = ch.customer_id
+    `select ch.id, coalesce(o.order_no, 'Pack · ' || ch.days || ' deliveries') as order_no, c.name as customer, o.subscription_day::text as day, ch.amount::float as amount, ch.status, ch.attempts, ch.failure, ch.notified_at, ch.paid_at
+       from shop_charge ch left join shop_order o on o.id = ch.order_id join shop_customer c on c.id = ch.customer_id
       order by ch.created_at desc limit 300`,
   );

@@ -70,7 +70,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
           </div>
           <div className="text-right">
             <div className="text-[22px] font-semibold tracking-tight tabular-nums text-foreground">{rupees(o.total)}</div>
-            <div className="text-[13px] text-foreground/75">{o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : "Online"} · {paidText}</div>
+            <div className="text-[13px] text-foreground/75">{o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : o.payment_method === "prepaid" ? "Subscription pack" : "Online"} · {paidText}</div>
             <a href={`/app-orders/d2c/${o.id}/invoice`} target="_blank" rel="noreferrer" title={isBilled(o) ? "Open the invoice in a new tab to view, print or save as PDF" : "Not charged yet: the customer is billed once the order is delivered"}
               className="mt-2 inline-flex h-7 items-center gap-1.5 rounded-md border border-foreground/15 px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.04]">
               <FileText className="size-3.5" /> Invoice{isBilled(o) ? "" : " (not charged yet)"}
@@ -161,7 +161,7 @@ export default async function D2cOrderPage({ params }: { params: Promise<{ id: s
             </Section>
 
             <Section title="Payment">
-              <KV label="Method">{o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : "Online (Easebuzz)"}</KV>
+              <KV label="Method">{o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : o.payment_method === "prepaid" ? "Subscription pack (autopay)" : "Online (Easebuzz)"}</KV>
               <KV label="Status">{paidText}</KV>
               <KV label="Amount">{rupees(o.total)}</KV>
               {payments.length ? (

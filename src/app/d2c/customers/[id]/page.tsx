@@ -82,7 +82,7 @@ export default async function D2cCustomerPage({ params }: { params: Promise<{ id
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{when(o.created_at)}</td>
                     <td className="min-w-64 px-3 py-2">{o.items}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{o.payment_method === "online" ? "Online" : "Cash"}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{o.payment_method === "online" ? "Online" : o.payment_method === "prepaid" ? "Subscription pack" : o.payment_method === "autopay" ? "Autopay" : "Cash"}</td>
                     <td className="num whitespace-nowrap px-3 py-2 text-right font-medium">{rs(o.total)}</td>
                     <td className="whitespace-nowrap px-3 py-2">{STATUS_LABEL[o.status] ?? o.status}</td>
                   </tr>

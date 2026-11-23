@@ -33,7 +33,8 @@ export async function officeUpdatePlan(who: string, customerId: number, id: numb
 
 export async function officeSetStatus(who: string, customerId: number, id: number, status: "active" | "paused" | "cancelled"): Promise<Result> {
   if (!(await owns(customerId, id))) return { ok: false, error: "That subscription no longer exists." };
-  if (!(await updateSubscription(customerId, id, { status }))) return { ok: false, error: "Could not change the status." };
+  // the office's cancel is at once (a customer's own runs to the end of what they paid)
+  if (!(await updateSubscription(customerId, id, { status }, { immediate: true }))) return { ok: false, error: "Could not change the status." };
   await audit(who, id, `Subscription ${status === "active" ? "resumed" : status} for customer ${customerId}`);
   return { ok: true };
 }

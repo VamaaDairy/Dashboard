@@ -3,6 +3,7 @@ import { Repeat } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { allMandates, MAX_ATTEMPTS, recentCharges, required } from "@/lib/shop/autopay";
 import { autocollectReady, isLive } from "@/lib/payments/autocollect";
+import { packCustomers, PACK_DAYS } from "@/lib/shop/packs";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ const tone = (s: string) =>
 
 /** Autopay (UPI Autopay or eNACH) for subscriptions: who has it set up, and how each delivery's debit is going (issue #65). */
 export default async function AutopayPage() {
-  const [mandates, charges] = await Promise.all([allMandates(), recentCharges()]);
+  const [mandates, charges, payers] = await Promise.all([allMandates(), recentCharges(), packCustomers()]);
   const active = mandates.filter((m) => m.status === "authorized").length;
   const unpaid = charges.filter((c) => c.status === "unpaid").reduce((n, c) => n + c.amount, 0);
   const th = "whitespace-nowrap px-3 py-2 font-semibold";
@@ -35,7 +36,7 @@ export default async function AutopayPage() {
         <PageHeader
           icon={Repeat}
           title="Autopay"
-          subtitle={`Subscription deliveries are charged to the customer's bank. UPI Autopay: the evening a delivery is handed over the bank is told the amount, and it is debited the next evening (NPCI: 24 h notice, off-peak hours). eNACH (bank account): the debit is raised that evening, goes to the bank at 7 AM and is settled in 24-48 h. A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to pay in the app.`}
+          subtitle={`Subscriptions are paid ${PACK_DAYS} deliveries at a time, by UPI Autopay or eNACH (bank account). A day's order is made only while paid days are left; skipped and paused days use none. The next pack is debited a few days before they run out (UPI: bank told 24 h ahead; eNACH: settled in 24-48 h). A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to try again in the app. A cancelled subscription is delivered until its paid days are used, then ends - no refund.`}
           actions={<Link href="/shop-orders/subscriptions" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Subscriptions</Link>}
         />
         <div className="grid gap-3 md:grid-cols-3">
@@ -54,11 +55,35 @@ export default async function AutopayPage() {
           </div>
         </div>
 
+        <h2 className="pt-2 text-sm font-semibold">Subscription packs</h2>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
+              <tr>{["Customer", "Paid deliveries left", "Used / paid", "Balance", "Next pack", "Renews"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {payers.map((p) => (
+                <tr key={p.customer_id} className="border-t border-border">
+                  <td className="px-3 py-2"><div className="font-medium">{p.customer}</div><div className="font-mono text-xs text-muted-foreground">{p.phone}</div></td>
+                  <td className={`num px-3 py-2 font-semibold ${p.paid_days - p.used_days <= 0 ? "text-red-700" : ""}`}>{Math.max(0, p.paid_days - p.used_days)}</td>
+                  <td className="num px-3 py-2">{p.used_days} / {p.paid_days}</td>
+                  <td className="num px-3 py-2">{money(p.balance)}</td>
+                  <td className={`whitespace-nowrap px-3 py-2 ${p.open_status ? tone(p.open_status) : p.last_status === "unpaid" ? "text-red-700" : "text-muted-foreground"}`}>
+                    {p.open_status ? `${money(p.open_amount ?? 0)} · ${CHARGE[p.open_status] ?? p.open_status}` : p.last_status === "unpaid" ? "Last one not collected" : "-"}
+                  </td>
+                  <td className="px-3 py-2">{p.renewing ? "Yes" : "No"}</td>
+                </tr>
+              ))}
+              {payers.length === 0 ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">No customer pays by packs yet.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+
         <h2 className="pt-2 text-sm font-semibold">Charges</h2>
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-              <tr>{["Order", "Customer", "Delivery day", "Amount", "Status", "Tries", "Bank notified", "Paid", "Last problem"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+              <tr>{["For", "Customer", "Delivery day", "Amount", "Status", "Tries", "Bank notified", "Paid", "Last problem"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {charges.map((c) => (
@@ -74,7 +99,7 @@ export default async function AutopayPage() {
                   <td className="max-w-xs truncate px-3 py-2 text-muted-foreground" title={c.failure ?? ""}>{c.failure ?? ""}</td>
                 </tr>
               ))}
-              {charges.length === 0 ? <tr><td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">No autopay charges yet. A delivered subscription order of a customer with autopay appears here.</td></tr> : null}
+              {charges.length === 0 ? <tr><td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">No autopay charges yet. A subscription pack appears here once a customer on autopay subscribes.</td></tr> : null}
             </tbody>
           </table>
         </div>

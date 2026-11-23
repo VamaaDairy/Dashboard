@@ -28,7 +28,7 @@ export function toOrderRow(o: BoardRow, labels: Map<number, ProductLabel>, now =
     subtotal: Number(o.subtotal),
     deliveryFee: Number(o.delivery_fee),
     total: Number(o.total),
-    payMethod: o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : "Online",
+    payMethod: o.payment_method === "cod" ? "Cash on delivery" : o.payment_method === "autopay" ? "Autopay" : o.payment_method === "prepaid" ? "Subscription pack" : "Online",
     paid: o.payment_status === "paid"
       ? { label: o.payment_method === "cod" ? "Collected" : "Paid", tone: "good" }
       : o.payment_status === "refunded" ? { label: "Refunded", tone: "bad" }
