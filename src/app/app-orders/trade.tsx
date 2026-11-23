@@ -9,7 +9,7 @@ import { Panel, Pill } from "@/components/cn/ui";
 import { OrderDecision } from "@/components/masters/OrderDecision";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { getTradeOrder, listTradeOrders, tradeStatuses, type TradeKind } from "@/lib/app-orders";
+import { getTradeOrder, listTradeOrders, tradeStatuses, type TradeKind, type TradeOrder } from "@/lib/app-orders";
 import { rupees } from "@/lib/shop/pricing";
 import { decideAppOrderAction } from "./actions";
 import { confirmSelectedAction } from "./edit-actions";
@@ -170,7 +170,9 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
           <div className="min-w-0 space-y-5">
             {editable ? (
               <Panel title="Items" description="Pending: change quantities, remove or add products, then save. The buyer is told what changed." flush>
-                <OrderEditor uid={o.uid} lines={o.lines.map((l) => ({ sku: l.sku, name: l.name, qty: Number(l.qty), rate: Number(l.rate), split: l.split }))} products={products} />
+                {/* what is paid for, at the list price; the offers the order was placed under are worked out again on save */}
+                <OrderEditor uid={o.uid} lines={o.lines.filter((l) => !l.free).map((l) => ({ sku: l.sku, name: l.name, qty: Number(l.qty), rate: Number(l.listRate), split: l.split }))} products={products} />
+                <OfferLines lines={o.lines} />
               </Panel>
             ) : (
               <Panel title="Items" description={`${o.lines.length} product${o.lines.length === 1 ? "" : "s"} · ${qty(o.qty)} units`} flush>
@@ -189,7 +191,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                     </thead>
                     <tbody>
                       {o.lines.map((l) => (
-                        <tr key={l.sku} className="border-t border-border">
+                        <tr key={`${l.sku}-${l.free}`} className="border-t border-border">
                           <td className="px-4 py-2.5">
                             <ProductCell p={{ sku: l.sku, skuNo: null, name: l.name, qty: l.packQty, unit: l.unit, image: l.image, inMaster: true }} size={40} />
                           </td>
@@ -199,7 +201,11 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                             {qty(l.qty)}
                             {l.split ? <div className="text-[11px] font-semibold text-muted-foreground">{l.split}</div> : null}
                           </td>
-                          <td className="num px-4 py-2.5 text-right">{rupees(l.rate)}</td>
+                          <td className="num px-4 py-2.5 text-right">
+                            {l.free ? <span className="font-semibold">Free</span> : rupees(l.rate)}
+                            {l.discount > 0 ? <div className="text-[11px] text-muted-foreground line-through">{rupees(l.listRate)}</div> : null}
+                            {l.offer ? <div className="text-[11px] text-muted-foreground">{l.offer}</div> : null}
+                          </td>
                           <td className="num px-4 py-2.5 text-right text-muted-foreground">{rupees(l.mrp)}</td>
                           <td className="num px-4 py-2.5 text-right font-medium">{rupees(l.amount)}</td>
                         </tr>
@@ -208,6 +214,7 @@ export async function TradeOrderPage({ kind, uid }: { kind: TradeKind; uid: stri
                     <tfoot className="border-t border-border text-[13px]">
                       <tr><td colSpan={6} className="px-4 pt-3 text-right text-muted-foreground">Value at MRP</td><td className="num px-4 pt-3 text-right">{rupees(mrpValue)}</td></tr>
                       <tr><td colSpan={6} className="px-4 py-1 text-right text-muted-foreground">{t.one} margin</td><td className="num px-4 py-1 text-right">{rupees(margin)}</td></tr>
+                      {o.lines.some((l) => l.discount > 0) ? <tr><td colSpan={6} className="px-4 py-1 text-right text-muted-foreground">Offer discount</td><td className="num px-4 py-1 text-right">−{rupees(o.lines.reduce((s, l) => s + l.discount, 0))}</td></tr> : null}
                       <tr className="font-semibold"><td colSpan={6} className="px-4 pb-3 text-right">Order value</td><td className="num px-4 pb-3 text-right">{rupees(o.total)}</td></tr>
                     </tfoot>
                   </table>
@@ -357,3 +364,18 @@ function OrderRoad({ road, placedAt, confirmedAt }: { road: OrderTracking | null
     </Panel>
   );
 }
+
+/** Under the order editor: the free items and discounts the order got from partner offers (worked out again on save). */
+function OfferLines({ lines }: { lines: TradeOrder["lines"] }) {
+  const free = lines.filter((l) => l.free);
+  const off = lines.reduce((s, l) => s + l.discount, 0);
+  if (!free.length && off <= 0) return null;
+  return (
+    <div className="border-t border-border px-4 py-3 text-[13px] text-muted-foreground">
+      {off > 0 ? <div>Offer discount: <span className="font-medium text-foreground">−{rupees(off)}</span></div> : null}
+      {free.map((l) => <div key={l.sku}>Free: <span className="font-medium text-foreground">{qty(l.qty)} × {l.name}</span>{l.offer ? ` (${l.offer})` : ""}</div>)}
+      <div className="text-[12px]">Offers are worked out again when the order is saved.</div>
+    </div>
+  );
+}
+

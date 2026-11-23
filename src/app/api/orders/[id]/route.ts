@@ -73,7 +73,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         packs.set(sku, (packs.get(sku) ?? 0) + p);
       }
     }
-    const r = await editOrder(a.uid, lines, who, typeof b.note === "string" ? b.note : null, packs);
+    const r = await editOrder(a.uid, lines, who, typeof b.note === "string" ? b.note : null, packs, { totals: true });
     return r.ok ? NextResponse.json({ ok: true }) : apiError(409, r.error);
   }
   return apiError(400, 'Send { "action": "confirm" | "cancel" | "reopen" | "edit", ... }.');

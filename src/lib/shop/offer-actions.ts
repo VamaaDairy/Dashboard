@@ -5,7 +5,14 @@ import { revalidatePath } from "next/cache";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { one, query } from "@/lib/db";
-import { normaliseCode } from "./offers-engine";
+import { normaliseCode, type Audience } from "./offers-engine";
+
+const AUDIENCES: Audience[] = ["d2c", "distributor", "retailer", "partners"];
+/** Both apps' offer pages see every change (the banner list too). */
+function refresh() {
+  for (const p of ["/shop-orders/offers", "/app-orders/marketing/offers"]) revalidatePath(p, "layout");
+  for (const p of ["/shop-orders/banners", "/app-orders/marketing/banners"]) revalidatePath(p);
+}
 
 async function editor() {
   const me = await userFromToken((await cookies()).get("session")?.value);
@@ -42,6 +49,8 @@ export interface OfferInput {
   active: boolean;
   showInApp: boolean;
   priority: number;
+  /** d2c, or the Gaia Distributors app: distributor / retailer / partners (both) */
+  audience: Audience;
 }
 
 const pos = (n: number | null, max: number) => n == null || (Number.isFinite(n) && n > 0 && n <= max);
@@ -75,6 +84,7 @@ function check(o: OfferInput): string | null {
   if (o.endsAt && !local(o.endsAt)) return "Check the end date and time.";
   if (o.startsAt && o.endsAt && o.endsAt <= o.startsAt) return "The offer must end after it starts.";
   if (!whole(o.priority) || Math.abs(o.priority) > 10000) return "Priority must be a whole number.";
+  if (!AUDIENCES.includes(o.audience)) return "Choose who the offer is for.";
   return null;
 }
 
@@ -102,14 +112,19 @@ export async function saveOfferAction(id: number | null, raw: OfferInput): Promi
   const known = new Set((await query<{ sku_code: string }>(`select sku_code from fp_product where sku_code = any($1)`, [[...o.skus, ...(o.freeSku ? [o.freeSku] : [])]])).map((r) => r.sku_code));
   if (o.skus.some((s) => !known.has(s)) || (o.freeSku && !known.has(o.freeSku))) return { ok: false, error: "One of the chosen products no longer exists." };
   if (o.code && (await one(`select 1 from shop_offer where code = $1 and id is distinct from $2`, [o.code, id]))) return { ok: false, error: `The code ${o.code} is already used by another offer.` };
+  // an offer stays in its app: a D2C offer never becomes a partner one or the other way round
+  if (id) {
+    const was = await one<{ audience: Audience }>(`select audience from shop_offer where id = $1`, [id]);
+    if (was && (was.audience === "d2c") !== (o.audience === "d2c")) return { ok: false, error: "An offer cannot move between the D2C app and the Distributors app." };
+  }
 
   const vals = [
     o.title, o.badge || null, o.description || null, o.kind, o.appliesTo, o.skus, o.categories, o.percent, o.amount, o.maxDiscount,
     o.buyQty, o.freeSku, o.freeQty, o.repeat, o.minQty, o.minAmount, o.code || null, o.firstOrderOnly, o.perCustomerLimit, o.totalLimit,
-    local(o.startsAt), local(o.endsAt), o.active, o.showInApp, o.priority,
+    local(o.startsAt), local(o.endsAt), o.active, o.showInApp, o.priority, o.audience,
   ];
   const cols = `title, badge, description, kind, applies_to, skus, categories, percent, amount, max_discount, buy_qty, free_sku, free_qty, repeat,
-                min_qty, min_amount, code, first_order_only, per_customer_limit, total_limit, starts_at, ends_at, active, show_in_app, priority`;
+                min_qty, min_amount, code, first_order_only, per_customer_limit, total_limit, starts_at, ends_at, active, show_in_app, priority, audience`;
   let saved: number;
   try {
     if (id) {
@@ -128,8 +143,7 @@ export async function saveOfferAction(id: number | null, raw: OfferInput): Promi
     return { ok: false, error: `Could not save the offer: ${(e as Error).message}` };
   }
   await syncOfferBanner(saved);
-  revalidatePath("/shop-orders/offers", "layout");
-  revalidatePath("/shop-orders/banners");
+  refresh();
   return { ok: true, id: saved };
 }
 
@@ -140,8 +154,8 @@ export async function saveOfferAction(id: number | null, raw: OfferInput): Promi
  * switched off with the offer, and the app only shows it while the offer runs.
  */
 async function syncOfferBanner(id: number) {
-  const o = await one<{ title: string; description: string | null; show_in_app: boolean; active: boolean; applies_to: string; sku: string | null; code: string | null; priority: number }>(
-    `select title, description, show_in_app, active, applies_to, coalesce(skus[1], free_sku) as sku, code, priority from shop_offer where id = $1`,
+  const o = await one<{ title: string; description: string | null; show_in_app: boolean; active: boolean; applies_to: string; sku: string | null; code: string | null; priority: number; audience: Audience }>(
+    `select title, description, show_in_app, active, applies_to, coalesce(skus[1], free_sku) as sku, code, priority, audience from shop_offer where id = $1`,
     [id],
   );
   if (!o) return;
@@ -150,13 +164,13 @@ async function syncOfferBanner(id: number) {
   const has = await one(`select 1 from shop_banner where offer_id = $1`, [id]);
   if (has) {
     await query(
-      `update shop_banner set title = left($2, 60), subtitle = left($3, 100), cta = $4, sku_code = $5, active = $6, updated_at = now() where offer_id = $1`,
-      [id, o.title, o.description, cta, o.sku, on],
+      `update shop_banner set title = left($2, 60), subtitle = left($3, 100), cta = $4, sku_code = $5, active = $6, audience = $7, updated_at = now() where offer_id = $1`,
+      [id, o.title, o.description, cta, o.sku, on, o.audience],
     );
   } else if (on) {
     await query(
-      `insert into shop_banner (title, subtitle, cta, sku_code, offer_id, priority, active) values (left($1, 60), left($2, 100), $3, $4, $5, $6, true)`,
-      [o.title, o.description, cta, o.sku, id, 100 + o.priority],
+      `insert into shop_banner (title, subtitle, cta, sku_code, offer_id, priority, active, audience) values (left($1, 60), left($2, 100), $3, $4, $5, $6, true, $7)`,
+      [o.title, o.description, cta, o.sku, id, 100 + o.priority, o.audience],
     );
   }
 }
@@ -165,8 +179,7 @@ export async function setOfferActiveAction(id: number, active: boolean): Promise
   if (!(await editor())) return NO;
   await query(`update shop_offer set active = $2, updated_at = now() where id = $1`, [id, active]);
   await syncOfferBanner(id);
-  revalidatePath("/shop-orders/offers", "layout");
-  revalidatePath("/shop-orders/banners");
+  refresh();
   return { ok: true };
 }
 
@@ -176,28 +189,28 @@ export async function duplicateOfferAction(id: number): Promise<Result> {
   if (!me) return NO;
   const r = await one<{ id: number }>(
     `insert into shop_offer (title, badge, description, kind, applies_to, skus, categories, percent, amount, max_discount, buy_qty, free_sku, free_qty,
-                             repeat, min_qty, min_amount, code, first_order_only, per_customer_limit, total_limit, starts_at, ends_at, active, show_in_app, priority, created_by)
+                             repeat, min_qty, min_amount, code, first_order_only, per_customer_limit, total_limit, starts_at, ends_at, active, show_in_app, priority, created_by, audience)
      select left('Copy of ' || title, 80), badge, description, kind, applies_to, skus, categories, percent, amount, max_discount, buy_qty, free_sku, free_qty,
-            repeat, min_qty, min_amount, null, first_order_only, per_customer_limit, total_limit, starts_at, ends_at, false, show_in_app, priority, $2
+            repeat, min_qty, min_amount, null, first_order_only, per_customer_limit, total_limit, starts_at, ends_at, false, show_in_app, priority, $2, audience
        from shop_offer where id = $1 returning id`,
     [id, me.name ?? me.email ?? null],
   );
-  revalidatePath("/shop-orders/offers", "layout");
+  refresh();
   return r ? { ok: true, id: r.id } : { ok: false, error: "That offer no longer exists." };
 }
 
 /** An offer that orders have used is only switched off (orders keep pointing at it); an unused one is deleted. */
 export async function deleteOfferAction(id: number): Promise<Result> {
   if (!(await editor())) return NO;
-  if (await one(`select 1 from shop_order_offer where offer_id = $1 limit 1`, [id])) {
+  if (await one(`select 1 from shop_order_offer where offer_id = $1 union all select 1 from dist_order_offer where offer_id = $1 limit 1`, [id])) {
     await query(`update shop_offer set active = false, updated_at = now() where id = $1`, [id]);
     await syncOfferBanner(id);
-    revalidatePath("/shop-orders/offers", "layout");
+    refresh();
     return { ok: false, error: "Orders have used this offer, so it was switched off instead of deleted (their bills still show it)." };
   }
   // its own banner goes with it
   await query(`delete from shop_banner where offer_id = $1`, [id]);
   await query(`delete from shop_offer where id = $1`, [id]);
-  revalidatePath("/shop-orders/offers", "layout");
+  refresh();
   return { ok: true };
 }

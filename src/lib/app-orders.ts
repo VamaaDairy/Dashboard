@@ -158,7 +158,8 @@ export interface TradeOrder extends TradeOrderRow {
   supplierCity: string | null;
   /** name / packQty / unit / image: the Product Master's one name for the product (product_label). */
   /** split: the quantity as ordered in crates / boxes and pieces, e.g. "2 CRT + 5 PCS"; null when by the piece only. */
-  lines: Array<{ sku: string; name: string; packQty: string | null; unit: string | null; qty: number; rate: number; mrp: number; amount: number; image: string | null; split: string | null }>;
+  /** rate: paid per piece; listRate: before any offer; discount: rupees off; free: given by an offer (offer: its name) */
+  lines: Array<{ sku: string; name: string; packQty: string | null; unit: string | null; qty: number; rate: number; listRate: number; mrp: number; amount: number; discount: number; free: boolean; offer: string | null; image: string | null; split: string | null }>;
 }
 
 export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
@@ -183,7 +184,9 @@ export async function getTradeOrder(uid: string): Promise<TradeOrder | null> {
   await syncProductLabels();
   const raw = await query<Omit<TradeOrder["lines"][number], "split"> & { units: unknown }>(
     `select p.sku_code as sku, coalesce(pl.name, p.sku_name) as name, pl.qty as "packQty", pl.unit,
-            i.quantity as qty, i.selling_price as rate, i.mrp, i.total_cost as amount, pl.image, i.units
+            i.quantity as qty, i.selling_price as rate, coalesce(i.dp, i.selling_price) as "listRate", i.mrp, i.total_cost as amount,
+            coalesce(i.scheme_discount, 0) as discount, coalesce((i.scheme_details->>'free')::boolean, false) as free, i.scheme_details->>'offer' as offer,
+            pl.image, i.units
      from fp_booking_order_item i join fp_product p on p.uid = i.product_uid left join ${labelJoin("p.sku_code")}
      where i.booking_order_uid = $1 order by i.order_item_number`,
     [uid],

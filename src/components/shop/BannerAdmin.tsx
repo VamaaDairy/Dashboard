@@ -17,12 +17,16 @@ export interface BannerRow {
   startsAt: string | null;
   endsAt: string | null;
   image: string | null;
+  /** d2c, or the Gaia Distributors app: distributor / retailer / partners (both) */
+  audience: "d2c" | "distributor" | "retailer" | "partners";
 }
 
 export interface ProductOption { sku: string; name: string; image: string | null }
 export interface OfferOption { id: number; title: string; badge: string | null; live: boolean }
-/** What the form can point a banner at. */
-export interface BannerTargets { products: ProductOption[]; categories: string[]; offers: OfferOption[] }
+/** What the form can point a banner at, and which app's banners it makes. */
+export interface BannerTargets { products: ProductOption[]; categories: string[]; offers: OfferOption[]; app: "d2c" | "partners" }
+
+const FOR = [["partners", "Both"], ["distributor", "Distributors"], ["retailer", "Retailers"]] as const;
 
 const box = "h-9 rounded-lg border border-input bg-transparent px-3 text-sm";
 const label = "text-xs text-muted-foreground";
@@ -86,6 +90,7 @@ export function BannerForm({ targets, banner, onDone }: { targets: BannerTargets
   const [bg, setBg] = useState(banner?.bgColor ?? "#2F3992");
   const [poster, setPoster] = useState<string | null>(banner?.image ?? null);
   const [removeImage, setRemoveImage] = useState(false);
+  const [audience, setAudience] = useState<string>(targets.app === "d2c" ? "d2c" : banner?.audience && banner.audience !== "d2c" ? banner.audience : "partners");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -107,12 +112,24 @@ export function BannerForm({ targets, banner, onDone }: { targets: BannerTargets
           if (onDone) return onDone();
           formRef.current?.reset();
           setTitle(""); setSubtitle(""); setCta(""); setSku(""); setBg("#2F3992"); setPoster(null); setLink(""); setCategory(""); setOfferId("");
+          setAudience(targets.app === "d2c" ? "d2c" : "partners");
         });
       }}
     >
       {banner ? <input type="hidden" name="id" value={banner.id} /> : null}
       <input type="hidden" name="removeImage" value={removeImage ? "1" : ""} />
+      <input type="hidden" name="audience" value={audience} />
       <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2" style={{ minWidth: 280 }}>
+        {targets.app === "partners" ? (
+          <div className="sm:col-span-2">
+            <div className={label}>Shown to</div>
+            <div className="mt-1 inline-flex rounded-lg border border-input p-0.5">
+              {FOR.map(([v, l]) => (
+                <button key={v} type="button" onClick={() => setAudience(v)} className={`h-8 rounded-md px-3 text-sm ${audience === v ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <label className={label}>Title<input name="title" value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} className={`${box} mt-1 block w-full`} placeholder="Pure Desi Ghee" /></label>
         <label className={label}>Button text<input name="cta" value={cta} maxLength={20} onChange={(e) => setCta(e.target.value)} className={`${box} mt-1 block w-full`} placeholder="Shop now" /></label>
         <label className={`${label} sm:col-span-2`}>Subtitle<input name="subtitle" value={subtitle} maxLength={100} onChange={(e) => setSubtitle(e.target.value)} className={`${box} mt-1 block w-full`} placeholder="Rich aroma, slow-cooked the traditional way" /></label>
