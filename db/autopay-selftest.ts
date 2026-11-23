@@ -373,6 +373,13 @@ async function main() {
     const r2w = (await pk.packState(w4.x.id)).open;
     check(r2w?.days === 14, `renewal pays the same 2 weeks again (got ${r2w?.days})`);
 
+    // ---------------------------------------------------------------- 9c. autopay on, not required: new ones need it, old cash ones go on
+    check(ap.requiredForNew() && !ap.required(), "autopay switched on: a NEW subscription must set it up");
+    const old = await newCustomer("Old Cash");
+    await subscribe(old, 1);
+    await subs.generateOrders(today);
+    check((await ordersOf(old.id))[0]?.payment_method === "cod", "an older subscription without autopay still gets its cash delivery");
+
     // ---------------------------------------------------------------- 10. autopay required
     process.env.AUTOPAY_REQUIRED = "1";
     const w = await newCustomer("No Mandate");

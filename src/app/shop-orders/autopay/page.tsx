@@ -43,7 +43,7 @@ export default async function AutopayPage() {
           <div className={card}>
             <div className="text-xs font-semibold uppercase text-muted-foreground">Easebuzz Autocollect</div>
             <div className="mt-1 text-lg font-bold">{autocollectReady() ? (isLive() ? "Live" : "Sandbox (test money)") : "Not configured"}</div>
-            <div className="text-sm text-muted-foreground">{required() ? "Autopay is required for subscriptions" : "Autopay optional - customers without it pay cash"}</div>
+            <div className="text-sm text-muted-foreground">{required() ? "Every subscription is paid by autopay" : autocollectReady() ? "New subscriptions start with autopay; older ones paying cash keep going" : "Autopay is off"}</div>
           </div>
           <div className={card}>
             <div className="text-xs font-semibold uppercase text-muted-foreground">Customers with autopay</div>
