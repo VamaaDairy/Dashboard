@@ -369,6 +369,12 @@ const WORKING: NavSection[] = [
           },
         ),
       },
+    ],
+  },
+  {
+    // the field sales force (the Gaia Salesforce app) on its own, apart from Distributor & Retail
+    id: "salesforce", label: "Salesforce", icon: MapPinned,
+    groups: [
       {
         label: "Field sales",
         items: items(
@@ -379,6 +385,7 @@ const WORKING: NavSection[] = [
           orders("Promoters", Users, ["firmPromoter", "firmPromoterReport", "serviceManagementView"]),
         ),
       },
+      { label: "People", items: [{ href: "/employees/salesforce", key: "employees", label: "Salesforce staff", icon: Users }] },
     ],
   },
   {
