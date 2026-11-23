@@ -1,5 +1,4 @@
 import "server-only";
-import { required as autopayRequired } from "./autopay";
 import { deliversOn, packState, paidTill, periodOf, prepaidCustomers, raisePack, refreshPack } from "./packs";
 import { query, tx } from "@/lib/db";
 import { notifyOrderStatus, notifySubscription } from "@/lib/push";
@@ -399,24 +398,21 @@ export async function generateOrders(day: string): Promise<{ created: number; it
     byCustomer.set(s.customer_id, [...(byCustomer.get(s.customer_id) ?? []), { sub: s, qty }]);
   }
 
-  // customers on autopay pay by packs (src/lib/shop/packs.ts): a day's order only while paid days are left, made as
-  // 'prepaid' (already paid, nothing at the door). With autopay required, anyone else gets no order.
+  // subscriptions are paid by autopay, a period at a time (src/lib/shop/packs.ts): a day's order only while paid
+  // days are left, made as 'prepaid' (already paid, nothing at the door). No autopay, no order.
   const prepaid = await prepaidCustomers([...byCustomer.keys()]);
-  const mustAutopay = autopayRequired();
 
   let created = 0, items = 0;
   for (const [customerId, all] of byCustomer) {
-    let lines = all;
-    if (prepaid.has(customerId)) {
-      const st = await packState(customerId);
-      // the day number this order would be; a cancelled subscription only runs to its last paid day
-      lines = st.daysLeft > 0 ? all.filter(({ sub }) => deliversOn(sub, st.usedDays + 1)) : [];
-      if (!lines.length) {
-        skipped += all.length;
-        continue;
-      }
-    } else if (mustAutopay) {
-      skipped += lines.length;
+    if (!prepaid.has(customerId)) {
+      skipped += all.length;
+      continue;
+    }
+    const st = await packState(customerId);
+    // the day number this order would be; a cancelled subscription only runs to its last paid day
+    const lines = st.daysLeft > 0 ? all.filter(({ sub }) => deliversOn(sub, st.usedDays + 1)) : [];
+    if (!lines.length) {
+      skipped += all.length;
       continue;
     }
     const to = lines[lines.length - 1].sub; // the newest subscription's address
@@ -431,8 +427,7 @@ export async function generateOrders(day: string): Promise<{ created: number; it
         `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, status, customer_id, subscription_day, payment_method, payment_status)
          values ($1, $2, $3, $4, 'Subscription delivery', $5, $6, $7, $8, $9, 'confirmed', $10, $11, $12, $13)
          on conflict do nothing returning id`,
-        [to.name, to.phone, to.address, to.pincode, to.lat, to.lng, subtotal, fee, subtotal + fee, customerId, day,
-         prepaid.has(customerId) ? "prepaid" : "cod", prepaid.has(customerId) ? "paid" : "pending"],
+        [to.name, to.phone, to.address, to.pincode, to.lat, to.lng, subtotal, fee, subtotal + fee, customerId, day, "prepaid", "paid"],
       );
       if (!o.rows.length) return 0;
       for (const r of rows) {

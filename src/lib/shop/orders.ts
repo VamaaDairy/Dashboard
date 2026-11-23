@@ -1,5 +1,4 @@
 import "server-only";
-import { chargeDelivered } from "./autopay";
 import { one, query, tx } from "@/lib/db";
 import { shop } from "@/lib/whatsapp/config";
 import { notifyOrderStatus, notifyRiderAssigned } from "@/lib/push";
@@ -197,7 +196,6 @@ export async function setOrderStatus(id: number, status: string): Promise<boolea
     [id, status],
   );
   if (r[0]?.changed) await notifyOrderStatus(id, status);
-  if (r[0]?.changed && status === "delivered") await chargeDelivered(id);
   // the delivery session follows: marked delivered from the office (no code checked), or ended by a cancel
   if (r[0]?.changed && status === "delivered") await sessionDelivered(id, null, false);
   if (r[0]?.changed && status === "cancelled") await endSession(id, "cancelled");
@@ -285,7 +283,6 @@ export async function riderDeliver(riderId: number, id: number, otp: string): Pr
   );
   await sessionDelivered(id, riderId, !o.subscription);
   await notifyOrderStatus(id, "delivered");
-  await chargeDelivered(id);
   return "ok";
 }
 
