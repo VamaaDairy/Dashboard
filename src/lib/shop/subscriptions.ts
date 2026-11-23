@@ -243,6 +243,8 @@ export async function createSubscription(
   customerId: number,
   plan: PlanInput,
   to: { name: string; phone: string; address: string; pincode: string | null; lat: number | null; lng: number | null },
+  /** false: its first payment is still to be made - the customer is told once it is paid, not before */
+  announce = true,
 ): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   if (!(await pricesFor([plan.sku])).has(plan.sku)) return { ok: false, error: "That product is not available." };
   const [row] = await query<{ id: number }>(
@@ -250,7 +252,7 @@ export async function createSubscription(
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) returning id`,
     [customerId, plan.sku, plan.qty, plan.frequency, plan.weekdays, plan.everyN, plan.startDate, plan.endDate, to.name, to.phone, to.address, to.pincode, to.lat, to.lng],
   );
-  await notifySubscription(customerId, "created");
+  if (announce) await notifySubscription(customerId, "created");
   return { ok: true, id: row.id };
 }
 

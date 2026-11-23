@@ -143,8 +143,8 @@ async function settleUpfront(txnId: string, customerId: number, info: eb.Mandate
     if (r.length) {
       const p = r[0] as { amount: number; days: number };
       await notify("customer", customerId, {
-        title: "Autopay is on",
-        body: `${rupees(p.amount)} was paid for your next ${p.days} deliveries. Later payments are taken by themselves.`,
+        title: "Subscription started",
+        body: `${rupees(p.amount)} paid for your next ${p.days} deliveries. Later payments are taken by UPI Autopay by themselves.`,
         data: { screen: "autopay" },
       });
       return;
