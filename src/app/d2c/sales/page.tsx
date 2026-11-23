@@ -34,7 +34,7 @@ export default async function D2cSalesPage({ searchParams }: { searchParams: Pro
         <SalesDashboard
           from={from} to={to} today={today} s={s} prev={prev} days={days} categories={categories} products={products} buyers={buyers} areas={areas}
           statuses={statuses.map((x) => ({ ...x, label: STATUS_LABEL[x.status] ?? x.status }))}
-          payments={[...byMethod].map(([m, revenue]) => ({ label: m === "online" ? "Online" : "Cash on delivery", revenue }))}
+          payments={[...byMethod].map(([m, revenue]) => ({ label: m === "online" ? "Online" : m === "prepaid" ? "Subscription packs (autopay)" : m === "autopay" ? "Autopay" : "Cash on delivery", revenue }))}
         />
       </div>
     </div>

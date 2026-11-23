@@ -45,7 +45,7 @@ export function amountInWords(n: number) {
 
 export const isBilled = (o: Pick<ShopOrder, "status" | "payment_status">) => o.status === "delivered" && o.payment_status !== "refunded";
 const paymentLabel = (o: ShopOrder) => {
-  const how = o.payment_method === "online" ? "Online" : o.payment_method === "autopay" ? "UPI Autopay" : "Cash";
+  const how = o.payment_method === "online" ? "Online" : o.payment_method === "autopay" ? "Autopay" : o.payment_method === "prepaid" ? "Subscription pack (autopay)" : "Cash";
   return o.payment_status === "paid" ? `${how} - paid` : o.payment_status === "refunded" ? `${how} - refunded` : `${how} - unpaid`;
 };
 

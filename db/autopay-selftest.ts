@@ -1,6 +1,7 @@
 /**
- * Self-test of UPI Autopay for subscriptions (src/lib/shop/autopay.ts) against a LOCAL database, with a fake
- * Easebuzz that checks every signature. Never run against production.
+ * Self-test of autopay for subscriptions - UPI and eNACH mandates, and subscriptions paid 30 deliveries at a time
+ * (src/lib/shop/autopay.ts, src/lib/shop/packs.ts) - against a LOCAL database, with a fake Easebuzz that checks every
+ * signature. Other customers' subscriptions are paused while it runs and put back after. Never run against production.
  *
  *   DATABASE_URL=postgres://localhost:5432/costing_erp_preview npx tsx --conditions=react-server db/autopay-selftest.ts
  */
@@ -22,6 +23,7 @@ const check = (ok: boolean, what: string) => {
 
 // ---- fake Easebuzz Autocollect ----
 const mandates = new Map<string, string>(); // txn -> status
+const enach = new Set<string>(); // txns the customer approved as eNACH (bank account)
 const notices = new Map<string, { status: string; amount: number }>();
 const debits = new Map<string, { status: string; amount: number }>();
 let failDebits = false;
@@ -37,7 +39,7 @@ const fake: typeof fetch = async (input, init) => {
   if (url.host !== "sandboxapi.easebuzz.in") return bad("wrong host");
   if (path === "/v1/access-key/generate/") {
     if (auth !== sha("TESTKEY", String(body.amount), body.transaction_id)) return bad("bad hash (access key)");
-    if (body.frequency !== "as_presented" || body.amount_rule !== "MAX" || body.payment_modes[0] !== "UPIAD") return bad("bad mandate terms");
+    if (body.frequency !== "as_presented" || body.amount_rule !== "MAX" || body.payment_modes.join() !== "UPIAD,EN") return bad("bad mandate terms");
     mandates.set(body.transaction_id, "requested");
     return json({ success: true, access_key: `AK${body.transaction_id}` });
   }
@@ -45,7 +47,9 @@ const fake: typeof fetch = async (input, init) => {
   if (m && init?.method === "GET" && !["notify", "execute"].includes(m[1])) {
     if (auth !== sha("TESTKEY", m[1])) return bad("bad hash (mandate get)");
     if (!mandates.has(m[1])) return json({ success: false, message: "not found" }, 404);
-    return json({ success: true, data: { id: `MR${m[1]}`, transaction_id: m[1], status: mandates.get(m[1]), customer_upi_handle: "test@upi", umrn: "U1" } });
+    return json({ success: true, data: enach.has(m[1])
+      ? { id: `MR${m[1]}`, transaction_id: m[1], status: mandates.get(m[1]), mandate_type: "ENACH", customer_account_number: "XXXXXXXX2828", customer_upi_handle: "", umrn: "E1" }
+      : { id: `MR${m[1]}`, transaction_id: m[1], status: mandates.get(m[1]), mandate_type: "UPI", customer_upi_handle: "test@upi", umrn: "U1" } });
   }
   if (path === "/v1/mandate/notify/") {
     if (auth !== sha("TESTKEY", body.transaction_id, body.notification_request_number, String(body.amount))) return bad("bad hash (notify)");
@@ -68,6 +72,12 @@ const fake: typeof fetch = async (input, init) => {
     debits.set(body.merchant_request_number, { status: "in_process", amount: body.amount });
     return json({ success: true, data: { status: "in_process" } });
   }
+  if (path === "/v1/mandate/presentment/" && init?.method === "POST") {
+    if (auth !== sha("TESTKEY", body.transaction_id, body.merchant_request_number, String(body.amount))) return bad("bad hash (eNACH presentment)");
+    if (!enach.has(body.transaction_id) || mandates.get(body.transaction_id) !== "authorized") return bad("not an active eNACH mandate");
+    debits.set(body.merchant_request_number, { status: "in_process", amount: body.amount });
+    return json({ success: true, data: { status: "in_process", merchant_request_number: body.merchant_request_number } });
+  }
   m = /^\/v1\/mandate\/presentment\/([^/]+)\/$/.exec(path);
   if (m) {
     if (auth !== sha("TESTKEY", m[1])) return bad("bad hash (presentment get)");
@@ -83,98 +93,295 @@ async function main() {
   const { setFetcher } = await import("@/lib/payments/autocollect");
   setFetcher(fake);
   const ap = await import("@/lib/shop/autopay");
+  const pk = await import("@/lib/shop/packs");
   const subs = await import("@/lib/shop/subscriptions");
   const orders = await import("@/lib/shop/orders");
+  const { deliveryFor } = await import("@/lib/shop/pricing");
   const { one, query, pool } = await import("@/lib/db");
 
-  const sku = (await (await import("@/lib/shop/catalog")).listProducts())[0].sku;
-  const phone = `9${String(Date.now()).slice(-9)}`;
-  const cust = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash) values ('Autopay Test', $1, 'x') returning id`, [phone]))!;
-  const backdate = (id: number) => query(`update shop_charge set updated_at = now() - interval '10 minutes' where id = $1`, [id]);
+  const product = (await (await import("@/lib/shop/catalog")).listProducts())[0];
+  const sku = product.sku;
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const dayValue = (qty: number) => { const sub = r2(product.price * qty); return r2(sub + deliveryFor(sub, orders.deliveryRule)); };
+  const today = subs.todayIST();
+  let seq = 0;
+  const extra: number[] = [];
+  const newCustomer = async (name: string) => {
+    const phone = `9${String(Date.now()).slice(-7)}${String(seq++).padStart(2, "0")}`;
+    const c = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash) values ($1, $2, 'x') returning id`, [name, phone]))!;
+    extra.push(c.id);
+    return { id: c.id, name, phone };
+  };
+  const to = (c: { name: string; phone: string }) => ({ name: c.name, phone: c.phone, address: "Test street 1", pincode: null, lat: null, lng: null });
+  const subscribe = async (c: { id: number; name: string; phone: string }, qty: number, frequency: "daily" | "alternate" = "daily", start = today) => {
+    const r = await subs.createSubscription(c.id, { sku, qty, frequency, weekdays: null, everyN: null, startDate: start, endDate: null }, to(c));
+    if (!r.ok) throw new Error(r.error);
+    return r.id;
+  };
+  const mandate = async (c: { id: number; name: string; phone: string }, kind: "upi" | "enach" = "upi", max = 15000) => {
+    const m = await ap.startMandate(c, max);
+    if (!m.ok) throw new Error(m.error);
+    if (kind === "enach") enach.add(m.txnId);
+    mandates.set(m.txnId, "authorized");
+    await ap.refreshMandate(m.txnId);
+    return m.txnId;
+  };
+  /** runs the autopay rounds until the customer's pack is settled (paid / unpaid / cancelled) */
+  const settle = async (customerId: number) => {
+    for (let i = 0; i < 40; i++) {
+      await ap.runAutopay();
+      const st = await pk.packState(customerId);
+      if (!st.open) return st;
+      await query(`update shop_charge set updated_at = now() - interval '2 hours' where customer_id = $1 and kind = 'pack' and status = any($2)`, [customerId, pk.OPEN]);
+    }
+    return pk.packState(customerId);
+  };
+  const ordersOf = (customerId: number) =>
+    query<{ id: number; day: string; total: number; payment_method: string; payment_status: string; status: string }>(
+      `select id, to_char(subscription_day, 'YYYY-MM-DD') as day, total::float as total, payment_method, payment_status, status
+         from shop_order where customer_id = $1 and subscription_day is not null order by subscription_day`,
+      [customerId],
+    );
+  /** makes the orders of [n] days from [from] (as the evening job would), for this customer only (others are paused) */
+  const runDays = async (from: string, n: number) => {
+    for (let i = 0; i < n; i++) await subs.generateOrders(subs.addDays(from, i));
+  };
+
+  // keep the database's own subscriptions out of the way
+  const others = (await query<{ id: number }>(`update shop_subscription set status = 'paused' where status = 'active' returning id`)).map((r) => r.id);
 
   try {
-    // 1. set up the mandate
-    const s = await ap.startMandate({ id: cust.id, name: "Autopay Test", phone });
+    // ---------------------------------------------------------------- mandates
+    const a = await newCustomer("Autopay Test");
+    const s = await ap.startMandate(a, 5000);
     check(s.ok && s.url.startsWith("https://testpay.easebuzz.in/pay/AK"), "mandate start returns Easebuzz's approval page");
     if (!s.ok) throw new Error("no mandate");
-    check((await ap.autopayView(cust.id)).state === "pending", "app sees 'pending' while waiting for the UPI app");
+    check((await ap.autopayView(a.id)).state === "pending", "app sees 'pending' while waiting for the UPI app");
     mandates.set(s.txnId, "authorized");
     await ap.onWebhook({ event: "MANDATE_STATUS_UPDATE", data: { transaction_id: s.txnId, status: "rejected" } }); // post says rejected, API says authorized
-    check((await ap.autopayView(cust.id)).state === "active", "webhook reads the status back from Easebuzz (not from the post)");
-    check(!(await ap.startMandate({ id: cust.id, name: "Autopay Test", phone })).ok, "a second mandate is refused while one is active");
+    check((await ap.autopayView(a.id)).state === "active", "webhook reads the status back from Easebuzz (not from the post)");
+    check(!(await ap.startMandate(a, 5000)).ok, "a second mandate is refused while one is active");
+    check(!(await ap.startMandate((await newCustomer("Limit")), 300)).ok && !(await ap.startMandate((await newCustomer("Limit2")), 20000)).ok, "a limit below ₹500 or above ₹15,000 is refused");
 
-    // 2. subscription orders become autopay orders
-    const day = subs.todayIST();
-    const sub = await subs.createSubscription(cust.id, { sku, qty: 2, frequency: "daily", weekdays: null, everyN: null, startDate: day, endDate: null }, { name: "Autopay Test", phone, address: "Test street 1", pincode: null, lat: null, lng: null });
-    if (!sub.ok) throw new Error(sub.error);
-    await subs.generateOrders(day);
-    const o = (await one<{ id: number; payment_method: string; total: number }>(`select id, payment_method, total::float as total from shop_order where customer_id = $1 and subscription_day = $2`, [cust.id, day]))!;
-    check(o?.payment_method === "autopay", "the day's subscription order is an autopay order");
+    // ---------------------------------------------------------------- 1. first pack (UPI, 2 a day)
+    await subscribe(a, 2);
+    const p1 = await pk.raisePack(a.id);
+    check(p1?.status === "pending" && p1.days === 30 && p1.amount === r2(30 * dayValue(2)), `first pack: 30 deliveries for ${r2(30 * dayValue(2))} (got ${p1?.amount})`);
+    check((await pk.raisePack(a.id))?.id === p1?.id, "raising again gives the same pack (never two on their way)");
+    await subs.generateOrders(today);
+    check((await ordersOf(a.id)).length === 0, "no delivery before the pack is paid");
+    const before1 = calls.length;
+    const st1 = await settle(a.id);
+    check(st1.paidDays === 30 && st1.daysLeft === 30, "pack paid: 30 delivery days");
+    check(calls.slice(before1).some((c) => c.includes("notify/")) && calls.slice(before1).some((c) => c.includes("execute/")), "UPI pack: bank notice, then the debit");
+    await runDays(today, 31);
+    let o1 = await ordersOf(a.id);
+    check(o1.length === 30, `exactly 30 deliveries over 31 days (got ${o1.length})`);
+    check(o1.every((o) => o.payment_method === "prepaid" && o.payment_status === "paid"), "each one is prepaid: nothing to collect at the door");
+    check((await pk.packState(a.id)).daysLeft === 0, "no paid days left after 30");
+    await orders.setOrderStatus(o1[5].id, "cancelled");
+    check((await pk.packState(a.id)).daysLeft === 1, "a cancelled delivery gives its day back");
+    await subs.generateOrders(subs.addDays(today, 31));
+    o1 = await ordersOf(a.id);
+    check(o1.filter((o) => o.status !== "cancelled").length === 30 && o1.at(-1)?.day === subs.addDays(today, 31), "...and that day is delivered later instead");
 
-    // 3. delivered: stays unpaid until the debit, and becomes a charge
-    await orders.setOrderStatus(o.id, "delivered");
-    const afterDeliver = (await one<{ payment_status: string }>(`select payment_status from shop_order where id = $1`, [o.id]))!;
-    check(afterDeliver.payment_status === "pending", "delivered autopay order is not marked paid at the door");
-    let ch = (await one<{ id: number; status: string; amount: number }>(`select id, status, amount::float as amount from shop_charge where order_id = $1`, [o.id]))!;
-    check(ch?.status === "pending" && ch.amount === o.total, "delivery creates a pending charge for the order total");
+    // ---------------------------------------------------------------- 2. skipped days and pauses extend the pack
+    const b = await newCustomer("Skip Test");
+    await mandate(b);
+    const subB = await subscribe(b, 1);
+    await pk.raisePack(b.id);
+    await settle(b.id);
+    for (const d of [2, 5, 6]) await query(`insert into shop_subscription_day (subscription_id, day, qty) values ($1, $2, 0)`, [subB, subs.addDays(today, d)]);
+    await runDays(today, 33);
+    const ob = await ordersOf(b.id);
+    check(ob.length === 30 && ob.at(-1)?.day === subs.addDays(today, 32), `3 skipped days: still 30 deliveries, the last on day 33 (got ${ob.length}, ${ob.at(-1)?.day})`);
+    check(!ob.some((o) => [2, 5, 6].map((d) => subs.addDays(today, d)).includes(o.day)), "nothing delivered on the skipped days");
 
-    // 4. evening: notice -> notified -> debit -> paid
+    // ---------------------------------------------------------------- 3. renewal a few days before the end; changes settled
+    const c = await newCustomer("Renew Test");
+    await mandate(c);
+    await subscribe(c, 1);
+    await pk.raisePack(c.id);
+    await settle(c.id);
+    await runDays(today, 26); // 4 days left
+    const oc = await ordersOf(c.id);
+    await query(`update shop_order set total = total + 50 where id = $1`, [oc[3].id]); // one day had more milk (₹50 more)
+    check((await pk.packState(c.id)).balance === r2(4 * dayValue(1) - 50), "balance = what is paid minus what was delivered");
     await ap.runAutopay();
-    ch = (await one(`select id, status, amount::float as amount from shop_charge where id = $1`, [ch.id]))!;
-    check(ch.status === "notifying", "notice sent to the bank");
-    await backdate(ch.id);
+    const renew = (await pk.packState(c.id)).open;
+    check(renew != null, "4 paid days left: the next pack is raised");
     await ap.runAutopay();
-    ch = (await one(`select id, status, amount::float as amount from shop_charge where id = $1`, [ch.id]))!;
-    check(ch.status === "presenting", "after the notice is confirmed, the debit is raised (fast mode skips the 24 h)");
-    await backdate(ch.id);
-    await ap.runAutopay();
-    const done = (await one<{ status: string; ps: string }>(`select c.status, o.payment_status as ps from shop_charge c join shop_order o on o.id = c.order_id where c.id = $1`, [ch.id]))!;
-    check(done.status === "paid" && done.ps === "paid", "debit success marks the charge and the order paid");
-    const before = calls.length;
-    await ap.runAutopay();
-    check(!calls.slice(before).some((c) => c.includes("execute") || c.includes("notify/")), "a paid charge is never notified or debited again");
+    check((await query(`select id from shop_charge where customer_id = $1 and kind = 'pack' and status = any($2)`, [c.id, pk.OPEN])).length === 1, "never a second pack while one is on its way");
+    const stc = await settle(c.id);
+    const paidRenew = (await one<{ amount: number }>(`select amount::float as amount from shop_charge where customer_id = $1 and kind = 'pack' order by id desc limit 1`, [c.id]))!;
+    check(paidRenew.amount === r2(30 * dayValue(1) + 50), `renewal = next 30 days + the ₹50 extra (${r2(30 * dayValue(1) + 50)}, got ${paidRenew.amount})`);
+    check(stc.daysLeft === 34, `after renewal: 4 + 30 days left (got ${stc.daysLeft})`);
 
-    // 5. failing debits: retried, then 'unpaid'
+    // ---------------------------------------------------------------- 4. credit covers a pack: ₹0, paid at once
+    const d = await newCustomer("Credit Test");
+    await mandate(d);
+    await subscribe(d, 1);
+    await query(`insert into shop_charge (customer_id, amount, kind, days, status, paid_at) values ($1, $2, 'pack', 1, 'paid', now())`, [d.id, r2(100 * dayValue(1))]);
+    const p4 = await pk.raisePack(d.id);
+    check(p4?.status === "paid" && p4.amount === 0 && p4.days === 30, "credit larger than a pack: ₹0 pack, paid at once");
+    check((await one<{ notify_no: string | null; debit_no: string | null }>(`select notify_no, debit_no from shop_charge where id = $1`, [p4!.id]))!.notify_no === null, "...and nothing sent to the bank");
+
+    // ---------------------------------------------------------------- 5. renewal fails: retried, then deliveries stop; Try again
+    const e = await newCustomer("Fail Test");
+    await mandate(e);
+    await subscribe(e, 1);
+    await pk.raisePack(e.id);
+    await settle(e.id);
+    await runDays(today, 27); // 3 days left
     failDebits = true;
-    const day2 = subs.addDays(day, 1);
-    await subs.generateOrders(day2);
-    const o2 = (await one<{ id: number }>(`select id from shop_order where customer_id = $1 and subscription_day = $2`, [cust.id, day2]))!;
-    await orders.setOrderStatus(o2.id, "delivered");
-    const c2 = (await one<{ id: number }>(`select id from shop_charge where order_id = $1`, [o2.id]))!;
-    for (let i = 0; i < ap.MAX_ATTEMPTS * 3 + 2; i++) {
-      await ap.runAutopay();
-      await backdate(c2.id);
-    }
-    const f = (await one<{ status: string; attempts: number; failure: string }>(`select status, attempts, failure from shop_charge where id = $1`, [c2.id]))!;
-    check(f.status === "unpaid" && f.attempts === ap.MAX_ATTEMPTS, `failed debit retried ${ap.MAX_ATTEMPTS} times, then unpaid (${f.status}, ${f.attempts} tries)`);
-    check(/INSUFFICIENT/.test(f.failure ?? ""), "the bank's reason is kept");
-    check((await ap.autopayView(cust.id)).unpaid > 0, "app sees the unpaid amount");
-
-    // 6. mandate cancelled in the UPI app: no more debits
+    const ste = await settle(e.id);
     failDebits = false;
-    const day3 = subs.addDays(day, 2);
-    await subs.generateOrders(day3);
-    const o3 = (await one<{ id: number }>(`select id from shop_order where customer_id = $1 and subscription_day = $2`, [cust.id, day3]))!;
-    await orders.setOrderStatus(o3.id, "delivered");
-    const c3 = (await one<{ id: number }>(`select id from shop_charge where order_id = $1`, [o3.id]))!;
-    await ap.runAutopay(); // notice
-    await backdate(c3.id);
-    await ap.runAutopay(); // notified, then debit due
-    mandates.set(s.txnId, "cancelled");
-    await query(`update shop_charge set status = 'notified' where id = $1 and status = 'presenting'`, [c3.id]); // as if the debit was not raised yet
+    const lastE = (await one<{ status: string; attempts: number }>(`select status, attempts from shop_charge where customer_id = $1 and kind = 'pack' order by id desc limit 1`, [e.id]))!;
+    check(lastE.status === "unpaid" && lastE.attempts === ap.MAX_ATTEMPTS && ste.lastUnpaid, `failed renewal tried ${ap.MAX_ATTEMPTS} times, then unpaid`);
     await ap.runAutopay();
-    const g = (await one<{ status: string }>(`select status from shop_charge where id = $1`, [c3.id]))!;
-    check(g.status === "unpaid", "a mandate cancelled in the UPI app stops the debit (charge unpaid)");
-    check((await ap.autopayView(cust.id)).state === "none", "app sees autopay as stopped");
+    check(!(await pk.packState(e.id)).open, "after it went unpaid, no new pack by itself");
+    await runDays(subs.addDays(today, 27), 5);
+    check((await ordersOf(e.id)).length === 30, "deliveries stop once the paid days are used");
+    const view = await ap.autopayView(e.id);
+    check(view.pack?.unpaid === true && view.unpaid === 0, "app sees 'try again' (an uncollected pack is not a debt)");
+    const again = await pk.raisePack(e.id); // what POST /api/shop/autopay/retry does
+    check(again?.status === "pending", "Try again raises a new pack");
+    await settle(e.id);
+    await runDays(subs.addDays(today, 32), 1);
+    check((await ordersOf(e.id)).length === 31, "paid again: deliveries start again");
 
-    // 7. autopay required: no mandate -> no subscription order
+    // ---------------------------------------------------------------- 6. customer cancels: no refund, paid days delivered, then it ends
+    const f = await newCustomer("Cancel Test");
+    await mandate(f);
+    const subF = await subscribe(f, 1);
+    await pk.raisePack(f.id);
+    await settle(f.id);
+    await runDays(today, 10);
+    check(await subs.updateSubscription(f.id, subF, { status: "cancelled" }), "customer cancels with 20 paid days left");
+    const sf = (await one<{ status: string; renew: boolean; ends_after_day: number }>(`select status, renew, ends_after_day from shop_subscription where id = $1`, [subF]))!;
+    check(sf.status === "active" && !sf.renew && sf.ends_after_day === 30, "it keeps running to its last paid day (30) and will not renew");
+    await runDays(subs.addDays(today, 10), 25);
+    await ap.runAutopay();
+    check((await ordersOf(f.id)).length === 30, "all 30 paid deliveries were made");
+    check(!(await pk.packState(f.id)).open, "no renewal pack");
+    check((await one<{ status: string }>(`select status from shop_subscription where id = $1`, [subF]))!.status === "cancelled", "then the subscription ends");
+
+    // cancelled before anything was paid (pack not yet at the bank): cancelled at once, the pack dropped
+    const g = await newCustomer("Cancel Early");
+    await mandate(g);
+    const subG = await subscribe(g, 1);
+    const pg = await pk.raisePack(g.id);
+    await subs.updateSubscription(g.id, subG, { status: "cancelled" });
+    check((await one<{ status: string }>(`select status from shop_subscription where id = $1`, [subG]))!.status === "cancelled"
+      && (await one<{ status: string }>(`select status from shop_charge where id = $1`, [pg!.id]))!.status === "cancelled", "cancelled before paying: ends at once and the waiting pack is dropped");
+
+    // resuming a cancelled-but-running one makes it renew again
+    const h = await newCustomer("Resume Test");
+    await mandate(h);
+    const subH = await subscribe(h, 1);
+    await pk.raisePack(h.id);
+    await settle(h.id);
+    await subs.updateSubscription(h.id, subH, { status: "cancelled" });
+    await subs.updateSubscription(h.id, subH, { status: "active" });
+    check((await one<{ renew: boolean }>(`select renew from shop_subscription where id = $1`, [subH]))!.renew, "un-cancelling it while it runs: it renews again");
+
+    // ---------------------------------------------------------------- 7. a second subscription in the middle of a pack
+    const k = await newCustomer("Two Subs");
+    await mandate(k);
+    await subscribe(k, 1);
+    await pk.raisePack(k.id);
+    await settle(k.id);
+    await runDays(today, 10);
+    await subscribe(k, 1, "alternate", subs.addDays(today, 10));
+    await runDays(subs.addDays(today, 10), 2);
+    const ok2 = await ordersOf(k.id);
+    const items = await query<{ n: number }>(`select count(*)::int as n from shop_order_item where order_id = $1`, [ok2.at(-2)!.id]);
+    check(ok2.length === 12 && items[0].n === 2, "both subscriptions in one order; still one paid day per delivery day");
+    const nk = await pk.nextPack(k.id);
+    check(nk != null && nk.days === 30 && nk.amount > 30 * dayValue(1), "the next pack covers both");
+
+    // ---------------------------------------------------------------- 8. over the autopay limit: never sent to the bank
+    const l = await newCustomer("Limit Test");
+    await mandate(l, "upi", 500);
+    await subscribe(l, 5);
+    await pk.raisePack(l.id);
+    const beforeL = calls.length;
+    const stl = await settle(l.id);
+    const pl = (await one<{ status: string; failure: string }>(`select status, failure from shop_charge where customer_id = $1 and kind = 'pack' order by id desc limit 1`, [l.id]))!;
+    check(pl.status === "unpaid" && /limit/.test(pl.failure) && stl.lastUnpaid, "a pack above the limit is unpaid at once, with the reason");
+    check(!calls.slice(beforeL).some((x) => x.includes("notify/") || x.includes("execute/")), "...and never sent to the bank");
+
+    // ---------------------------------------------------------------- 9. eNACH pack: no notice, checked hourly, then paid
+    const n = await newCustomer("eNACH Pack");
+    await mandate(n, "enach");
+    check((await ap.autopayView(n.id)).kind === "enach" && (await ap.autopayView(n.id)).bankAccount === "XXXXXXXX2828", "eNACH mandate: kind and masked account");
+    await subscribe(n, 1);
+    await pk.raisePack(n.id);
+    const beforeN = calls.length;
+    await ap.runAutopay();
+    const pn = (await one<{ status: string; notify_no: string | null }>(`select status, notify_no from shop_charge where customer_id = $1 and kind = 'pack'`, [n.id]))!;
+    check(pn.status === "presenting" && !pn.notify_no && !calls.slice(beforeN).some((x) => x.includes("notify/")), "eNACH pack is debited straight away, with no notice");
+    await query(`update shop_charge set updated_at = now() - interval '10 minutes' where customer_id = $1 and kind = 'pack'`, [n.id]);
+    await ap.runAutopay();
+    check((await one<{ status: string }>(`select status from shop_charge where customer_id = $1 and kind = 'pack'`, [n.id]))!.status === "presenting", "not checked again within the hour");
+    check((await settle(n.id)).daysLeft === 30, "the bank's success: 30 days paid");
+
+    // unknown mandate type: read back before the first debit, never guessed
+    const u = await newCustomer("Unknown Kind");
+    const tu = await mandate(u, "enach");
+    await query(`update shop_mandate set kind = null where txn_id = $1`, [tu]);
+    await subscribe(u, 1);
+    await pk.raisePack(u.id);
+    const beforeU = calls.length;
+    await ap.runAutopay();
+    check((await one<{ kind: string }>(`select kind from shop_mandate where txn_id = $1`, [tu]))!.kind === "enach" && !calls.slice(beforeU).some((x) => x.includes("notify/")), "unknown mandate type is read back, then debited the eNACH way");
+
+    // ---------------------------------------------------------------- 10. autopay required
     process.env.AUTOPAY_REQUIRED = "1";
-    const day4 = subs.addDays(day, 3);
-    await subs.generateOrders(day4);
-    check(!(await one(`select 1 from shop_order where customer_id = $1 and subscription_day = $2`, [cust.id, day4])), "with autopay required, a customer without it gets no subscription order");
+    const w = await newCustomer("No Mandate");
+    await subscribe(w, 1);
+    await subs.generateOrders(today);
+    check((await ordersOf(w.id)).length === 0, "with autopay required, a customer without it gets no order");
+    check((await ap.subscriptionMandate(w.id)) === null, "...and cannot start a subscription");
+
+    // eNACH still with the bank: the plan is saved, its pack waits, deliveries start once approved and paid
+    const q = await newCustomer("eNACH Wait");
+    const sq = await ap.startMandate(q, 5000);
+    if (!sq.ok) throw new Error("no mandate");
+    check((await ap.subscriptionMandate(q.id)) === null, "a mandate not yet submitted does not count");
+    enach.add(sq.txnId);
+    mandates.set(sq.txnId, "initiated");
+    await ap.refreshMandate(sq.txnId);
+    check((await ap.subscriptionMandate(q.id)) === "approving" && (await ap.mandateLimit(q.id)) === 5000, "an eNACH mandate with the bank lets the subscription start (its limit counts)");
+    await subscribe(q, 1);
+    await pk.raisePack(q.id);
+    await ap.runAutopay();
+    check((await one<{ status: string }>(`select status from shop_charge where customer_id = $1 and kind = 'pack'`, [q.id]))!.status === "pending", "its pack waits while the bank approves");
+    await subs.generateOrders(today);
+    check((await ordersOf(q.id)).length === 0, "no delivery yet");
+    mandates.set(sq.txnId, "authorized");
+    await query(`update shop_mandate set updated_at = now() - interval '2 hours' where txn_id = $1`, [sq.txnId]);
+    await settle(q.id);
+    await subs.generateOrders(subs.addDays(today, 1));
+    check((await ordersOf(q.id))[0]?.payment_method === "prepaid", "approved and paid: deliveries start");
+
+    // the bank rejects an eNACH mandate: off, and it no longer counts
+    const rj = await newCustomer("eNACH Reject");
+    const sr = await ap.startMandate(rj, 5000);
+    if (!sr.ok) throw new Error("no mandate");
+    enach.add(sr.txnId);
+    mandates.set(sr.txnId, "initiated");
+    await ap.refreshMandate(sr.txnId);
+    mandates.set(sr.txnId, "rejected");
+    await ap.refreshMandate(sr.txnId);
+    check((await ap.subscriptionMandate(rj.id)) === null && (await ap.autopayView(rj.id)).state === "none", "a rejected eNACH mandate is off and no longer counts");
   } finally {
-    await query(`delete from shop_order where customer_id = $1`, [cust.id]);
-    await query(`delete from shop_customer where id = $1`, [cust.id]);
+    delete process.env.AUTOPAY_REQUIRED;
+    for (const id of extra) {
+      await query(`delete from shop_order where customer_id = $1`, [id]);
+      await query(`delete from shop_customer where id = $1`, [id]);
+    }
+    if (others.length) await query(`update shop_subscription set status = 'active' where id = any($1)`, [others]);
     await pool.end();
   }
   console.log(failures ? `\n${failures} check(s) FAILED` : "\nAll checks passed");

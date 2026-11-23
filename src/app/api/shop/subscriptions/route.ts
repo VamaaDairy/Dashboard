@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { customerFromRequest } from "@/lib/shop/customer";
-import { activeMandate, required as autopayRequired } from "@/lib/shop/autopay";
+import { mandateLimit, required as autopayRequired, subscriptionMandate } from "@/lib/shop/autopay";
+import { nextPack, PACK_DAYS, packState, raisePack, refreshPack } from "@/lib/shop/packs";
+import { rupees } from "@/lib/shop/pricing";
 import { createSubscription, customerCalendar, parsePlan, setDay, todayIST, type PlanInput } from "@/lib/shop/subscriptions";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +30,26 @@ export async function POST(req: NextRequest) {
   if (!b) return fail(400, "Send a JSON body.");
   const p = parsePlan(b);
   if (!p.ok) return fail(400, p.error);
-  // subscriptions are paid by UPI Autopay, never cash: the app sets autopay up first ({ code } tells it to)
-  if (autopayRequired() && !(await activeMandate(c.id))) {
-    return NextResponse.json({ error: "Set up UPI Autopay to start a subscription.", code: "autopay_required" }, { status: 402 });
+  // subscriptions are paid by autopay (UPI or eNACH), never cash: the app sets autopay up first ({ code } tells it
+  // to). An eNACH mandate the bank is still approving is enough to save the plan; deliveries start once it is approved.
+  const mandate = await subscriptionMandate(c.id);
+  if (autopayRequired() && !mandate) {
+    return NextResponse.json({ error: "Set up autopay to start a subscription.", code: "autopay_required" }, { status: 402 });
+  }
+  // on autopay it is paid 30 deliveries at a time: that pack has to fit the autopay's limit
+  const plan = { endDate: null, ...p.plan } as PlanInput;
+  if (mandate) {
+    const quote = await nextPack(c.id, [{
+      id: -1, sku_code: plan.sku, qty: plan.qty, frequency: plan.frequency, weekdays: plan.weekdays, every_n: plan.everyN,
+      start_date: plan.startDate, end_date: plan.endDate, status: "active", renew: true, ends_after_day: null,
+    }]);
+    const limit = await mandateLimit(c.id);
+    if (quote && limit != null && quote.amount > limit) {
+      return NextResponse.json(
+        { error: `${PACK_DAYS} deliveries cost ${rupees(quote.amount)}, more than your autopay limit of ${rupees(limit)}. Set up autopay again with a higher limit.`, code: "over_limit" },
+        { status: 400 },
+      );
+    }
   }
 
   const name = String(b.name ?? c.name ?? "").trim();
@@ -41,7 +60,7 @@ export async function POST(req: NextRequest) {
   if (address.length < 5) return fail(400, "Add the delivery address for your subscription.");
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-  const r = await createSubscription(c.id, { endDate: null, ...p.plan } as PlanInput, {
+  const r = await createSubscription(c.id, plan, {
     name, phone, address,
     pincode: typeof b.pincode === "string" && b.pincode.trim() ? b.pincode.trim() : c.pincode,
     lat: num(b.lat) ?? c.lat, lng: num(b.lng) ?? c.lng,
@@ -49,5 +68,13 @@ export async function POST(req: NextRequest) {
   if (!r.ok) return fail(400, r.error);
   // days the customer took out while choosing
   if (Array.isArray(b.skipDays)) for (const d of b.skipDays.slice(0, 120)) if (typeof d === "string") await setDay(c.id, r.id, d, 0);
-  return NextResponse.json({ id: r.id }, { status: 201 });
+  if (!mandate) return NextResponse.json({ id: r.id }, { status: 201 });
+  // the first pack (or, with one still waiting to go to the bank, that one priced again to take this in)
+  const st = await packState(c.id);
+  if (st.open?.status === "pending") await refreshPack(st.open.id, c.id);
+  const pack = await raisePack(c.id); // the one on its way, else a new one
+  return NextResponse.json(
+    { id: r.id, pack: pack ? { status: pack.status, amount: pack.amount, days: pack.days } : null, daysLeft: (await packState(c.id)).daysLeft },
+    { status: 201 },
+  );
 }

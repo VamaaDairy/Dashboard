@@ -12,11 +12,16 @@ async function page(req: NextRequest) {
   const m = /^GM\d+T[0-9A-Z]+$/.test(txn) ? await refreshMandate(txn) : null;
   const ok = m?.status === "authorized";
   const waiting = m && ["requested", "initiated"].includes(m.status);
-  const title = ok ? "Autopay is on" : waiting ? "Almost done" : "Autopay was not set up";
+  const bank = m?.kind === "enach";
+  const title = ok ? "Autopay is on" : waiting ? (bank ? "Your bank is approving it" : "Almost done") : "Autopay was not set up";
   const text = ok
-    ? "Your Gaia subscription will be paid automatically. You'll be told a day before every debit."
+    ? bank
+      ? "Your Gaia subscription will be paid automatically from your bank account."
+      : "Your Gaia subscription will be paid automatically. You'll be told a day before every debit."
     : waiting
-      ? "Approve the request in your UPI app. The Gaia app updates as soon as it's approved."
+      ? bank
+        ? "Banks take up to 2 days to approve autopay. Your subscription starts as soon as it's approved; we'll let you know."
+        : "Approve the request in your UPI app. The Gaia app updates as soon as it's approved."
       : "Nothing was set up and no money was taken. You can try again from the Gaia app.";
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} | Gaia</title><style>

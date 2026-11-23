@@ -1,5 +1,6 @@
 import "server-only";
 import { required as autopayRequired } from "./autopay";
+import { deliversOn, packState, paidTill, prepaidCustomers, raisePack, refreshPack } from "./packs";
 import { query, tx } from "@/lib/db";
 import { notifyOrderStatus, notifySubscription } from "@/lib/push";
 import { listProductsForDisplay, pricesFor } from "./catalog";
@@ -47,11 +48,15 @@ export interface Subscription {
   pincode: string | null;
   lat: number | null;
   lng: number | null;
+  /** false once a customer paying by packs cancelled it: it runs to its last paid day, then ends */
+  renew: boolean;
+  /** that last paid day (the customer's delivery-day number) */
+  ends_after_day: number | null;
 }
 
 const SUB_COLS = `id, customer_id, sku_code, qty, frequency, weekdays, every_n,
   to_char(start_date, 'YYYY-MM-DD') as start_date, to_char(end_date, 'YYYY-MM-DD') as end_date,
-  status, name, phone, address, pincode, lat, lng`;
+  status, name, phone, address, pincode, lat, lng, renew, ends_after_day`;
 
 // ---- dates (India) ----
 
@@ -206,9 +211,16 @@ export async function customerCalendar(customerId: number, from: string, count: 
     });
   }
 
+  // paying by packs: how many paid deliveries are left, until when, and whether one is on its way
+  const st = await packState(customerId);
+  const pack = st.paidDays > 0 || st.open || st.lastUnpaid
+    ? { daysLeft: st.daysLeft, paidTill: await paidTill(customerId, st), open: st.open ? { status: st.open.status, amount: st.open.amount, days: st.open.days } : null, unpaid: st.lastUnpaid }
+    : null;
+
   return {
     today: todayIST(),
     firstEditableDay: firstEditableDay(),
+    pack,
     cutoffHour: CUTOFF_HOUR,
     subscriptions: subs.map((s) => {
       const p = products.get(s.sku_code);
@@ -216,6 +228,8 @@ export async function customerCalendar(customerId: number, from: string, count: 
       return {
         id: s.id, sku: s.sku_code, name: p?.name ?? d?.name ?? s.sku_code, image: p?.image ?? d?.image ?? null, price: p?.price ?? null, size: p?.size ?? null,
         qty: s.qty, frequency: s.frequency, weekdays: s.weekdays ?? [], everyN: s.every_n, startDate: s.start_date, endDate: s.end_date, status: s.status,
+        /** false: cancelled while paid days were left - delivered until they are used, never renewed */
+        renews: s.renew,
         /** The product is out of stock: no deliveries until it is back on sale (then they start again by themselves). */
         outOfStock: !p,
       };
@@ -245,7 +259,28 @@ export async function updateSubscription(
   customerId: number,
   id: number,
   patch: Partial<PlanInput> & { status?: "active" | "paused" | "cancelled" },
+  opts: { immediate?: boolean } = {},
 ): Promise<boolean> {
+  // a customer paying by packs who cancels gets what was paid for: no refund, so the subscription keeps going to its
+  // last paid day (or the pack already at the bank) and only the renewal stops. The office's cancel is immediate.
+  if (patch.status === "cancelled" && !opts.immediate) {
+    const st = await packState(customerId);
+    const atBank = st.open && st.open.status !== "pending" ? st.open.days : 0;
+    if (st.daysLeft > 0 || atBank > 0) {
+      const r = await query(
+        `update shop_subscription set renew = false, ends_after_day = $3, updated_at = now() where id = $1 and customer_id = $2 and status <> 'cancelled' returning id`,
+        [id, customerId, st.paidDays + atBank],
+      );
+      if (!r.length) return false;
+      if (st.open?.status === "pending") await refreshPack(st.open.id, customerId);
+      await notifySubscription(customerId, "ending");
+      return true;
+    }
+  }
+  // resuming one that was cancelled that way: it renews again
+  if (patch.status === "active") {
+    await query(`update shop_subscription set renew = true, ends_after_day = null where id = $1 and customer_id = $2 and status <> 'cancelled' and not renew`, [id, customerId]);
+  }
   const sets: string[] = [];
   const vals: unknown[] = [id, customerId];
   const put = (col: string, v: unknown) => {
@@ -271,6 +306,13 @@ export async function updateSubscription(
     // tomorrow's order may already be made (after the 9 PM cut-off): it follows the pause / resume at once
     await refreshMadeOrders(customerId);
     await notifySubscription(customerId, patch.status === "active" ? "resumed" : patch.status);
+  }
+  if (r.length > 0) {
+    // a pack not yet sent to the bank follows the change (paused, cancelled, more or less milk) - and after a resume a
+    // customer whose paid days ran out gets their next one without waiting for the evening run
+    const st = await packState(customerId);
+    if (st.open?.status === "pending") await refreshPack(st.open.id, customerId);
+    else if (patch.status === "active" && !st.open && st.paidDays > 0 && st.daysLeft === 0 && !st.lastUnpaid) await raisePack(customerId);
   }
   return r.length > 0;
 }
@@ -357,18 +399,23 @@ export async function generateOrders(day: string): Promise<{ created: number; it
     byCustomer.set(s.customer_id, [...(byCustomer.get(s.customer_id) ?? []), { sub: s, qty }]);
   }
 
-  // customers paying by UPI Autopay get autopay orders (no cash); with autopay required, no mandate means no order
-  const autopay = new Set(
-    (await query<{ customer_id: number }>(
-      `select distinct customer_id from shop_mandate where status = 'authorized' and end_date >= $1::date and customer_id = any($2)`,
-      [day, [...byCustomer.keys()]],
-    )).map((r) => r.customer_id),
-  );
+  // customers on autopay pay by packs (src/lib/shop/packs.ts): a day's order only while paid days are left, made as
+  // 'prepaid' (already paid, nothing at the door). With autopay required, anyone else gets no order.
+  const prepaid = await prepaidCustomers([...byCustomer.keys()]);
   const mustAutopay = autopayRequired();
 
   let created = 0, items = 0;
-  for (const [customerId, lines] of byCustomer) {
-    if (mustAutopay && !autopay.has(customerId)) {
+  for (const [customerId, all] of byCustomer) {
+    let lines = all;
+    if (prepaid.has(customerId)) {
+      const st = await packState(customerId);
+      // the day number this order would be; a cancelled subscription only runs to its last paid day
+      lines = st.daysLeft > 0 ? all.filter(({ sub }) => deliversOn(sub, st.usedDays + 1)) : [];
+      if (!lines.length) {
+        skipped += all.length;
+        continue;
+      }
+    } else if (mustAutopay) {
       skipped += lines.length;
       continue;
     }
@@ -381,10 +428,11 @@ export async function generateOrders(day: string): Promise<{ created: number; it
     const fee = deliveryFor(subtotal, deliveryRule);
     const made = await tx(async (c) => {
       const o = await c.query(
-        `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, status, customer_id, subscription_day, payment_method)
-         values ($1, $2, $3, $4, 'Subscription delivery', $5, $6, $7, $8, $9, 'confirmed', $10, $11, $12)
+        `insert into shop_order (name, phone, address, pincode, notes, lat, lng, subtotal, delivery_fee, total, status, customer_id, subscription_day, payment_method, payment_status)
+         values ($1, $2, $3, $4, 'Subscription delivery', $5, $6, $7, $8, $9, 'confirmed', $10, $11, $12, $13)
          on conflict do nothing returning id`,
-        [to.name, to.phone, to.address, to.pincode, to.lat, to.lng, subtotal, fee, subtotal + fee, customerId, day, autopay.has(customerId) ? "autopay" : "cod"],
+        [to.name, to.phone, to.address, to.pincode, to.lat, to.lng, subtotal, fee, subtotal + fee, customerId, day,
+         prepaid.has(customerId) ? "prepaid" : "cod", prepaid.has(customerId) ? "paid" : "pending"],
       );
       if (!o.rows.length) return 0;
       for (const r of rows) {
@@ -414,8 +462,8 @@ const PAUSED_NOTE = "Subscription paused";
  * here: UPI Autopay only debits an order once it is delivered.
  */
 export async function refreshMadeOrders(customerId: number): Promise<void> {
-  const orders = await query<{ id: number; day: string; status: string }>(
-    `select id, to_char(subscription_day, 'YYYY-MM-DD') as day, status from shop_order
+  const orders = await query<{ id: number; day: string; status: string; payment_method: string }>(
+    `select id, to_char(subscription_day, 'YYYY-MM-DD') as day, status, payment_method from shop_order
       where customer_id = $1 and subscription_day > $2 and rider_id is null
         and (status in ('placed', 'confirmed') or (status = 'cancelled' and notes = $3))`,
     [customerId, todayIST(), PAUSED_NOTE],
@@ -441,6 +489,8 @@ export async function refreshMadeOrders(customerId: number): Promise<void> {
       rows.push({ sku: s.sku_code, name: p.name, image: p.image, qty, unit: p.price, total: Math.round(p.price * qty * 100) / 100 });
     }
 
+    // bringing back a prepaid day uses a paid day again: only if one is left
+    if (rows.length && o.status === "cancelled" && o.payment_method === "prepaid" && (await packState(customerId)).daysLeft <= 0) continue;
     if (!rows.length) {
       if (o.status === "cancelled") continue;
       const done = await query(`update shop_order set status = 'cancelled', notes = $2, updated_at = now() where id = $1 and status in ('placed', 'confirmed') and rider_id is null returning id`, [o.id, PAUSED_NOTE]);
