@@ -3,7 +3,7 @@ import { Repeat } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { allMandates, MAX_ATTEMPTS, recentCharges, required } from "@/lib/shop/autopay";
 import { autocollectReady, isLive } from "@/lib/payments/autocollect";
-import { packCustomers, PACK_DAYS } from "@/lib/shop/packs";
+import { packCustomers, periodLabel } from "@/lib/shop/packs";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,7 @@ export default async function AutopayPage() {
         <PageHeader
           icon={Repeat}
           title="Autopay"
-          subtitle={`Subscriptions are paid ${PACK_DAYS} deliveries at a time, by UPI Autopay or eNACH (bank account). A day's order is made only while paid days are left; skipped and paused days use none. The next pack is debited a few days before they run out (UPI: bank told 24 h ahead; eNACH: settled in 24-48 h). A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to try again in the app. A cancelled subscription is delivered until its paid days are used, then ends - no refund.`}
+          subtitle={`Subscriptions are paid for a period the customer picks (4 weeks, a month, or up to a date of their own) - all the deliveries in it at once - by UPI Autopay or eNACH (bank account). A day's order is made only while paid days are left; skipped and paused days use none. The next pack is debited a few days before they run out (UPI: bank told 24 h ahead; eNACH: settled in 24-48 h). A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to try again in the app. A cancelled subscription is delivered until its paid days are used, then ends - no refund.`}
           actions={<Link href="/shop-orders/subscriptions" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Subscriptions</Link>}
         />
         <div className="grid gap-3 md:grid-cols-3">
@@ -59,12 +59,13 @@ export default async function AutopayPage() {
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-              <tr>{["Customer", "Paid deliveries left", "Used / paid", "Balance", "Next pack", "Renews"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+              <tr>{["Customer", "Pays for", "Paid deliveries left", "Used / paid", "Balance", "Next pack", "Renews"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {payers.map((p) => (
                 <tr key={p.customer_id} className="border-t border-border">
                   <td className="px-3 py-2"><div className="font-medium">{p.customer}</div><div className="font-mono text-xs text-muted-foreground">{p.phone}</div></td>
+                  <td className="whitespace-nowrap px-3 py-2">{periodLabel({ unit: p.pack_unit, len: p.pack_len })}</td>
                   <td className={`num px-3 py-2 font-semibold ${p.paid_days - p.used_days <= 0 ? "text-red-700" : ""}`}>{Math.max(0, p.paid_days - p.used_days)}</td>
                   <td className="num px-3 py-2">{p.used_days} / {p.paid_days}</td>
                   <td className="num px-3 py-2">{money(p.balance)}</td>
@@ -74,7 +75,7 @@ export default async function AutopayPage() {
                   <td className="px-3 py-2">{p.renewing ? "Yes" : "No"}</td>
                 </tr>
               ))}
-              {payers.length === 0 ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">No customer pays by packs yet.</td></tr> : null}
+              {payers.length === 0 ? <tr><td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">No customer pays by packs yet.</td></tr> : null}
             </tbody>
           </table>
         </div>
