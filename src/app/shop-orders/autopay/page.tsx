@@ -10,7 +10,7 @@ const when = (d: Date | null) => (d ? new Date(d).toLocaleString("en-GB", { time
 const money = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 const MANDATE: Record<string, string> = {
-  authorized: "Active", requested: "Not approved yet", initiated: "Waiting for UPI app", failed: "Failed", rejected: "Rejected",
+  authorized: "Active", requested: "Not approved yet", initiated: "Waiting for approval", failed: "Failed", rejected: "Rejected",
   bounced: "Not opened", dropped: "Abandoned", user_cancelled: "Cancelled at setup", cancelled: "Cancelled by customer",
   revoking: "Cancelling", revoked: "Cancelled by us", expired: "Expired", completed: "Ended",
 };
@@ -21,7 +21,7 @@ const CHARGE: Record<string, string> = {
 const tone = (s: string) =>
   s === "paid" || s === "authorized" ? "text-green-700" : s === "unpaid" || ["failed", "rejected", "cancelled", "revoked", "expired"].includes(s) ? "text-red-700" : "text-amber-700";
 
-/** UPI Autopay for subscriptions: who has it set up, and how each delivery's debit is going (issue #65). */
+/** Autopay (UPI Autopay or eNACH) for subscriptions: who has it set up, and how each delivery's debit is going (issue #65). */
 export default async function AutopayPage() {
   const [mandates, charges] = await Promise.all([allMandates(), recentCharges()]);
   const active = mandates.filter((m) => m.status === "authorized").length;
@@ -34,8 +34,8 @@ export default async function AutopayPage() {
       <div className="w-full space-y-4">
         <PageHeader
           icon={Repeat}
-          title="UPI Autopay"
-          subtitle={`Subscription deliveries are charged to the customer's bank: the evening a delivery is handed over the bank is told the amount, and it is debited the next evening (NPCI: 24 h notice, off-peak hours). A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to pay in the app.`}
+          title="Autopay"
+          subtitle={`Subscription deliveries are charged to the customer's bank. UPI Autopay: the evening a delivery is handed over the bank is told the amount, and it is debited the next evening (NPCI: 24 h notice, off-peak hours). eNACH (bank account): the debit is raised that evening, goes to the bank at 7 AM and is settled in 24-48 h. A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to pay in the app.`}
           actions={<Link href="/shop-orders/subscriptions" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Subscriptions</Link>}
         />
         <div className="grid gap-3 md:grid-cols-3">
@@ -83,7 +83,7 @@ export default async function AutopayPage() {
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-              <tr>{["Customer", "Status", "Limit / day", "UPI ID", "Approved", "Started"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+              <tr>{["Customer", "Status", "Limit / day", "Type", "UPI ID / account", "Approved", "Started"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {mandates.map((m) => (
@@ -91,12 +91,13 @@ export default async function AutopayPage() {
                   <td className="px-3 py-2"><div className="font-medium">{m.customer}</div><div className="font-mono text-xs text-muted-foreground">{m.phone}</div></td>
                   <td className={`whitespace-nowrap px-3 py-2 font-medium ${tone(m.status)}`}>{MANDATE[m.status] ?? m.status}</td>
                   <td className="num px-3 py-2">{money(m.max_amount)}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{m.upi_handle ?? "-"}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{m.kind === "enach" ? "eNACH" : m.kind === "upi" ? "UPI" : "-"}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{(m.kind === "enach" ? m.bank_account : m.upi_handle) ?? "-"}</td>
                   <td className="whitespace-nowrap px-3 py-2">{when(m.authorized_at)}</td>
                   <td className="whitespace-nowrap px-3 py-2">{when(m.created_at)}</td>
                 </tr>
               ))}
-              {mandates.length === 0 ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">No customer has set up autopay yet.</td></tr> : null}
+              {mandates.length === 0 ? <tr><td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">No customer has set up autopay yet.</td></tr> : null}
             </tbody>
           </table>
         </div>

@@ -4,15 +4,19 @@ import * as eb from "@/lib/payments/autocollect";
 import { notify } from "@/lib/push";
 
 /**
- * Subscription deliveries paid by UPI Autopay (migration 087, issue #65).
+ * Subscription deliveries paid by autopay (migration 087, issue #65; eNACH added in migration 118).
  *
  *   1. The customer sets up one mandate: we get an access key from Easebuzz and the app opens Easebuzz's page,
- *      where they approve it in their UPI app ("as presented", up to a maximum per debit).
+ *      where they pick UPI Autopay (approved in their UPI app) or eNACH (their bank account, approved with net
+ *      banking or a debit card) - "as presented", up to a maximum per debit. An eNACH mandate takes the bank
+ *      24-48 h to approve.
  *   2. While a customer has an authorised mandate, their subscription orders are 'autopay' - no cash is collected.
  *   3. A delivered autopay order becomes a charge. In the evening debit window the bank is notified of the amount
  *      (NPCI: at least 24 h before the debit); the next evening, after re-checking the mandate is still active, it is
  *      debited. Easebuzz's webhook and our own polling both move a charge on; every status is read back from
  *      Easebuzz's API, never taken from what was posted to us.
+ *      eNACH has no notice: the evening a charge is due its debit is raised straight away; Easebuzz hands it to the
+ *      bank at 7 AM and the bank's answer comes 24-48 h later.
  *   4. A failed notice or debit is tried again the next evening; after [MAX_ATTEMPTS] the charge is 'unpaid' and the
  *      customer is asked to pay it in the app.
  *
@@ -30,6 +34,9 @@ const EMAIL = process.env.EASEBUZZ_EMAIL ?? "payments@vamaadairy.com";
 
 const ACTIVE = "authorized";
 const PENDING_STATES = ["requested", "initiated"];
+/** how long the app shows a mandate as "waiting": UPI is approved in minutes, eNACH by the bank in up to 2 days */
+const PENDING_FOR = { upi: 30 * 60 * 1000, enach: 3 * 24 * 3600 * 1000 };
+const by = (kind: string | null) => (kind === "enach" ? "your bank account" : "UPI Autopay");
 const rupees = (n: number) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 // ---------------------------------------------------------------- time
@@ -61,10 +68,12 @@ export interface Mandate {
   end_date: string;
   access_key: string | null;
   upi_handle: string | null;
+  kind: eb.MandateKind | null;
+  bank_account: string | null;
   authorized_at: Date | null;
   created_at: Date;
 }
-const M_COLS = `id, customer_id, txn_id, status, max_amount::float as max_amount, start_date::text, end_date::text, access_key, upi_handle, authorized_at, created_at`;
+const M_COLS = `id, customer_id, txn_id, status, max_amount::float as max_amount, start_date::text, end_date::text, access_key, upi_handle, kind, bank_account, authorized_at, created_at`;
 
 /** The customer's authorised, unexpired mandate, if any. */
 export const activeMandate = (customerId: number) =>
@@ -122,21 +131,24 @@ export async function refreshMandate(txnId: string): Promise<Mandate | null> {
   }
   const now = await one<Mandate>(
     `update shop_mandate set status = $2, easebuzz_id = coalesce($3, easebuzz_id), umrn = coalesce($4, umrn), upi_handle = coalesce($5, upi_handle),
-            raw = $6, authorized_at = case when $2 = '${ACTIVE}' then coalesce(authorized_at, now()) else authorized_at end, updated_at = now()
+            raw = $6, kind = coalesce($7, kind), bank_account = coalesce($8, bank_account), authorized_at = case when $2 = '${ACTIVE}' then coalesce(authorized_at, now()) else authorized_at end, updated_at = now()
       where id = $1 returning ${M_COLS}`,
-    [was.id, info.status, info.id, info.umrn, info.upiHandle, JSON.stringify(info.raw)],
+    [was.id, info.status, info.id, info.umrn, info.upiHandle, JSON.stringify(info.raw), info.kind, info.bankAccount],
   );
   if (was.status !== info.status) {
     if (info.status === ACTIVE) {
       await notify("customer", was.customer_id, {
         title: "Autopay is on",
-        body: `Your Gaia subscription is now paid automatically, up to ${rupees(was.max_amount)} a day. You're told a day before each debit.`,
+        body:
+          info.kind === "enach"
+            ? `Your Gaia subscription is now paid automatically from your bank account, up to ${rupees(was.max_amount)} a day.`
+            : `Your Gaia subscription is now paid automatically, up to ${rupees(was.max_amount)} a day. You're told a day before each debit.`,
         data: { screen: "autopay" },
       });
     } else if (was.status === ACTIVE) {
       await notify("customer", was.customer_id, {
         title: "Autopay has stopped",
-        body: "Your UPI Autopay for Gaia was cancelled. Set it up again in the app to keep your subscription running.",
+        body: `Your Gaia autopay (${by(info.kind ?? was.kind)}) was cancelled. Set it up again in the app to keep your subscription running.`,
         data: { screen: "autopay" },
       });
     }
@@ -152,7 +164,11 @@ export interface AutopayView {
   required: boolean;
   available: boolean;
   maxAmount: number | null;
+  /** upi / enach; null while the customer has not picked one yet */
+  kind: eb.MandateKind | null;
   upiHandle: string | null;
+  /** eNACH: the bank account, masked */
+  bankAccount: string | null;
   validTill: string | null;
   lastStatus: string | null;
   charges: Array<{ orderNo: string; day: string | null; amount: number; status: string; failure: string | null; paidAt: string | null }>;
@@ -162,7 +178,7 @@ export interface AutopayView {
 export async function autopayView(customerId: number): Promise<AutopayView> {
   const active = await activeMandate(customerId);
   const last = active ?? (await latestMandate(customerId));
-  const fresh = last && PENDING_STATES.includes(last.status) && Date.now() - new Date(last.created_at).getTime() < 30 * 60 * 1000;
+  const fresh = last && PENDING_STATES.includes(last.status) && Date.now() - new Date(last.created_at).getTime() < PENDING_FOR[last.kind ?? "upi"];
   const charges = await query<{ order_no: string; day: string | null; amount: number; status: string; failure: string | null; paid_at: Date | null }>(
     `select o.order_no, o.subscription_day::text as day, c.amount::float as amount, c.status, c.failure, c.paid_at
        from shop_charge c join shop_order o on o.id = c.order_id where c.customer_id = $1 order by c.created_at desc limit 30`,
@@ -173,7 +189,9 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
     required: required(),
     available: eb.autocollectReady(),
     maxAmount: last?.max_amount ?? null,
+    kind: last?.kind ?? null,
     upiHandle: active?.upi_handle ?? null,
+    bankAccount: active?.bank_account ?? null,
     validTill: active?.end_date ?? null,
     lastStatus: last?.status ?? null,
     charges: charges.map((c) => ({ orderNo: c.order_no, day: c.day, amount: c.amount, status: c.status, failure: c.failure, paidAt: c.paid_at ? new Date(c.paid_at).toISOString() : null })),
@@ -208,13 +226,15 @@ interface Charge {
   debit_no: string | null;
   notified_at: Date | null;
   txn_id: string | null;
+  kind: eb.MandateKind | null;
   order_no: string;
 }
 const C_SELECT = `select c.id, c.order_id, c.customer_id, c.amount::float as amount, c.status, c.attempts, c.notify_no, c.debit_no, c.notified_at,
-                         (select m.txn_id from shop_mandate m where m.customer_id = c.customer_id and m.status = '${ACTIVE}' and m.end_date >= current_date
-                           order by m.authorized_at desc nulls last limit 1) as txn_id,
-                         o.order_no
-                    from shop_charge c join shop_order o on o.id = c.order_id`;
+                         am.txn_id, am.kind, o.order_no
+                    from shop_charge c join shop_order o on o.id = c.order_id
+                    left join lateral (select m.txn_id, m.kind from shop_mandate m
+                                        where m.customer_id = c.customer_id and m.status = '${ACTIVE}' and m.end_date >= current_date
+                                        order by m.authorized_at desc nulls last limit 1) am on true`;
 
 /** Moves a charge on only if it is still where we left it - two runs can never act on it twice. */
 async function claim(id: number, from: string, to: string, set = ""): Promise<boolean> {
@@ -240,7 +260,7 @@ async function paid(c: Charge, raw: unknown): Promise<void> {
   await query(`update shop_order set payment_status = 'paid', updated_at = now() where id = $1`, [c.order_id]);
   await notify("customer", c.customer_id, {
     title: "Paid by autopay",
-    body: `${rupees(c.amount)} for order ${c.order_no} was paid from your UPI Autopay.`,
+    body: `${rupees(c.amount)} for order ${c.order_no} was paid by autopay from ${by(c.kind)}.`,
     data: { screen: "autopay" },
   });
 }
@@ -282,6 +302,28 @@ async function debit(c: Charge): Promise<void> {
   }
 }
 
+/** eNACH: raises the debit for a pending charge straight away (no notice). The bank answers in 24-48 h. */
+async function presentEnach(c: Charge): Promise<void> {
+  if (!c.txn_id) return;
+  const m = await eb.getMandate(c.txn_id).catch(() => null);
+  if (m && m.status !== ACTIVE) {
+    await query(`update shop_mandate set status = $2, updated_at = now() where txn_id = $1`, [c.txn_id, m.status]);
+    return failed({ ...c, attempts: MAX_ATTEMPTS }, `Autopay ${m.status.replace(/_/g, " ")}`);
+  }
+  const attempt = c.attempts + 1;
+  const debitNo = `GD${c.id}A${attempt}`;
+  if (!(await claim(c.id, "pending", "presenting", `, attempts = ${attempt}, notify_no = null, debit_no = '${debitNo}', notified_at = null, presented_at = now()`))) return;
+  try {
+    const r = await eb.presentDebit(c.txn_id, debitNo, c.amount);
+    if (r.status === "success") await paid(c, r.raw);
+    else if (r.status === "failure") await failed({ ...c, attempts: attempt }, eb.reasonOf(r.raw));
+    else await query(`update shop_charge set raw = $2 where id = $1`, [c.id, JSON.stringify(r.raw)]);
+  } catch (e) {
+    // a 5xx may still have reached Easebuzz: the poll reads the debit back (a 404 there means it never arrived)
+    console.error("[autopay] eNACH debit call failed:", e instanceof Error ? e.message : e);
+  }
+}
+
 /** Reads back a charge that is waiting on Easebuzz (its notice or its debit). */
 async function poll(c: Charge): Promise<void> {
   try {
@@ -296,6 +338,8 @@ async function poll(c: Charge): Promise<void> {
       const r = await eb.getDebit(c.debit_no);
       if (r.status === "success") await paid(c, r.raw);
       else if (r.status === "failure") await failed(c, eb.reasonOf(r.raw));
+      // an eNACH debit stays with the bank for 24-48 h: look again in an hour, not every few minutes
+      else if (c.kind === "enach") await query(`update shop_charge set updated_at = now() where id = $1 and status = 'presenting'`, [c.id]);
     }
   } catch (e) {
     const status = e instanceof eb.EasebuzzError ? e.status : 0;
@@ -313,11 +357,22 @@ export async function runAutopay(now = new Date()): Promise<{ notified: number; 
   if (!eb.autocollectReady()) return { notified: 0, debited: 0, checked: 0 };
   const out = { notified: 0, debited: 0, checked: 0 };
 
-  const waiting = await query<Charge>(`${C_SELECT} where c.status in ('notifying', 'presenting') and c.updated_at < now() - interval '5 minutes' order by c.id limit 200`);
+  const waiting = await query<Charge>(
+    `${C_SELECT} where c.status in ('notifying', 'presenting')
+        and c.updated_at < now() - case when am.kind = 'enach' and c.status = 'presenting' then interval '1 hour' else interval '5 minutes' end
+      order by c.id limit 200`,
+  );
   for (const c of waiting) {
     await poll(c);
     out.checked++;
   }
+
+  // eNACH mandates wait up to 2 days for the bank; the webhook says when, this is the safety net (hourly)
+  const approving = await query<{ txn_id: string }>(
+    `select txn_id from shop_mandate where kind = 'enach' and status = any($1) and created_at > now() - interval '4 days' and updated_at < now() - interval '1 hour' limit 50`,
+    [PENDING_STATES],
+  );
+  for (const m of approving) await refreshMandate(m.txn_id);
   if (!inDebitWindow(now)) return out;
 
   // (fast test mode: due at once - the cutoff is a minute ahead so database and server clocks never disagree)
@@ -341,8 +396,13 @@ export async function runAutopay(now = new Date()): Promise<{ notified: number; 
       const last = await one<{ updated_at: Date }>(`select updated_at from shop_charge where id = $1`, [c.id]);
       if (last && now.getTime() - new Date(last.updated_at).getTime() < 12 * 3600 * 1000) continue;
     }
-    await sendNotice(c);
-    out.notified++;
+    if (c.kind === "enach") {
+      await presentEnach(c);
+      out.debited++;
+    } else {
+      await sendNotice(c);
+      out.notified++;
+    }
   }
   return out;
 }
@@ -373,8 +433,8 @@ export async function onWebhook(body: Record<string, unknown>): Promise<string> 
 // ---------------------------------------------------------------- dashboard
 
 export const allMandates = () =>
-  query<{ id: number; customer: string; phone: string; status: string; max_amount: number; upi_handle: string | null; authorized_at: Date | null; created_at: Date }>(
-    `select m.id, c.name as customer, c.phone, m.status, m.max_amount::float as max_amount, m.upi_handle, m.authorized_at, m.created_at
+  query<{ id: number; customer: string; phone: string; status: string; max_amount: number; kind: eb.MandateKind | null; upi_handle: string | null; bank_account: string | null; authorized_at: Date | null; created_at: Date }>(
+    `select m.id, c.name as customer, c.phone, m.status, m.max_amount::float as max_amount, m.kind, m.upi_handle, m.bank_account, m.authorized_at, m.created_at
        from shop_mandate m join shop_customer c on c.id = m.customer_id order by m.created_at desc limit 300`,
   );
 

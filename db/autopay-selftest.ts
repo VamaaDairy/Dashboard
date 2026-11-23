@@ -22,6 +22,7 @@ const check = (ok: boolean, what: string) => {
 
 // ---- fake Easebuzz Autocollect ----
 const mandates = new Map<string, string>(); // txn -> status
+const enach = new Set<string>(); // txns the customer approved as eNACH (bank account)
 const notices = new Map<string, { status: string; amount: number }>();
 const debits = new Map<string, { status: string; amount: number }>();
 let failDebits = false;
@@ -37,7 +38,7 @@ const fake: typeof fetch = async (input, init) => {
   if (url.host !== "sandboxapi.easebuzz.in") return bad("wrong host");
   if (path === "/v1/access-key/generate/") {
     if (auth !== sha("TESTKEY", String(body.amount), body.transaction_id)) return bad("bad hash (access key)");
-    if (body.frequency !== "as_presented" || body.amount_rule !== "MAX" || body.payment_modes[0] !== "UPIAD") return bad("bad mandate terms");
+    if (body.frequency !== "as_presented" || body.amount_rule !== "MAX" || body.payment_modes.join() !== "UPIAD,EN") return bad("bad mandate terms");
     mandates.set(body.transaction_id, "requested");
     return json({ success: true, access_key: `AK${body.transaction_id}` });
   }
@@ -45,7 +46,9 @@ const fake: typeof fetch = async (input, init) => {
   if (m && init?.method === "GET" && !["notify", "execute"].includes(m[1])) {
     if (auth !== sha("TESTKEY", m[1])) return bad("bad hash (mandate get)");
     if (!mandates.has(m[1])) return json({ success: false, message: "not found" }, 404);
-    return json({ success: true, data: { id: `MR${m[1]}`, transaction_id: m[1], status: mandates.get(m[1]), customer_upi_handle: "test@upi", umrn: "U1" } });
+    return json({ success: true, data: enach.has(m[1])
+      ? { id: `MR${m[1]}`, transaction_id: m[1], status: mandates.get(m[1]), mandate_type: "ENACH", customer_account_number: "XXXXXXXX2828", customer_upi_handle: "", umrn: "E1" }
+      : { id: `MR${m[1]}`, transaction_id: m[1], status: mandates.get(m[1]), mandate_type: "UPI", customer_upi_handle: "test@upi", umrn: "U1" } });
   }
   if (path === "/v1/mandate/notify/") {
     if (auth !== sha("TESTKEY", body.transaction_id, body.notification_request_number, String(body.amount))) return bad("bad hash (notify)");
@@ -67,6 +70,12 @@ const fake: typeof fetch = async (input, init) => {
     if (!n || n.status !== "notified" || n.amount !== body.amount) return bad("not notified for this amount");
     debits.set(body.merchant_request_number, { status: "in_process", amount: body.amount });
     return json({ success: true, data: { status: "in_process" } });
+  }
+  if (path === "/v1/mandate/presentment/" && init?.method === "POST") {
+    if (auth !== sha("TESTKEY", body.transaction_id, body.merchant_request_number, String(body.amount))) return bad("bad hash (eNACH presentment)");
+    if (!enach.has(body.transaction_id) || mandates.get(body.transaction_id) !== "authorized") return bad("not an active eNACH mandate");
+    debits.set(body.merchant_request_number, { status: "in_process", amount: body.amount });
+    return json({ success: true, data: { status: "in_process", merchant_request_number: body.merchant_request_number } });
   }
   m = /^\/v1\/mandate\/presentment\/([^/]+)\/$/.exec(path);
   if (m) {
@@ -90,6 +99,7 @@ async function main() {
   const sku = (await (await import("@/lib/shop/catalog")).listProducts())[0].sku;
   const phone = `9${String(Date.now()).slice(-9)}`;
   const cust = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash) values ('Autopay Test', $1, 'x') returning id`, [phone]))!;
+  const extra: number[] = [];
   const backdate = (id: number) => query(`update shop_charge set updated_at = now() - interval '10 minutes' where id = $1`, [id]);
 
   try {
@@ -167,14 +177,53 @@ async function main() {
     check(g.status === "unpaid", "a mandate cancelled in the UPI app stops the debit (charge unpaid)");
     check((await ap.autopayView(cust.id)).state === "none", "app sees autopay as stopped");
 
-    // 7. autopay required: no mandate -> no subscription order
+    // 7. eNACH: another customer picks their bank account on Easebuzz's page; the debit goes without a notice
+    const phoneE = `8${String(Date.now()).slice(-9)}`;
+    const custE = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash) values ('eNACH Test', $1, 'x') returning id`, [phoneE]))!;
+    extra.push(custE.id);
+    const se = await ap.startMandate({ id: custE.id, name: "eNACH Test", phone: phoneE });
+    if (!se.ok) throw new Error("no eNACH mandate");
+    enach.add(se.txnId);
+    mandates.set(se.txnId, "initiated");
+    await ap.refreshMandate(se.txnId);
+    await query(`update shop_mandate set created_at = now() - interval '1 day' where txn_id = $1`, [se.txnId]);
+    check((await ap.autopayView(custE.id)).state === "pending", "eNACH mandate still shows 'waiting' a day later (bank takes up to 2 days)");
+    mandates.set(se.txnId, "authorized");
+    await query(`update shop_mandate set updated_at = now() - interval '2 hours' where txn_id = $1`, [se.txnId]);
+    await ap.runAutopay(); // safety-net poll picks up the approval without a webhook
+    const ve = await ap.autopayView(custE.id);
+    check(ve.state === "active" && ve.kind === "enach" && ve.bankAccount === "XXXXXXXX2828", "approved eNACH mandate is active, with its kind and masked account");
+    const subE = await subs.createSubscription(custE.id, { sku, qty: 1, frequency: "daily", weekdays: null, everyN: null, startDate: day, endDate: null }, { name: "eNACH Test", phone: phoneE, address: "Test street 2", pincode: null, lat: null, lng: null });
+    if (!subE.ok) throw new Error(subE.error);
+    await subs.generateOrders(day);
+    const oe = (await one<{ id: number; payment_method: string }>(`select id, payment_method from shop_order where customer_id = $1 and subscription_day = $2`, [custE.id, day]))!;
+    check(oe?.payment_method === "autopay", "eNACH customer's subscription order is an autopay order");
+    await orders.setOrderStatus(oe.id, "delivered");
+    const ce = (await one<{ id: number }>(`select id from shop_charge where order_id = $1`, [oe.id]))!;
+    const beforeE = calls.length;
+    await ap.runAutopay();
+    let e1 = (await one<{ status: string; notify_no: string | null; debit_no: string | null }>(`select status, notify_no, debit_no from shop_charge where id = $1`, [ce.id]))!;
+    check(e1.status === "presenting" && !e1.notify_no && !!e1.debit_no, "eNACH charge is debited straight away, with no bank notice");
+    check(!calls.slice(beforeE).some((c) => c.includes("notify/")), "no UPI notice call for eNACH");
+    await query(`update shop_charge set updated_at = now() - interval '10 minutes' where id = $1`, [ce.id]);
+    await ap.runAutopay();
+    e1 = (await one(`select status, notify_no, debit_no from shop_charge where id = $1`, [ce.id]))!;
+    check(e1.status === "presenting", "an eNACH debit is not checked again within the hour");
+    await query(`update shop_charge set updated_at = now() - interval '61 minutes' where id = $1`, [ce.id]);
+    await ap.runAutopay();
+    const pe = (await one<{ status: string; ps: string }>(`select c.status, o.payment_status as ps from shop_charge c join shop_order o on o.id = c.order_id where c.id = $1`, [ce.id]))!;
+    check(pe.status === "paid" && pe.ps === "paid", "the bank's success marks the eNACH charge and order paid");
+
+    // 8. autopay required: no mandate -> no subscription order
     process.env.AUTOPAY_REQUIRED = "1";
     const day4 = subs.addDays(day, 3);
     await subs.generateOrders(day4);
     check(!(await one(`select 1 from shop_order where customer_id = $1 and subscription_day = $2`, [cust.id, day4])), "with autopay required, a customer without it gets no subscription order");
   } finally {
-    await query(`delete from shop_order where customer_id = $1`, [cust.id]);
-    await query(`delete from shop_customer where id = $1`, [cust.id]);
+    for (const id of [cust.id, ...extra]) {
+      await query(`delete from shop_order where customer_id = $1`, [id]);
+      await query(`delete from shop_customer where id = $1`, [id]);
+    }
     await pool.end();
   }
   console.log(failures ? `\n${failures} check(s) FAILED` : "\nAll checks passed");
