@@ -219,6 +219,67 @@ async function main() {
     const day4 = subs.addDays(day, 3);
     await subs.generateOrders(day4);
     check(!(await one(`select 1 from shop_order where customer_id = $1 and subscription_day = $2`, [cust.id, day4])), "with autopay required, a customer without it gets no subscription order");
+
+    // 8b. a mandate whose type we never learnt is read back before its first debit, never guessed
+    await query(`update shop_mandate set kind = null where txn_id = $1`, [se.txnId]);
+    const oe2day = subs.addDays(day, 1);
+    await subs.generateOrders(oe2day);
+    const oe2 = (await one<{ id: number }>(`select id from shop_order where customer_id = $1 and subscription_day = $2`, [custE.id, oe2day]))!;
+    await orders.setOrderStatus(oe2.id, "delivered");
+    const beforeK = calls.length;
+    await ap.runAutopay();
+    const k = (await one<{ kind: string | null; status: string }>(`select m.kind, c.status from shop_charge c join shop_mandate m on m.txn_id = $2 where c.order_id = $1`, [oe2.id, se.txnId]))!;
+    check(k.kind === "enach" && k.status === "presenting" && !calls.slice(beforeK).some((c) => c.includes("notify/")), "unknown mandate type is read back, then debited the eNACH way");
+
+    // 9. autopay required + eNACH still with the bank: the plan is saved, deliveries start only once approved
+    const phoneP = `7${String(Date.now()).slice(-9)}`;
+    const custP = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash) values ('eNACH Wait', $1, 'x') returning id`, [phoneP]))!;
+    extra.push(custP.id);
+    check((await ap.subscriptionMandate(custP.id)) === null, "no mandate: a subscription cannot start");
+    const sp = await ap.startMandate({ id: custP.id, name: "eNACH Wait", phone: phoneP });
+    if (!sp.ok) throw new Error("no mandate P");
+    check((await ap.subscriptionMandate(custP.id)) === null, "a mandate not yet submitted (customer did not pick a method) does not count");
+    mandates.set(sp.txnId, "initiated");
+    await ap.refreshMandate(sp.txnId); // still UPI-unknown: kind comes from Easebuzz once picked
+    check((await ap.subscriptionMandate(custP.id)) === null, "a UPI mandate waiting for the UPI app does not count");
+    enach.add(sp.txnId);
+    await ap.refreshMandate(sp.txnId);
+    check((await ap.subscriptionMandate(custP.id)) === "approving", "an eNACH mandate the bank is approving lets the subscription start");
+    const dayP = subs.addDays(day, 4);
+    const subP = await subs.createSubscription(custP.id, { sku, qty: 1, frequency: "daily", weekdays: null, everyN: null, startDate: dayP, endDate: null }, { name: "eNACH Wait", phone: phoneP, address: "Test street 3", pincode: null, lat: null, lng: null });
+    if (!subP.ok) throw new Error(subP.error);
+    await subs.generateOrders(dayP);
+    check(!(await one(`select 1 from shop_order where customer_id = $1 and subscription_day = $2`, [custP.id, dayP])), "no delivery while the bank is still approving");
+    mandates.set(sp.txnId, "authorized");
+    await ap.refreshMandate(sp.txnId);
+    const dayP2 = subs.addDays(dayP, 1);
+    await subs.generateOrders(dayP2);
+    const oP = await one<{ payment_method: string }>(`select payment_method from shop_order where customer_id = $1 and subscription_day = $2`, [custP.id, dayP2]);
+    check(oP?.payment_method === "autopay", "once approved, the next day's delivery is made as an autopay order");
+
+    // 10. the bank rejects an eNACH mandate: it no longer lets a subscription start
+    const phoneR = `6${String(Date.now()).slice(-9)}`;
+    const custR = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash) values ('eNACH Reject', $1, 'x') returning id`, [phoneR]))!;
+    extra.push(custR.id);
+    const sr = await ap.startMandate({ id: custR.id, name: "eNACH Reject", phone: phoneR });
+    if (!sr.ok) throw new Error("no mandate R");
+    enach.add(sr.txnId);
+    mandates.set(sr.txnId, "initiated");
+    await ap.refreshMandate(sr.txnId);
+    mandates.set(sr.txnId, "rejected");
+    await ap.refreshMandate(sr.txnId);
+    check((await ap.subscriptionMandate(custR.id)) === null && (await ap.autopayView(custR.id)).state === "none", "a rejected eNACH mandate is off and no longer counts");
+
+    // 11. a day's total above the mandate limit is never sent to the bank
+    const custL = custP.id;
+    const oL = (await one<{ id: number }>(`select id from shop_order where customer_id = $1 and subscription_day = $2`, [custL, dayP2]))!;
+    await query(`update shop_order set total = 99999 where id = $1`, [oL.id]);
+    await orders.setOrderStatus(oL.id, "delivered");
+    const beforeL = calls.length;
+    await ap.runAutopay();
+    const l = (await one<{ status: string; failure: string }>(`select status, failure from shop_charge where order_id = $1`, [oL.id]))!;
+    check(l.status === "unpaid" && /limit/.test(l.failure ?? ""), `over the limit: unpaid at once with the reason (${l.status})`);
+    check(!calls.slice(beforeL).some((c) => c.includes("presentment/") && c.startsWith("POST")), "over the limit: no debit raised");
   } finally {
     for (const id of [cust.id, ...extra]) {
       await query(`delete from shop_order where customer_id = $1`, [id]);

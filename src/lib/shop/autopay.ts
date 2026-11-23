@@ -82,6 +82,20 @@ export const activeMandate = (customerId: number) =>
     [customerId],
   );
 
+/**
+ * Whether the customer may start a subscription when autopay is required: with an authorised mandate, or with an
+ * eNACH mandate the bank is still approving (up to 2 days). In the second case the subscription is saved, but no
+ * order is made for it until the mandate is authorised (generateOrders checks that every day).
+ */
+export async function subscriptionMandate(customerId: number): Promise<"active" | "approving" | null> {
+  if (await activeMandate(customerId)) return "active";
+  const m = await one<{ id: number }>(
+    `select id from shop_mandate where customer_id = $1 and kind = 'enach' and status = any($2) and created_at > now() - interval '3 days' limit 1`,
+    [customerId, PENDING_STATES],
+  );
+  return m ? "approving" : null;
+}
+
 const latestMandate = (customerId: number) =>
   one<Mandate>(`select ${M_COLS} from shop_mandate where customer_id = $1 order by created_at desc limit 1`, [customerId]);
 
@@ -143,6 +157,13 @@ export async function refreshMandate(txnId: string): Promise<Mandate | null> {
           info.kind === "enach"
             ? `Your Gaia subscription is now paid automatically from your bank account, up to ${rupees(was.max_amount)} a day.`
             : `Your Gaia subscription is now paid automatically, up to ${rupees(was.max_amount)} a day. You're told a day before each debit.`,
+        data: { screen: "autopay" },
+      });
+    } else if (PENDING_STATES.includes(was.status) && (info.kind ?? was.kind) === "enach" && !PENDING_STATES.includes(info.status)) {
+      // the bank said no to an eNACH mandate (the customer was not watching: it takes up to 2 days)
+      await notify("customer", was.customer_id, {
+        title: "Autopay was not approved",
+        body: "Your bank did not approve the autopay for your Gaia subscription. Set it up again in the app so your deliveries can start.",
         data: { screen: "autopay" },
       });
     } else if (was.status === ACTIVE) {
@@ -227,12 +248,14 @@ interface Charge {
   notified_at: Date | null;
   txn_id: string | null;
   kind: eb.MandateKind | null;
+  /** the mandate's limit per debit */
+  max_amount: number | null;
   order_no: string;
 }
 const C_SELECT = `select c.id, c.order_id, c.customer_id, c.amount::float as amount, c.status, c.attempts, c.notify_no, c.debit_no, c.notified_at,
-                         am.txn_id, am.kind, o.order_no
+                         am.txn_id, am.kind, am.max_amount, o.order_no
                     from shop_charge c join shop_order o on o.id = c.order_id
-                    left join lateral (select m.txn_id, m.kind from shop_mandate m
+                    left join lateral (select m.txn_id, m.kind, m.max_amount::float as max_amount from shop_mandate m
                                         where m.customer_id = c.customer_id and m.status = '${ACTIVE}' and m.end_date >= current_date
                                         order by m.authorized_at desc nulls last limit 1) am on true`;
 
@@ -265,9 +288,18 @@ async function paid(c: Charge, raw: unknown): Promise<void> {
   });
 }
 
+/** A debit above the mandate's limit is refused by the bank every time: no point trying (or bouncing) it. */
+async function overLimit(c: Charge): Promise<boolean> {
+  if (c.max_amount == null || c.amount <= c.max_amount) return false;
+  await query(`update shop_charge set attempts = $2 where id = $1`, [c.id, MAX_ATTEMPTS]);
+  await failed({ ...c, attempts: MAX_ATTEMPTS }, `More than the autopay limit of ${rupees(c.max_amount)} a day`);
+  return true;
+}
+
 /** Sends the bank its notice for a pending charge (opens the 24-hour wait). */
 async function sendNotice(c: Charge): Promise<void> {
   if (!c.txn_id) return; // no active mandate: the charge waits until the customer sets autopay up again
+  if (await overLimit(c)) return;
   const attempt = c.attempts + 1;
   const notifyNo = `GN${c.id}A${attempt}`;
   if (!(await claim(c.id, "pending", "notifying", `, attempts = ${attempt}, notify_no = '${notifyNo}', debit_no = null, notified_at = null`))) return;
@@ -305,6 +337,7 @@ async function debit(c: Charge): Promise<void> {
 /** eNACH: raises the debit for a pending charge straight away (no notice). The bank answers in 24-48 h. */
 async function presentEnach(c: Charge): Promise<void> {
   if (!c.txn_id) return;
+  if (await overLimit(c)) return;
   const m = await eb.getMandate(c.txn_id).catch(() => null);
   if (m && m.status !== ACTIVE) {
     await query(`update shop_mandate set status = $2, updated_at = now() where txn_id = $1`, [c.txn_id, m.status]);
@@ -395,6 +428,16 @@ export async function runAutopay(now = new Date()): Promise<{ notified: number; 
     if (c.attempts > 0 && !fast()) {
       const last = await one<{ updated_at: Date }>(`select updated_at from shop_charge where id = $1`, [c.id]);
       if (last && now.getTime() - new Date(last.updated_at).getTime() < 12 * 3600 * 1000) continue;
+    }
+    if (c.txn_id && !c.kind) {
+      // never guess: a UPI notice to an eNACH mandate (or the other way round) would fail. Read it back first.
+      const m = await one<{ txn_id: string }>(`select txn_id from shop_mandate where txn_id = $1`, [c.txn_id]);
+      const kind = m ? (await refreshMandate(m.txn_id))?.kind ?? null : null;
+      if (!kind) {
+        console.error(`[autopay] charge ${c.id}: mandate ${c.txn_id} has no type yet; left for the next run`);
+        continue;
+      }
+      c.kind = kind;
     }
     if (c.kind === "enach") {
       await presentEnach(c);

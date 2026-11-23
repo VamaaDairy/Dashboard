@@ -120,13 +120,21 @@ export interface MandateInfo {
   raw: Json;
 }
 
+/** Easebuzz's mandate_type ("UPI", "ENACH") as ours; null when not chosen yet or not one we offer. */
+export function kindOf(t: unknown): MandateKind | null {
+  const s = String(t ?? "").toUpperCase();
+  if (s.includes("UPI")) return "upi";
+  if (s.includes("NACH")) return "enach";
+  return null;
+}
+
 /** A mandate as Easebuzz has it now (by our transaction id). */
 export async function getMandate(txnId: string): Promise<MandateInfo> {
   const d = data(await call("GET", `/v1/mandate/${encodeURIComponent(txnId)}/`, sign(KEY, txnId)));
   return {
     status: String(d.status ?? "unknown"),
-    kind: d.mandate_type === "ENACH" ? "enach" : d.mandate_type === "UPI" ? "upi" : null,
-    bankAccount: d.mandate_type === "ENACH" && d.customer_account_number ? String(d.customer_account_number) : null,
+    kind: kindOf(d.mandate_type),
+    bankAccount: kindOf(d.mandate_type) === "enach" && d.customer_account_number ? String(d.customer_account_number) : null,
     id: d.id ? String(d.id) : null,
     umrn: d.umrn ? String(d.umrn) : null,
     upiHandle: d.customer_upi_handle ? String(d.customer_upi_handle) : null,
