@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 /**
- * Easebuzz Autocollect (Recurring Payment) - UPI Autopay and eNACH (bank account) mandates and their debits.
+ * Easebuzz Autocollect (Recurring Payment) - UPI Autopay mandates and their debits.
  * https://docs.easebuzz.in/docs/8-autocollect-recurring-payment
  *
  * Same account settings as the checkout (src/lib/payments/easebuzz.ts): EASEBUZZ_KEY, EASEBUZZ_SALT and
@@ -76,12 +76,14 @@ export interface MandateRequest {
   failureUrl: string;
   /** Who it is for, kept by Easebuzz with the mandate (letters, digits, spaces). */
   note?: string;
+  /** Taken from the customer's account the moment they approve the mandate in their UPI app (the first payment). */
+  upfront?: number;
 }
 
 /**
- * Step 1 of a mandate: an access key for Easebuzz's approval page. "as_presented" with a MAX rule: each debit is
- * whatever was delivered, never above [maxAmount]. The page offers both UPI Autopay (approved in the UPI app) and
- * eNACH (approved with net banking or a debit card); the customer picks one.
+ * Step 1 of a mandate: an access key for Easebuzz's page, which opens the customer's UPI app. "as_presented" with a
+ * MAX rule: each later debit is what is due, never above [maxAmount]. With [upfront] the first payment is taken at
+ * approval, and the mandate is only kept if that payment goes through (mandate_atomicity).
  */
 export async function mandateAccessKey(m: MandateRequest): Promise<{ accessKey: string; url: string }> {
   const amount = amountText(m.maxAmount);
@@ -98,7 +100,8 @@ export async function mandateAccessKey(m: MandateRequest): Promise<{ accessKey: 
     end_date: m.endDate,
     frequency: "as_presented",
     amount_rule: "MAX",
-    payment_modes: ["UPIAD", "EN"],
+    payment_modes: ["UPIAD"],
+    ...(m.upfront ? { upfront_presentment_amount: Number(amountText(m.upfront)), mandate_atomicity: true } : {}),
     udf1: (m.note ?? "").replace(/[^A-Za-z0-9 ]+/g, " ").slice(0, 60),
   });
   const accessKey = String(j.access_key ?? "");
@@ -106,35 +109,28 @@ export async function mandateAccessKey(m: MandateRequest): Promise<{ accessKey: 
   return { accessKey, url: `${PAY}${accessKey}` };
 }
 
-export type MandateKind = "upi" | "enach";
-
 export interface MandateInfo {
   status: string;
-  /** null until the customer has picked UPI or bank account on Easebuzz's page */
-  kind: MandateKind | null;
-  /** eNACH: the bank account, masked by Easebuzz */
-  bankAccount: string | null;
+  /** the first payment taken at approval: success / failure / in_process ...; null when none was asked */
+  upfront: { status: string; amount: number | null } | null;
   id: string | null;
   umrn: string | null;
   upiHandle: string | null;
   raw: Json;
 }
 
-/** Easebuzz's mandate_type ("UPI", "ENACH") as ours; null when not chosen yet or not one we offer. */
-export function kindOf(t: unknown): MandateKind | null {
-  const s = String(t ?? "").toUpperCase();
-  if (s.includes("UPI")) return "upi";
-  if (s.includes("NACH")) return "enach";
-  return null;
-}
+const upfrontOf = (u: unknown): MandateInfo["upfront"] => {
+  if (!u || typeof u !== "object" || !Object.keys(u).length) return null;
+  const o = u as Json;
+  return { status: String(o.status ?? "unknown"), amount: o.amount == null ? null : Number(o.amount) };
+};
 
 /** A mandate as Easebuzz has it now (by our transaction id). */
 export async function getMandate(txnId: string): Promise<MandateInfo> {
   const d = data(await call("GET", `/v1/mandate/${encodeURIComponent(txnId)}/`, sign(KEY, txnId)));
   return {
     status: String(d.status ?? "unknown"),
-    kind: kindOf(d.mandate_type),
-    bankAccount: kindOf(d.mandate_type) === "enach" && d.customer_account_number ? String(d.customer_account_number) : null,
+    upfront: upfrontOf(d.upfront_presentment),
     id: d.id ? String(d.id) : null,
     umrn: d.umrn ? String(d.umrn) : null,
     upiHandle: d.customer_upi_handle ? String(d.customer_upi_handle) : null,
@@ -181,26 +177,7 @@ export async function executeDebit(txnId: string, notifyNo: string, debitNo: str
   return { status: String(d.status ?? "in_process"), raw: d };
 }
 
-/**
- * eNACH: raises the debit itself - no notice to the bank first (that is UPI only). Easebuzz hands it to the bank in
- * its next cycle (7 AM / 8 PM) and the bank's answer comes 24-48 h later; read it with [getDebit].
- */
-export async function presentDebit(txnId: string, debitNo: string, amount: number): Promise<{ status: string; raw: Json }> {
-  const a = amountText(amount);
-  const d = data(
-    await call("POST", "/v1/mandate/presentment/", sign(KEY, txnId, debitNo, a), {
-      key: KEY,
-      transaction_id: txnId,
-      amount: Number(a),
-      merchant_request_number: debitNo,
-      fetch_balance: false,
-      force_presentment: false,
-    }),
-  );
-  return { status: String(d.status ?? "in_process"), raw: d };
-}
-
-/** A debit (UPI or eNACH) by our merchant_request_number. */
+/** A debit by our merchant_request_number. */
 export async function getDebit(debitNo: string): Promise<{ status: string; raw: Json }> {
   const d = data(await call("GET", `/v1/mandate/presentment/${encodeURIComponent(debitNo)}/`, sign(KEY, debitNo)));
   return { status: String(d.status ?? "unknown"), raw: d };

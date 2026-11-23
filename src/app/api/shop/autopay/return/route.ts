@@ -12,17 +12,12 @@ async function page(req: NextRequest) {
   const m = /^GM\d+T[0-9A-Z]+$/.test(txn) ? await refreshMandate(txn) : null;
   const ok = m?.status === "authorized";
   const waiting = m && ["requested", "initiated"].includes(m.status);
-  const bank = m?.kind === "enach";
-  const title = ok ? "Autopay is on" : waiting ? (bank ? "Your bank is approving it" : "Almost done") : "Autopay was not set up";
+  const title = ok ? "Subscription paid" : waiting ? "Almost done" : "Payment not done";
   const text = ok
-    ? bank
-      ? "Your Gaia subscription will be paid automatically from your bank account."
-      : "Your Gaia subscription will be paid automatically. You'll be told a day before every debit."
+    ? "Your first payment is done and autopay is on: the next ones are taken by themselves. You'll be told a day before each."
     : waiting
-      ? bank
-        ? "Banks take up to 2 days to approve autopay. Your subscription starts as soon as it's approved; we'll let you know."
-        : "Approve the request in your UPI app. The Gaia app updates as soon as it's approved."
-      : "Nothing was set up and no money was taken. You can try again from the Gaia app.";
+      ? "Approve the request in your UPI app. The Gaia app updates as soon as it's done."
+      : "No money was taken. Open your subscription in the Gaia app and tap Pay to try again.";
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} | Gaia</title><style>
 body{margin:0;background:#F7F5E8;color:#2F3992;font-family:system-ui,-apple-system,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}

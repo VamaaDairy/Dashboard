@@ -67,7 +67,7 @@ export async function setPeriod(customerId: number, p: Period): Promise<void> {
   if (st.open?.status === "pending") await refreshPack(st.open.id, customerId);
 }
 /** The next pack is raised when this many paid delivery days (or fewer) are left: time for the bank (UPI notice
- * 24 h + debit; eNACH 24-48 h) before the paid days run out. */
+ * 24 h + debit) before the paid days run out. */
 export const LEAD_DAYS = 4;
 /** A pack on its way (not settled yet). Matches the unique index shop_charge_one_open_pack. */
 export const OPEN = ["pending", "notifying", "notified", "presenting", "failed"];

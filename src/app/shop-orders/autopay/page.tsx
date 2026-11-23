@@ -22,7 +22,7 @@ const CHARGE: Record<string, string> = {
 const tone = (s: string) =>
   s === "paid" || s === "authorized" ? "text-green-700" : s === "unpaid" || ["failed", "rejected", "cancelled", "revoked", "expired"].includes(s) ? "text-red-700" : "text-amber-700";
 
-/** Autopay (UPI Autopay or eNACH) for subscriptions: who has it set up, and how each delivery's debit is going (issue #65). */
+/** UPI Autopay for subscriptions: who pays how, and how each payment is going. */
 export default async function AutopayPage() {
   const [mandates, charges, payers] = await Promise.all([allMandates(), recentCharges(), packCustomers()]);
   const active = mandates.filter((m) => m.status === "authorized").length;
@@ -36,7 +36,7 @@ export default async function AutopayPage() {
         <PageHeader
           icon={Repeat}
           title="Autopay"
-          subtitle={`Subscriptions are paid for a period the customer picks (4 weeks, a month, or up to a date of their own) - all the deliveries in it at once - by UPI Autopay or eNACH (bank account). A day's order is made only while paid days are left; skipped and paused days use none. The next pack is debited a few days before they run out (UPI: bank told 24 h ahead; eNACH: settled in 24-48 h). A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to try again in the app. A cancelled subscription is delivered until its paid days are used, then ends - no refund.`}
+          subtitle={`Subscriptions are paid for a period the customer picks (4 weeks, a month, or up to a date of their own) - all the deliveries in it at once - by UPI Autopay. The first payment is made in the UPI app while subscribing; a day's order is made only while paid days are left (skipped and paused days use none). The next one is debited a few days before they run out (the bank is told 24 h ahead). A failed debit is tried ${MAX_ATTEMPTS} times, then the customer is asked to try again in the app. A cancelled subscription is delivered until its paid days are used, then ends - no refund.`}
           actions={<Link href="/shop-orders/subscriptions" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Subscriptions</Link>}
         />
         <div className="grid gap-3 md:grid-cols-3">
@@ -109,21 +109,19 @@ export default async function AutopayPage() {
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-              <tr>{["Customer", "Status", "Limit / day", "Type", "UPI ID / account", "Approved", "Started"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+              <tr>{["Customer", "Status", "UPI ID", "Approved", "Started"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {mandates.map((m) => (
                 <tr key={m.id} className="border-t border-border">
                   <td className="px-3 py-2"><div className="font-medium">{m.customer}</div><div className="font-mono text-xs text-muted-foreground">{m.phone}</div></td>
                   <td className={`whitespace-nowrap px-3 py-2 font-medium ${tone(m.status)}`}>{MANDATE[m.status] ?? m.status}</td>
-                  <td className="num px-3 py-2">{money(m.max_amount)}</td>
-                  <td className="whitespace-nowrap px-3 py-2">{m.kind === "enach" ? "eNACH" : m.kind === "upi" ? "UPI" : "-"}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{(m.kind === "enach" ? m.bank_account : m.upi_handle) ?? "-"}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{m.upi_handle ?? "-"}</td>
                   <td className="whitespace-nowrap px-3 py-2">{when(m.authorized_at)}</td>
                   <td className="whitespace-nowrap px-3 py-2">{when(m.created_at)}</td>
                 </tr>
               ))}
-              {mandates.length === 0 ? <tr><td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">No customer has set up autopay yet.</td></tr> : null}
+              {mandates.length === 0 ? <tr><td colSpan={5} className="px-3 py-10 text-center text-muted-foreground">No customer has set up autopay yet.</td></tr> : null}
             </tbody>
           </table>
         </div>
