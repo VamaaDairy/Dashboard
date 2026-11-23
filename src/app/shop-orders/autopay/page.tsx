@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Repeat } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { allMandates, MAX_ATTEMPTS, recentCharges, required } from "@/lib/shop/autopay";
+import { allMandates, MAX_ATTEMPTS, recentCharges } from "@/lib/shop/autopay";
 import { autocollectReady, isLive } from "@/lib/payments/autocollect";
 import { packCustomers, periodLabel } from "@/lib/shop/packs";
 
@@ -43,7 +43,7 @@ export default async function AutopayPage() {
           <div className={card}>
             <div className="text-xs font-semibold uppercase text-muted-foreground">Easebuzz Autocollect</div>
             <div className="mt-1 text-lg font-bold">{autocollectReady() ? (isLive() ? "Live" : "Sandbox (test money)") : "Not configured"}</div>
-            <div className="text-sm text-muted-foreground">{required() ? "Every subscription is paid by autopay" : autocollectReady() ? "New subscriptions start with autopay; older ones paying cash keep going" : "Autopay is off"}</div>
+            <div className="text-sm text-muted-foreground">Every subscription is paid by autopay</div>
           </div>
           <div className={card}>
             <div className="text-xs font-semibold uppercase text-muted-foreground">Customers with autopay</div>

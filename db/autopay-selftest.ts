@@ -11,7 +11,6 @@ process.env.EASEBUZZ_KEY = "TESTKEY";
 process.env.EASEBUZZ_SALT = "TESTSALT";
 process.env.EASEBUZZ_ENV = "test";
 process.env.AUTOPAY_FAST = "1";
-process.env.AUTOPAY_ENABLED = "1";
 if (!/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL ?? "")) throw new Error("Local database only.");
 
 const sha = (...p: Array<string | number>) => createHash("sha512").update([...p.map(String), "TESTSALT"].join("|")).digest("hex");
@@ -244,7 +243,7 @@ async function main() {
     await runDays(subs.addDays(today, 27), 5);
     check((await ordersOf(e.id)).length === 30, "deliveries stop once the paid days are used");
     const view = await ap.autopayView(e.id);
-    check(view.pack?.unpaid === true && view.unpaid === 0, "app sees 'try again' (an uncollected pack is not a debt)");
+    check(view.pack?.unpaid === true, "app sees 'try again'");
     const again = await pk.raisePack(e.id); // what POST /api/shop/autopay/retry does
     check(again?.status === "pending", "Try again raises a new pack");
     await settle(e.id);
@@ -373,19 +372,11 @@ async function main() {
     const r2w = (await pk.packState(w4.x.id)).open;
     check(r2w?.days === 14, `renewal pays the same 2 weeks again (got ${r2w?.days})`);
 
-    // ---------------------------------------------------------------- 9c. autopay on, not required: new ones need it, old cash ones go on
-    check(ap.requiredForNew() && !ap.required(), "autopay switched on: a NEW subscription must set it up");
-    const old = await newCustomer("Old Cash");
-    await subscribe(old, 1);
-    await subs.generateOrders(today);
-    check((await ordersOf(old.id))[0]?.payment_method === "cod", "an older subscription without autopay still gets its cash delivery");
-
-    // ---------------------------------------------------------------- 10. autopay required
-    process.env.AUTOPAY_REQUIRED = "1";
+    // ---------------------------------------------------------------- 10. autopay only: no mandate, no order
     const w = await newCustomer("No Mandate");
     await subscribe(w, 1);
     await subs.generateOrders(today);
-    check((await ordersOf(w.id)).length === 0, "with autopay required, a customer without it gets no order");
+    check((await ordersOf(w.id)).length === 0, "a customer without autopay gets no order (no cash for subscriptions)");
     check((await ap.subscriptionMandate(w.id)) === null, "...and cannot start a subscription");
 
     // eNACH still with the bank: the plan is saved, its pack waits, deliveries start once approved and paid
@@ -420,7 +411,6 @@ async function main() {
     await ap.refreshMandate(sr.txnId);
     check((await ap.subscriptionMandate(rj.id)) === null && (await ap.autopayView(rj.id)).state === "none", "a rejected eNACH mandate is off and no longer counts");
   } finally {
-    delete process.env.AUTOPAY_REQUIRED;
     for (const id of extra) {
       await query(`delete from shop_order where customer_id = $1`, [id]);
       await query(`delete from shop_customer where id = $1`, [id]);

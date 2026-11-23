@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
  *
  * Same account settings as the checkout (src/lib/payments/easebuzz.ts): EASEBUZZ_KEY, EASEBUZZ_SALT and
  * EASEBUZZ_ENV ("prod" = live money, anything else = Easebuzz's sandbox). Autocollect must be switched on for the
- * account by Easebuzz, and AUTOPAY_ENABLED=1 set here once it is (until then nothing autopay runs). Every call is signed with a SHA-512 of fields and the salt (the salt itself never leaves us).
+ * account by Easebuzz. Every call is signed with a SHA-512 of fields and the salt (the salt itself never leaves us).
  */
 
 const KEY = process.env.EASEBUZZ_KEY ?? "";
@@ -17,8 +17,8 @@ const API = LIVE ? "https://api.easebuzz.in/autocollect" : "https://sandboxapi.e
 /** Easebuzz's own page where the customer approves the mandate in their UPI app (the "redirect" method). */
 const PAY = LIVE ? "https://pay.easebuzz.in/pay/" : "https://testpay.easebuzz.in/pay/";
 
-/** Easebuzz has switched Autocollect on for the account and we turned it on here (AUTOPAY_ENABLED=1). */
-export const autocollectReady = () => !!KEY && !!SALT && process.env.AUTOPAY_ENABLED === "1";
+/** The Easebuzz key and salt are set. */
+export const autocollectReady = () => !!KEY && !!SALT;
 export const isLive = () => LIVE;
 
 const sha512 = (s: string) => createHash("sha512").update(s, "utf8").digest("hex");

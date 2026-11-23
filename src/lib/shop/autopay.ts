@@ -5,27 +5,18 @@ import { notify } from "@/lib/push";
 import * as packs from "./packs";
 
 /**
- * Subscription deliveries paid by autopay (migration 087, issue #65; eNACH added in migration 118).
+ * Subscriptions are paid by autopay only (Easebuzz Autocollect), a chosen period at a time (src/lib/shop/packs.ts).
  *
- *   1. The customer sets up one mandate: we get an access key from Easebuzz and the app opens Easebuzz's page,
- *      where they pick UPI Autopay (approved in their UPI app) or eNACH (their bank account, approved with net
- *      banking or a debit card) - "as presented", up to a maximum per debit. An eNACH mandate takes the bank
- *      24-48 h to approve.
- *   2. While a customer has an authorised mandate, their subscription orders are 'autopay' - no cash is collected.
- *   3. A delivered autopay order becomes a charge. In the evening debit window the bank is notified of the amount
- *      (NPCI: at least 24 h before the debit); the next evening, after re-checking the mandate is still active, it is
- *      debited. Easebuzz's webhook and our own polling both move a charge on; every status is read back from
- *      Easebuzz's API, never taken from what was posted to us.
- *      eNACH has no notice: the evening a charge is due its debit is raised straight away; Easebuzz hands it to the
- *      bank at 7 AM and the bank's answer comes 24-48 h later.
- *   Subscriptions are paid in packs of 30 deliveries (src/lib/shop/packs.ts): a pack is a charge with kind 'pack'
- *   and no order, debited the same way; its days are used by 'prepaid' subscription orders. ('delivery' charges -
- *   one per delivered 'autopay' order - are the old way, kept only for such orders made before packs.)
- *   4. A failed notice or debit is tried again the next evening; after [MAX_ATTEMPTS] the charge is 'unpaid' and the
- *      customer is asked to pay it in the app.
+ *   1. While subscribing, the customer sets up one mandate: Easebuzz's page, where they pick UPI Autopay (approved
+ *      in their UPI app) or eNACH (their bank account; the bank approves it in 24-48 h) - "as presented", up to a
+ *      maximum per debit.
+ *   2. Each pack is a charge (kind 'pack'). UPI: in the evening debit window the bank is told the amount (NPCI: at
+ *      least 24 h ahead), the next evening it is debited. eNACH: no notice - the debit is raised that evening,
+ *      Easebuzz hands it to the bank at 7 AM, the answer comes 24-48 h later. Easebuzz's webhook and our own
+ *      polling move a charge on; every status is read back from Easebuzz's API, never taken from a post.
+ *   3. A failed notice or debit is tried again the next evening; after [MAX_ATTEMPTS] the pack is 'unpaid' and the
+ *      customer can try again in the app.
  *
- * Settings: AUTOPAY_REQUIRED=1 makes autopay compulsory for subscriptions (new ones need a mandate; customers
- * without one get no subscription orders). Without it, customers without a mandate stay on cash as before.
  * AUTOPAY_FAST=1 (sandbox only) ignores the debit window and the 24-hour wait, for testing.
  */
 
@@ -35,12 +26,6 @@ export const DEFAULT_MAX = 5000;
 export const MIN_MAX = 500;
 /** UPI Autopay debits above ₹15,000 need the customer's PIN each time, so this is the ceiling. */
 export const MAX_MAX = 15000;
-export const required = () => process.env.AUTOPAY_REQUIRED === "1";
-/**
- * A NEW subscription is started with autopay whenever autopay is switched on: the customer sets it up while
- * subscribing. (AUTOPAY_REQUIRED additionally stops orders for older subscriptions that still pay cash.)
- */
-export const requiredForNew = () => required() || eb.autocollectReady();
 const fast = () => process.env.AUTOPAY_FAST === "1" && !eb.isLive();
 const PUBLIC_URL = (process.env.SHOP_PUBLIC_URL ?? "https://production.vamadairy.in").replace(/\/+$/, "");
 const EMAIL = process.env.EASEBUZZ_EMAIL ?? "payments@vamaadairy.com";
@@ -229,7 +214,6 @@ export interface AutopayView {
   } | null;
   /** how long each subscription payment covers (the customer's choice) */
   period: packs.Period;
-  unpaid: number;
 }
 
 export async function autopayView(customerId: number): Promise<AutopayView> {
@@ -246,7 +230,7 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
   const hasPacks = st.paidDays > 0 || !!st.open || st.lastUnpaid;
   return {
     state: active ? "active" : fresh ? "pending" : "none",
-    required: requiredForNew(),
+    required: true, // subscriptions are paid by autopay only
     available: eb.autocollectReady(),
     maxAmount: last?.max_amount ?? null,
     kind: last?.kind ?? null,
@@ -258,8 +242,6 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
       kind: c.kind, days: c.days, orderNo: c.order_no ?? `${c.days} deliveries`, day: c.day, amount: c.amount, status: c.status, failure: c.failure,
       paidAt: c.paid_at ? new Date(c.paid_at).toISOString() : null,
     })),
-    // a pack that could not be collected is not a debt (nothing was delivered for it): only delivery charges count
-    unpaid: charges.filter((c) => c.status === "unpaid" && c.kind === "delivery").reduce((n, c) => n + c.amount, 0),
     pack: hasPacks
       ? {
           daysLeft: st.daysLeft,
@@ -274,20 +256,6 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
 }
 
 // ---------------------------------------------------------------- charges
-
-/** A delivered autopay order becomes a charge (once). Called when an order is marked delivered. */
-export async function chargeDelivered(orderId: number): Promise<void> {
-  await query(
-    `insert into shop_charge (order_id, customer_id, mandate_id, amount)
-     select o.id, o.customer_id,
-            (select m.id from shop_mandate m where m.customer_id = o.customer_id and m.status = '${ACTIVE}' order by m.authorized_at desc nulls last limit 1),
-            o.total
-       from shop_order o
-      where o.id = $1 and o.payment_method = 'autopay' and o.status = 'delivered' and o.customer_id is not null and o.total > 0
-     on conflict (order_id) do nothing`,
-    [orderId],
-  );
-}
 
 interface Charge {
   id: number;
@@ -325,35 +293,20 @@ async function failed(c: Charge, reason: string): Promise<void> {
   const last = c.attempts >= MAX_ATTEMPTS;
   await query(`update shop_charge set status = $2, failure = $3, updated_at = now() where id = $1`, [c.id, last ? "unpaid" : "pending", reason.slice(0, 200)]);
   if (last) {
-    await notify("customer", c.customer_id, c.ckind === "pack"
-      ? {
-          title: "Subscription payment failed",
-          body: `We couldn't collect ${rupees(c.amount)} for your next ${c.days ?? packs.PACK_DAYS} deliveries. Deliveries stop after the days already paid. Open the Gaia app to try again.`,
-          data: { screen: "autopay" },
-        }
-      : {
-          title: "Payment due",
-          body: `We couldn't collect ${rupees(c.amount)} for order ${c.order_no} by autopay. Please pay it in the Gaia app.`,
-          data: { screen: "autopay" },
-        });
+    await notify("customer", c.customer_id, {
+      title: "Subscription payment failed",
+      body: `We couldn't collect ${rupees(c.amount)} for your next ${c.days ?? packs.PACK_DAYS} deliveries. Deliveries stop after the days already paid. Open the Gaia app to try again.`,
+      data: { screen: "autopay" },
+    });
   }
 }
 
 async function paid(c: Charge, raw: unknown): Promise<void> {
   const r = await query(`update shop_charge set status = 'paid', paid_at = now(), failure = null, raw = $2, updated_at = now() where id = $1 and status <> 'paid' returning id`, [c.id, JSON.stringify(raw)]);
   if (!r.length) return;
-  if (c.ckind === "pack") {
-    await notify("customer", c.customer_id, {
-      title: "Subscription paid",
-      body: `${rupees(c.amount)} was paid by autopay from ${by(c.kind)} for your next ${c.days ?? packs.PACK_DAYS} deliveries.`,
-      data: { screen: "autopay" },
-    });
-    return;
-  }
-  await query(`update shop_order set payment_status = 'paid', updated_at = now() where id = $1`, [c.order_id]);
   await notify("customer", c.customer_id, {
-    title: "Paid by autopay",
-    body: `${rupees(c.amount)} for order ${c.order_no} was paid by autopay from ${by(c.kind)}.`,
+    title: "Subscription paid",
+    body: `${rupees(c.amount)} was paid by autopay from ${by(c.kind)} for your next ${c.days ?? packs.PACK_DAYS} deliveries.`,
     data: { screen: "autopay" },
   });
 }
