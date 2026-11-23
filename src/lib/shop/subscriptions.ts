@@ -1,6 +1,6 @@
 import "server-only";
 import { required as autopayRequired } from "./autopay";
-import { deliversOn, packState, prepaidCustomers, raisePack, refreshPack } from "./packs";
+import { deliversOn, packState, paidTill, prepaidCustomers, raisePack, refreshPack } from "./packs";
 import { query, tx } from "@/lib/db";
 import { notifyOrderStatus, notifySubscription } from "@/lib/push";
 import { listProductsForDisplay, pricesFor } from "./catalog";
@@ -211,9 +211,16 @@ export async function customerCalendar(customerId: number, from: string, count: 
     });
   }
 
+  // paying by packs: how many paid deliveries are left, until when, and whether one is on its way
+  const st = await packState(customerId);
+  const pack = st.paidDays > 0 || st.open || st.lastUnpaid
+    ? { daysLeft: st.daysLeft, paidTill: await paidTill(customerId, st), open: st.open ? { status: st.open.status, amount: st.open.amount, days: st.open.days } : null, unpaid: st.lastUnpaid }
+    : null;
+
   return {
     today: todayIST(),
     firstEditableDay: firstEditableDay(),
+    pack,
     cutoffHour: CUTOFF_HOUR,
     subscriptions: subs.map((s) => {
       const p = products.get(s.sku_code);
