@@ -105,6 +105,9 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   const file = form.get("image");
   const poster = file instanceof File && file.size > 0 ? file : null;
   const removeImage = text("removeImage") === "1";
+  // which app: d2c, or the Gaia Distributors app (distributor / retailer / partners = both)
+  const audience = text("audience") || "d2c";
+  if (!["d2c", "distributor", "retailer", "partners"].includes(audience)) return { ok: false, error: "Choose which app the banner is for." };
 
   if (!/^#[0-9a-f]{6}$/i.test(bg)) return { ok: false, error: "Pick a background colour." };
   if (!Number.isInteger(priority) || Math.abs(priority) > 10000) return { ok: false, error: "Priority must be a whole number." };
@@ -118,13 +121,13 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   if (offerId && !(await query(`select 1 from shop_offer where id = $1`, [offerId])).length) return { ok: false, error: "That offer does not exist." };
 
   const bytes = poster ? Buffer.from(await poster.arrayBuffer()) : null;
-  const vals = [title, text("subtitle") || null, text("cta") || null, sku, bg.toUpperCase(), priority, starts, ends, category, offerId];
+  const vals = [title, text("subtitle") || null, text("cta") || null, sku, bg.toUpperCase(), priority, starts, ends, category, offerId, audience];
   if (id) {
     // a new poster replaces the old one; "remove" goes back to a designed card
-    const img = bytes ? `, image = $12, image_mime = $13` : removeImage ? `, image = null, image_mime = null` : "";
+    const img = bytes ? `, image = $13, image_mime = $14` : removeImage ? `, image = null, image_mime = null` : "";
     const [row] = await query<{ image: boolean }>(
       `update shop_banner set title = $2, subtitle = $3, cta = $4, sku_code = $5, bg_color = $6, priority = $7, starts_at = $8, ends_at = $9,
-              category = $10, offer_id = $11, updated_at = now()${img}
+              category = $10, offer_id = $11, audience = $12, updated_at = now()${img}
         where id = $1 returning image is not null as image`,
       [id, ...vals, ...(bytes ? [bytes, poster!.type] : [])],
     );
@@ -133,12 +136,13 @@ export async function saveBannerAction(form: FormData): Promise<{ ok: boolean; e
   } else {
     if (!title && !bytes) return { ok: false, error: "Give the banner a title or a poster image." };
     await query(
-      `insert into shop_banner (title, subtitle, cta, sku_code, bg_color, priority, starts_at, ends_at, category, offer_id, image, image_mime)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      `insert into shop_banner (title, subtitle, cta, sku_code, bg_color, priority, starts_at, ends_at, category, offer_id, audience, image, image_mime)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [...vals, bytes, poster?.type ?? null],
     );
   }
   revalidatePath("/shop-orders/banners");
+  revalidatePath("/app-orders/marketing/banners");
   return { ok: true };
 }
 
@@ -150,6 +154,7 @@ export async function setBannerAction(id: number, patch: { active?: boolean; pri
     [id, patch.active ?? null, patch.priority ?? null],
   );
   revalidatePath("/shop-orders/banners");
+  revalidatePath("/app-orders/marketing/banners");
   return { ok: true };
 }
 
@@ -157,11 +162,12 @@ export async function setBannerAction(id: number, patch: { active?: boolean; pri
 export async function duplicateBannerAction(id: number): Promise<{ ok: boolean; error?: string }> {
   if (!(await canEdit())) return NO;
   const r = await query(
-    `insert into shop_banner (title, subtitle, cta, sku_code, bg_color, image, image_mime, priority, active, starts_at, ends_at, category, offer_id)
-     select title, subtitle, cta, sku_code, bg_color, image, image_mime, priority, false, starts_at, ends_at, category, offer_id from shop_banner where id = $1 returning id`,
+    `insert into shop_banner (title, subtitle, cta, sku_code, bg_color, image, image_mime, priority, active, starts_at, ends_at, category, offer_id, audience)
+     select title, subtitle, cta, sku_code, bg_color, image, image_mime, priority, false, starts_at, ends_at, category, offer_id, audience from shop_banner where id = $1 returning id`,
     [id],
   );
   revalidatePath("/shop-orders/banners");
+  revalidatePath("/app-orders/marketing/banners");
   return r.length ? { ok: true } : { ok: false, error: "That banner no longer exists." };
 }
 
@@ -169,6 +175,7 @@ export async function deleteBannerAction(id: number): Promise<{ ok: boolean; err
   if (!(await canEdit())) return NO;
   await query(`delete from shop_banner where id = $1`, [id]);
   revalidatePath("/shop-orders/banners");
+  revalidatePath("/app-orders/marketing/banners");
   return { ok: true };
 }
 

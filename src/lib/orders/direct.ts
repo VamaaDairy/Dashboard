@@ -2,6 +2,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { one, query, tx } from "@/lib/db";
 import { firmPrices, priceDistLines, withUnits, type DistLogin } from "@/lib/distributor";
+import { orderCode, priceWithOffers, writeOrderLines } from "@/lib/distributor/offers";
 import { unitsText, type Units } from "@/lib/distributor/packs";
 import { listAllProducts } from "@/lib/shop/catalog";
 import { redraftInvoice } from "@/lib/distributor/invoice";
@@ -113,6 +114,8 @@ export interface DeskLine {
   amount: number;
   /** the split as ordered, e.g. { CRT: 2, PCS: 5 }; null when by the piece only */
   units: Units | null;
+  /** given free by an offer (a line of its own at 0) */
+  free: boolean;
 }
 
 export interface OrderEvent {
@@ -125,7 +128,8 @@ export interface OrderEvent {
 }
 
 export async function orderLines(c: PoolClient | null, uid: string): Promise<DeskLine[]> {
-  const sql = `select p.sku_code as sku, p.sku_name as name, i.quantity::float as qty, i.selling_price::float as rate, i.total_cost::float as amount, i.units
+  const sql = `select p.sku_code as sku, p.sku_name as name, i.quantity::float as qty, i.selling_price::float as rate, i.total_cost::float as amount, i.units,
+                      coalesce((i.scheme_details->>'free')::boolean, false) as free
                  from fp_booking_order_item i join fp_product p on p.uid = i.product_uid
                 where i.booking_order_uid = $1 order by i.order_item_number`;
   return c ? (await c.query<DeskLine>(sql, [uid])).rows : query<DeskLine>(sql, [uid]);
@@ -191,22 +195,24 @@ const describe = (changes: LineChange[]) =>
  * Replaces a pending order's lines. lines: the whole new order, SKU → quantity in pieces (0 or missing removes it).
  * packs: how many of a line's pieces are whole crates / boxes, where the buyer said; a line left out keeps its split
  * when its quantity is unchanged, else takes as many whole packs as fit.
- * Prices are worked out again for the buyer, totals and the invoice follow, and the change is logged.
+ * opts.totals: the quantities include the items an offer gave free (the route sheet, the office's order page and
+ * older apps show them together) - the free pieces are taken off before pricing; without it they are what is paid.
+ * Prices are worked out again for the buyer, with the partner offers the order was placed under (src/lib/distributor/
+ * offers.ts); totals and the invoice follow, and the change is logged.
  */
-export async function editOrder(uid: string, lines: Map<string, number>, who: Actor, note?: string | null, packs: Map<string, number> = new Map()): Promise<DeskResult> {
+export async function editOrder(
+  uid: string, lines: Map<string, number>, who: Actor, note?: string | null, packs: Map<string, number> = new Map(), opts: { totals?: boolean } = {},
+): Promise<DeskResult> {
   if (!/^[0-9a-f-]{36}$/i.test(uid)) return { ok: false, error: "That order no longer exists." };
-  const wanted = new Map([...lines].filter(([, q]) => q > 0));
-  if (!wanted.size) return { ok: false, error: "An order needs at least one product. Cancel it instead." };
-  if ([...wanted.values()].some((q) => !Number.isInteger(q) || q > MAX_DESK_QTY)) return { ok: false, error: "Check the quantities." };
+  if ([...lines.values()].some((q) => !Number.isInteger(q) || q < 0 || q > MAX_DESK_QTY)) return { ok: false, error: "Check the quantities." };
 
-  const head = await one<{ firm: string; retail: boolean; status: string }>(
-    `select from_firm_uid as firm, ${RETAIL_BUYER} as retail, status from fp_booking_order b where uid = $1`,
+  const head = await one<{ firm: string; retail: boolean; status: string; at: Date }>(
+    `select from_firm_uid as firm, ${RETAIL_BUYER} as retail, status, coalesce(booking_time, created_at, now()) as at from fp_booking_order b where uid = $1`,
     [uid],
   );
   if (!head) return { ok: false, error: "That order no longer exists." };
   // a retailer's order (its own, or booked for it by a sales officer) is priced from the Retail list
-  const priced = await priceDistLines(head.retail ? "retail" : "distributor", head.firm, wanted);
-  if (!priced.ok) return priced;
+  const channel = head.retail ? "retail" : "distributor";
 
   const r = await tx(async (c): Promise<DeskResult & { changes?: LineChange[] }> => {
     const o = (await c.query<{ order_id: number; status: string }>(`select order_id, status from fp_booking_order where uid = $1 for update`, [uid])).rows[0];
@@ -214,35 +220,36 @@ export async function editOrder(uid: string, lines: Map<string, number>, who: Ac
     if (!isPending(o.status)) return { ok: false, error: `Order ${o.order_id} is ${o.status.toLowerCase()}; only a pending order can be changed.` };
 
     const before = await orderLines(c, uid);
-    const split = await withUnits(priced.lines, packs, new Map(before.map((l) => [l.sku, { qty: l.qty, units: l.units }])));
+    const paidBefore = new Map<string, number>();
+    const freeBefore = new Map<string, number>();
+    for (const l of before) (l.free ? freeBefore : paidBefore).set(l.sku, ((l.free ? freeBefore : paidBefore).get(l.sku) ?? 0) + l.qty);
+    // what is to be paid for: the free pieces taken off a total that includes them
+    const wanted = new Map<string, number>();
+    for (const [sku, q] of lines) {
+      const paid = opts.totals ? Math.max(0, q - (freeBefore.get(sku) ?? 0)) : q;
+      if (paid > 0) wanted.set(sku, paid);
+    }
+    if (!wanted.size) return { ok: false, error: "An order needs at least one product. Cancel it instead." };
+    const priced = await priceDistLines(channel, head.firm, wanted);
+    if (!priced.ok) return priced;
+
+    const split = await withUnits(priced.lines, packs, new Map(before.filter((l) => !l.free).map((l) => [l.sku, { qty: l.qty, units: l.units }])));
     const names = new Map(before.map((l) => [l.sku, l.name]));
     const added = await c.query<{ sku: string; name: string }>(`select sku_code as sku, sku_name as name from fp_product where sku_code = any($1)`, [[...wanted.keys()]]);
     for (const a of added.rows) if (!names.has(a.sku)) names.set(a.sku, a.name);
     const changes: LineChange[] = [];
-    for (const sku of new Set([...before.map((l) => l.sku), ...wanted.keys()])) {
-      const from = before.find((l) => l.sku === sku)?.qty ?? 0;
+    for (const sku of new Set([...paidBefore.keys(), ...wanted.keys()])) {
+      const from = paidBefore.get(sku) ?? 0;
       const to = wanted.get(sku) ?? 0;
       if (from !== to) changes.push({ sku, name: names.get(sku) ?? sku, from, to });
     }
     // only crates / boxes against loose pieces changed (same total): still saved
-    const splitChanged = split.some((l) => unitsText(l.units) !== unitsText(before.find((b) => b.sku === l.sku)?.units ?? null));
+    const splitChanged = split.some((l) => unitsText(l.units) !== unitsText(before.find((b) => b.sku === l.sku && !b.free)?.units ?? null));
     if (!changes.length && !splitChanged) return { ok: false, error: "Nothing changed." };
 
-    await c.query(`delete from fp_booking_order_item where booking_order_uid = $1`, [uid]);
-    let n = 0;
-    for (const l of split) {
-      await c.query(
-        `insert into fp_booking_order_item (mrp, selling_price, dp, quantity, stock, total_cost, booking_order_uid, product_uid, order_item_number, units)
-         values ($1, $2, $2, $3, 0, $4, $5, $6, $7, $8)`,
-        [l.mrp, l.dp, l.qty, Math.round(l.qty * l.dp * 100) / 100, uid, l.uid, ++n, l.units ? JSON.stringify(l.units) : null],
-      );
-    }
-    const qty = priced.lines.reduce((s, l) => s + l.qty, 0);
-    const total = Math.round(priced.lines.reduce((s, l) => s + l.qty * l.dp, 0) * 100) / 100;
-    await c.query(
-      `update fp_booking_order set total_item = $2, total_quantity = $3, total_cost = $4, dealer_cost = $4, modified_time = now(), updated_at = now() where uid = $1`,
-      [uid, priced.lines.length, qty, total],
-    );
+    // the offers it was placed under (and its code), priced into the lines
+    const quote = await priceWithOffers(channel, head.firm, split, await orderCode(c, uid), { at: new Date(head.at), uid });
+    await writeOrderLines(c, uid, quote);
     await redraftInvoice(c, uid);
     await event(c, uid, "edited", who, note, changes);
     return { ok: true, changes };
@@ -393,11 +400,12 @@ async function appOrder(login: DistLogin, orderId: number) {
 const buyer = (login: DistLogin): Actor => ({ name: `${login.name} (${login.kind})`, kind: "app" });
 const closed = "This order can no longer be changed from the app. Please call Gaia on 8085959595.";
 
-export async function editOrderFromApp(login: DistLogin, orderId: number, lines: Map<string, number>, packs?: Map<string, number>): Promise<DeskResult> {
+/** [paidOnly]: the app sent only what is paid for (newer apps leave the free items out); older apps send them too. */
+export async function editOrderFromApp(login: DistLogin, orderId: number, lines: Map<string, number>, packs?: Map<string, number>, paidOnly = false): Promise<DeskResult> {
   const o = await appOrder(login, orderId);
   if (!o) return { ok: false, error: "Order not found." };
   if (!o.open) return { ok: false, error: closed };
-  return editOrder(o.uid, lines, buyer(login), null, packs);
+  return editOrder(o.uid, lines, buyer(login), null, packs, { totals: !paidOnly });
 }
 
 export async function cancelOrderFromApp(login: DistLogin, orderId: number, reason?: string): Promise<DeskResult> {
@@ -436,7 +444,9 @@ export async function setLineFromSheet(uid: string, sku: string, qty: number, wh
   if (o.billed) return { ok: false, error: `Order ${o.orderId} is billed. Cancel its bill first.` };
   if (o.trip) return { ok: false, error: `Order ${o.orderId} is on a trip. Take it off the trip on the Dispatch page first.` };
 
-  const lines = new Map((await orderLines(null, uid)).map((l) => [l.sku, l.qty]));
+  // the sheet shows what goes on the truck: paid and free pieces together
+  const lines = new Map<string, number>();
+  for (const l of await orderLines(null, uid)) lines.set(l.sku, (lines.get(l.sku) ?? 0) + l.qty);
   if ((lines.get(sku) ?? 0) === qty && packs === null) return { ok: true };
   lines.set(sku, qty);
   const left = [...lines.values()].filter((q) => q > 0).length;
@@ -456,7 +466,7 @@ export async function setLineFromSheet(uid: string, sku: string, qty: number, wh
     const re = await reopenOrder(uid, who, why ?? "Changed on the route sheet");
     if (!re.ok) return re;
   }
-  const r = await editOrder(uid, lines, who, why ?? "Changed on the route sheet", packs === null ? new Map() : new Map([[sku, packs]]));
+  const r = await editOrder(uid, lines, who, why ?? "Changed on the route sheet", packs === null ? new Map() : new Map([[sku, packs]]), { totals: true });
   if (confirmed) await confirmOrders([uid], who); // back to confirmed, changed or not
   return r.ok ? { ok: true } : r;
 }

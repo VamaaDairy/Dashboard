@@ -1,5 +1,6 @@
 import { tellBuyersOf } from "@/lib/orders/notify";
 import "server-only";
+import { priceWithOffers, writeOrderLines } from "./offers";
 import { randomBytes, randomInt } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { one, query, tx } from "@/lib/db";
@@ -300,12 +301,37 @@ export async function priceDistLines(
 
 export type PlaceResult = { ok: true; orderId: number; total: number } | { ok: false; error: string };
 
+/**
+ * The cart priced exactly as placeDistOrder would place it - the firm's prices and the partner offers that apply -
+ * for the app's cart and checkout (POST /api/distributor/quote).
+ */
+export async function quoteDistOrder(
+  login: DistLogin, input: { firmUid?: string; lines: Array<{ sku: string; qty: number; packs?: number | null }>; code?: string | null },
+): Promise<{ ok: true; quote: import("./offers").PartnerQuote } | { ok: false; error: string }> {
+  const firm = await firmAllowed(login, input.firmUid);
+  if (!firm) return { ok: false, error: "Choose the party this order is for." };
+  const merged = new Map<string, number>();
+  const packsOrdered = new Map<string, number>();
+  for (const l of input.lines) {
+    merged.set(l.sku, (merged.get(l.sku) ?? 0) + l.qty);
+    if (l.packs !== undefined && l.packs !== null) packsOrdered.set(l.sku, (packsOrdered.get(l.sku) ?? 0) + l.packs);
+  }
+  if (!merged.size) return { ok: false, error: "The cart is empty." };
+  if (merged.size > MAX_LINES) return { ok: false, error: `At most ${MAX_LINES} products per order.` };
+  const channel = partyChannel(login, firm);
+  const priced = await priceDistLines(channel, firm.uid, merged);
+  if (!priced.ok) return priced;
+  return { ok: true, quote: await priceWithOffers(channel, firm.uid, await withUnits(priced.lines, packsOrdered), input.code?.trim() || null) };
+}
+
 export async function placeDistOrder(
   login: DistLogin,
   input: {
     firmUid?: string; lines: Array<{ sku: string; qty: number; packs?: number | null }>; notes?: string | null; visitId?: number | null;
     /** the retailer requirements (db/100_retailer_demands.sql) this distributor order covers */
     demandIds?: number[];
+    /** a partner offer's coupon code (Marketing > Offers in the Dashboard) */
+    code?: string | null;
   },
 ): Promise<PlaceResult> {
   // a retailer sends its requirement to its distributor instead (src/lib/distributor/demands.ts). Until every retailer
@@ -327,9 +353,13 @@ export async function placeDistOrder(
   const channel = partyChannel(login, firm);
   const priced = await priceDistLines(channel, firm.uid, merged);
   if (!priced.ok) return priced;
-  const lines = await withUnits(priced.lines, packsOrdered);
+  const units = await withUnits(priced.lines, packsOrdered);
+  // the partner offers that apply, priced into the lines (src/lib/distributor/offers.ts)
+  const quote = await priceWithOffers(channel, firm.uid, units, input.code?.trim() || null);
+  if (input.code?.trim() && quote.codeStatus !== "applied") return { ok: false, error: quote.codeMessage ?? "This code is not valid." };
+  const lines = quote.lines;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
-  const total = Math.round(lines.reduce((s, l) => s + l.qty * l.dp, 0) * 100) / 100;
+  const total = quote.total;
 
   const placed = await tx(async (c) => {
     await c.query(`select pg_advisory_xact_lock(hashtext('dist_order_no'))`);
@@ -378,15 +408,7 @@ export async function placeDistOrder(
     if (login.kind === "distributor" && input.demandIds?.length) {
       await markDemandsOrdered(c, firm.uid, input.demandIds, orderUid, `${login.name} (${login.kind})`);
     }
-    let i = 0;
-    for (const l of lines) {
-      await c.query(
-        `insert into fp_booking_order_item
-           (mrp, selling_price, dp, quantity, stock, total_cost, booking_order_uid, product_uid, order_item_number, units)
-         values ($1, $2, $2, $3, 0, $4, $5, $6, $7, $8)`,
-        [l.mrp, l.dp, l.qty, Math.round(l.qty * l.dp * 100) / 100, orderUid, l.uid, ++i, l.units ? JSON.stringify(l.units) : null],
-      );
-    }
+    await writeOrderLines(c, orderUid, quote);
     // its GST invoice, numbered now; should that fail the order still stands and the invoice is issued when first opened
     await c.query("savepoint invoice");
     try {
@@ -426,8 +448,12 @@ export interface DistOrderRow {
   firmUid: string;
   /** the 4-digit code the buyer gives the transporter at delivery; null once it is delivered or cancelled */
   deliveryCode: string | null;
+  /** rupees off by offers, and the coupon code it was placed with */
+  discount: number;
+  code: string | null;
   /** units: the split as ordered, e.g. { CRT: 2, PCS: 5 }; null when ordered by the piece only */
-  lines: Array<{ sku: string; name: string; qty: number; rate: number; amount: number; units: Units | null }>;
+  /** rate: paid per piece; listRate: before any offer; discount: rupees off; free: given by an offer (offer: its name) */
+  lines: Array<{ sku: string; name: string; qty: number; rate: number; listRate: number; amount: number; discount: number; free: boolean; offer: string | null; units: Units | null }>;
   /** internal: the API adds the order's delivery date, edit window and history from it, then drops it */
   uid: string;
 }
@@ -453,7 +479,8 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
   const v = visibleTo(login);
   const rows = await query<Omit<DistOrderRow, "lines"> & { uid: string }>(
     `select b.uid, b.order_id as "orderId", b.booking_time as date, f.name as distributor, f.uid as "firmUid", b.status,
-            b.total_item as items, b.total_quantity as qty, b.total_cost as total,
+            b.total_item as items, b.total_quantity as qty, b.total_cost as total, coalesce(b.scheme_discount, 0) as discount,
+            b.scheme_details->>'code' as code,
             nullif(trim(b.rejection_reason), '') as reason,
             case when lower(b.status) in ('cancelled', 'rejected') or exists (select 1 from dist_trip_stop x where x.order_uid = b.uid and x.status = 'delivered')
                  then null else b.delivery_code end as "deliveryCode",
@@ -468,8 +495,11 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
     [v.arg],
   );
   if (!rows.length) return [];
-  const items = await query<{ b: string; sku: string; name: string; qty: number; rate: number; amount: number; units: Units | null }>(
-    `select i.booking_order_uid as b, p.sku_code as sku, p.sku_name as name, i.quantity as qty, i.selling_price as rate, i.total_cost as amount, i.units
+  // rate: paid per piece; listRate: before any offer; discount: rupees off the line; free: given by an offer
+  const items = await query<{ b: string; sku: string; name: string; qty: number; rate: number; listRate: number; amount: number; discount: number; free: boolean; offer: string | null; units: Units | null }>(
+    `select i.booking_order_uid as b, p.sku_code as sku, p.sku_name as name, i.quantity as qty, i.selling_price as rate, coalesce(i.dp, i.selling_price) as "listRate",
+            i.total_cost as amount, coalesce(i.scheme_discount, 0) as discount, coalesce((i.scheme_details->>'free')::boolean, false) as free,
+            i.scheme_details->>'offer' as offer, i.units
      from fp_booking_order_item i join fp_product p on p.uid = i.product_uid
      where i.booking_order_uid = any($1) order by i.order_item_number`,
     [rows.map((r) => r.uid)],

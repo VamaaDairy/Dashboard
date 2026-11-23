@@ -30,6 +30,7 @@ export async function editOrderAction(uid: string, lines: Array<{ sku: string; q
     if (typeof l?.sku !== "string" || !Number.isInteger(q) || q < 0 || q > MAX_DESK_QTY) return { ok: false, error: "Check the quantities." };
     map.set(l.sku, (map.get(l.sku) ?? 0) + q);
   }
+  // the order page's editor holds only what is paid for (free items are shown apart)
   const r = await editOrder(uid, map, who, note);
   if (r.ok) refresh();
   return r;

@@ -43,7 +43,11 @@ export interface Offer {
   active: boolean;
   showInApp: boolean;
   priority: number;
+  /** which app: 'd2c', or the Gaia Distributors app - 'distributor', 'retailer', 'partners' (both) */
+  audience?: Audience;
 }
+
+export type Audience = "d2c" | "distributor" | "retailer" | "partners";
 
 export interface CartItem {
   sku: string;
@@ -112,6 +116,7 @@ export interface Quote {
   itemDiscount: number;
   cartDiscount: number;
   cartOfferTitle: string | null;
+  cartOfferId: number | null;
   discount: number;
   code: string | null;
   codeStatus: CodeStatus;
@@ -318,6 +323,7 @@ export function applyOffers(cart: CartItem[], offers: Offer[], ctx: OfferContext
     itemDiscount,
     cartDiscount,
     cartOfferTitle: cartOffer?.title ?? null,
+    cartOfferId: cartOffer?.id ?? null,
     discount,
     code: codeStatus === "applied" ? code : null,
     codeStatus,

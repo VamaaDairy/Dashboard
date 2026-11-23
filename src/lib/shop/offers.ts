@@ -2,7 +2,7 @@ import "server-only";
 import { one, query } from "@/lib/db";
 import { appCatalog } from "@/lib/products/app-products";
 import { deliveryFor } from "./pricing";
-import { applyOffers, isLive, normaliseCode, type CartItem, type GiftProduct, type Offer, type Quote } from "./offers-engine";
+import { applyOffers, isLive, normaliseCode, type Audience, type CartItem, type GiftProduct, type Offer, type Quote } from "./offers-engine";
 import type { ShopProduct } from "./catalog";
 
 const COLS = `id, title, badge, description, kind, applies_to as "appliesTo", skus, categories,
@@ -10,16 +10,24 @@ const COLS = `id, title, badge, description, kind, applies_to as "appliesTo", sk
   free_sku as "freeSku", free_qty as "freeQty", repeat, min_qty as "minQty", min_amount::float as "minAmount", code,
   first_order_only as "firstOrderOnly", per_customer_limit as "perCustomerLimit", total_limit as "totalLimit",
   to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "startsAt",
-  to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "endsAt", active, show_in_app as "showInApp", priority`;
+  to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "endsAt", active, show_in_app as "showInApp", priority, audience`;
 
-/** Every offer, switched off or not (for the Dashboard). */
-export const allOffers = () => query<Offer>(`select ${COLS} from shop_offer order by active desc, priority desc, id desc`);
+/** Which app's offers: the D2C app's, or the Gaia Distributors app's (distributors, retailers, both). */
+export type MarketingApp = "d2c" | "partners";
+const OF_APP = (app: MarketingApp) => (app === "d2c" ? `audience = 'd2c'` : `audience <> 'd2c'`);
+
+/** Every offer of one app, switched off or not (for the Dashboard). */
+export const allOffers = (app: MarketingApp = "d2c") =>
+  query<Offer>(`select ${COLS} from shop_offer where ${OF_APP(app)} order by active desc, priority desc, id desc`);
 
 export const getOffer = (id: number) => one<Offer>(`select ${COLS} from shop_offer where id = $1`, [id]);
 
-/** The offers that could apply now: on, and inside their dates. */
-export const runningOffers = () =>
-  query<Offer>(`select ${COLS} from shop_offer where active and (starts_at is null or starts_at <= now()) and (ends_at is null or ends_at > now())`);
+/** The offers for [audiences] that could apply now: on, and inside their dates. */
+export const runningOffers = (audiences: Audience[] = ["d2c"]) =>
+  query<Offer>(
+    `select ${COLS} from shop_offer where active and (starts_at is null or starts_at <= now()) and (ends_at is null or ends_at > now()) and audience = any($1)`,
+    [audiences],
+  );
 
 /** Orders that count towards an offer's limits: every one that was not cancelled or left unpaid. */
 const COUNTED = `o.status not in ('cancelled', 'awaiting_payment')`;
@@ -89,10 +97,10 @@ export async function priceCart(
   return { ...q, itemsTotal, deliveryFee, total: Math.round((itemsTotal + deliveryFee) * 100) / 100, freeWorth, savings: Math.round((q.discount + freeWorth) * 100) / 100, unavailable };
 }
 
-/** The live offers the app shows (badges, the offers strip): no limits checked, those need the customer. */
-export async function appOffers() {
+/** The live offers an app shows (badges, the offers strip): no limits checked, those need the customer. */
+export async function appOffers(audiences: Audience[] = ["d2c"]) {
   const now = new Date();
-  const offers = (await runningOffers()).filter((o) => o.showInApp && isLive(o, now));
+  const offers = (await runningOffers(audiences)).filter((o) => o.showInApp && isLive(o, now));
   return offers
     .sort((a, b) => b.priority - a.priority || a.id - b.id)
     .map((o) => ({
@@ -118,16 +126,27 @@ export async function appOffers() {
     }));
 }
 
-/** How much each offer has been used (orders not cancelled), for the Dashboard. */
-export const offerStats = () =>
+/** Partner orders that count towards an offer: not cancelled. */
+const DIST_COUNTED = `b.status is distinct from 'Cancelled'`;
+
+/** How much each offer of [app] has been used (orders not cancelled), for the Dashboard. */
+export const offerStats = (app: MarketingApp = "d2c") =>
   query<{ offer_id: number; orders: number; discount: number; free_units: number; last_used: string | null }>(
-    `select x.offer_id, count(*)::int as orders, coalesce(sum(x.discount), 0)::float as discount, coalesce(sum(x.free_units), 0)::int as free_units,
-            to_char(max(o.created_at) at time zone 'Asia/Kolkata', 'DD Mon') as last_used
-       from shop_order_offer x join shop_order o on o.id = x.order_id where ${COUNTED} group by 1`,
+    app === "d2c"
+      ? `select x.offer_id, count(*)::int as orders, coalesce(sum(x.discount), 0)::float as discount, coalesce(sum(x.free_units), 0)::int as free_units,
+                to_char(max(o.created_at) at time zone 'Asia/Kolkata', 'DD Mon') as last_used
+           from shop_order_offer x join shop_order o on o.id = x.order_id where ${COUNTED} group by 1`
+      : `select x.offer_id, count(*)::int as orders, coalesce(sum(x.discount), 0)::float as discount, coalesce(sum(x.free_units), 0)::int as free_units,
+                to_char(max(b.booking_time) at time zone 'Asia/Kolkata', 'DD Mon') as last_used
+           from dist_order_offer x join fp_booking_order b on b.uid = x.order_uid where ${DIST_COUNTED} group by 1`,
   );
 
-/** Orders that used at least one offer (not cancelled). */
-export const ordersWithOffers = async () =>
-  (await one<{ n: number }>(`select count(distinct x.order_id)::int as n from shop_order_offer x join shop_order o on o.id = x.order_id where ${COUNTED}`))?.n ?? 0;
+/** Orders of [app] that used at least one offer (not cancelled). */
+export const ordersWithOffers = async (app: MarketingApp = "d2c") =>
+  (await one<{ n: number }>(
+    app === "d2c"
+      ? `select count(distinct x.order_id)::int as n from shop_order_offer x join shop_order o on o.id = x.order_id where ${COUNTED}`
+      : `select count(distinct x.order_uid)::int as n from dist_order_offer x join fp_booking_order b on b.uid = x.order_uid where ${DIST_COUNTED}`,
+  ))?.n ?? 0;
 
 export { normaliseCode };

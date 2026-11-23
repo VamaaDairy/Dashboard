@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Place a primary order. Body: { firmUid?, notes?, lines: [{ sku, qty, packs? }], demandIds? } - qty is the total in pieces;
+ * Place a primary order. Body: { firmUid?, notes?, lines: [{ sku, qty, packs? }], demandIds?, code? } - qty is the total in pieces;
  * packs (optional) is how many of them were ordered as whole crates / boxes; demandIds (optional) the retailer
  * requirements this order covers, marked as ordered on it. Prices are always worked out here. Retailers can't order.
  */
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const login = await distFromRequest(req);
   if (!login) return fail(401, "Please sign in again.");
   if (tooMany(req, "dist-order", 20)) return fail(429, "Too many orders. Please wait a minute.");
-  const b = (await readJson(req, 20_000)) as { firmUid?: unknown; notes?: unknown; lines?: unknown; demandIds?: unknown } | null;
+  const b = (await readJson(req, 20_000)) as { firmUid?: unknown; notes?: unknown; lines?: unknown; demandIds?: unknown; code?: unknown } | null;
   if (!b || !Array.isArray(b.lines)) return fail(400, "Invalid order.");
   const lines = b.lines.map((l) => {
     const x = l as { sku?: unknown; qty?: unknown; packs?: unknown };
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     notes: typeof b.notes === "string" ? b.notes : null,
     lines,
     demandIds: Array.isArray(b.demandIds) ? b.demandIds.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 500) : [],
+    code: typeof b.code === "string" ? b.code.slice(0, 30) : null,
   });
   return r.ok ? NextResponse.json({ orderId: r.orderId, total: r.total }, { status: 201 }) : fail(400, r.error);
 }

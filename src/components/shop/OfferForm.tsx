@@ -107,7 +107,10 @@ function ProductPicker({ products, value, onChange, single }: { products: PickPr
 
 const num = (s: string) => (s.trim() === "" ? null : Number(s));
 
-export function OfferForm({ id, initial, products, categories }: { id: number | null; initial: OfferInput; products: PickProduct[]; categories: string[] }) {
+const FOR = [["partners", "Distributors and retailers"], ["distributor", "Distributors only"], ["retailer", "Retailers only"]] as const;
+
+/** [base]: the offers page to go back to (D2C: /shop-orders/offers; Distributors app: /app-orders/marketing/offers). */
+export function OfferForm({ id, initial, products, categories, base = "/shop-orders/offers" }: { id: number | null; initial: OfferInput; products: PickProduct[]; categories: string[]; base?: string }) {
   const router = useRouter();
   const [o, setO] = useState<OfferInput>(initial);
   const set = <K extends keyof OfferInput>(k: K, v: OfferInput[K]) => setO((x) => ({ ...x, [k]: v }));
@@ -140,13 +143,24 @@ export function OfferForm({ id, initial, products, categories }: { id: number | 
       const r = await saveOfferAction(id, full);
       if (!r.ok) return setError(r.error);
       setError("");
-      router.push("/shop-orders/offers");
+      router.push(base);
       router.refresh();
     });
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="@container space-y-4">
+        {o.audience !== "d2c" ? (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="text-sm font-semibold">Who gets it</div>
+            <p className="text-[12px] text-muted-foreground">In the Gaia Distributors app; it is taken off their order and bill.</p>
+            <div className="mt-2 inline-flex flex-wrap rounded-lg border border-input p-0.5">
+              {FOR.map(([v, l]) => (
+                <button key={v} type="button" onClick={() => set("audience", v)} className={`h-8 rounded-md px-3 text-sm ${o.audience === v ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <Section n={1} title="Type of offer">
           <div className="grid gap-2 @lg:grid-cols-3">
             {KINDS.map((k) => <Choice key={k.v} on={o.kind === k.v} icon={k.icon} title={k.t} desc={k.d} onClick={() => set("kind", k.v)} />)}
@@ -266,7 +280,7 @@ export function OfferForm({ id, initial, products, categories }: { id: number | 
           <button type="button" onClick={save} disabled={pending} className="h-10 flex-1 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
             {pending ? "Saving…" : id ? "Save offer" : "Create offer"}
           </button>
-          <button type="button" onClick={() => router.push("/shop-orders/offers")} className="h-10 rounded-lg border border-input px-4 text-sm hover:bg-muted">Cancel</button>
+          <button type="button" onClick={() => router.push(base)} className="h-10 rounded-lg border border-input px-4 text-sm hover:bg-muted">Cancel</button>
         </div>
         {error ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
       </aside>

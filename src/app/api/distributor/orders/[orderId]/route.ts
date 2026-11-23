@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ or
   if (tooMany(req, "dist-order-edit", 30)) return fail(429, "Too many changes. Please wait a minute.");
   const id = Number((await params).orderId);
   if (!Number.isInteger(id) || id < 1) return fail(404, "Order not found.");
-  const b = (await readJson(req, 20_000)) as { lines?: unknown } | null;
+  const b = (await readJson(req, 20_000)) as { lines?: unknown; paidOnly?: unknown } | null;
   if (!b || !Array.isArray(b.lines) || b.lines.length > 200) return fail(400, "Invalid order.");
   const lines = new Map<string, number>();
   const packs = new Map<string, number>();
@@ -32,6 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ or
       packs.set(sku, (packs.get(sku) ?? 0) + p);
     }
   }
-  const r = await editOrderFromApp(login, id, lines, packs);
+  // newer apps send only what is paid for (paidOnly), older ones the free items too
+  const r = await editOrderFromApp(login, id, lines, packs, b.paidOnly === true);
   return r.ok ? NextResponse.json({ ok: true }) : fail(400, r.error);
 }

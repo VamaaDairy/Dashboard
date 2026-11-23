@@ -359,6 +359,14 @@ const WORKING: NavSection[] = [
             ],
           },
           schemes,
+          {
+            // the Gaia Distributors app's own offers and banners (the D2C app's are under D2C > Marketing)
+            href: "/app-orders/marketing/offers", key: "shop", label: "Marketing", icon: BadgePercent,
+            children: [
+              { href: "/app-orders/marketing/offers", key: "shop", label: "Offers" },
+              { href: "/app-orders/marketing/banners", key: "shop", label: "Banners" },
+            ],
+          },
         ),
       },
       {

@@ -1,5 +1,6 @@
 import "server-only";
 import { query } from "@/lib/db";
+import type { Audience } from "./offers-engine";
 
 /** A banner as the app sees it. `image` is a path on this server, versioned so a new upload is not served from cache. */
 export interface ShopBanner {
@@ -17,18 +18,19 @@ export interface ShopBanner {
   image: string | null;
 }
 
-/** What the carousel shows right now: active, inside its dates (India time), highest priority first. */
-export async function liveBanners(): Promise<ShopBanner[]> {
+/** What an app's carousel shows right now: active, inside its dates (India time), highest priority first. */
+export async function liveBanners(audiences: Audience[] = ["d2c"]): Promise<ShopBanner[]> {
   const rows = await query<{ id: number; title: string; subtitle: string | null; cta: string | null; sku: string | null; category: string | null; offer_id: number | null; offer_badge: string | null; bg_color: string; has_image: boolean; v: string }>(
     `select b.id, b.title, b.subtitle, b.cta, b.sku_code as sku, b.category, f.id as offer_id, f.badge as offer_badge, b.bg_color, b.image is not null as has_image,
             extract(epoch from b.updated_at)::bigint::text as v
        from shop_banner b
        -- an offer's banner shows only while the offer runs
        left join shop_offer f on f.id = b.offer_id and f.active and (f.starts_at is null or f.starts_at <= now()) and (f.ends_at is null or f.ends_at > now())
-      where b.active and (b.offer_id is null or f.id is not null)
+      where b.active and b.audience = any($1) and (b.offer_id is null or f.id is not null)
         and (b.starts_at is null or b.starts_at <= (now() at time zone 'Asia/Kolkata')::date)
         and (b.ends_at is null or b.ends_at >= (now() at time zone 'Asia/Kolkata')::date)
       order by b.priority desc, b.id`,
+    [audiences],
   );
   return rows.map((r) => ({
     id: r.id,
