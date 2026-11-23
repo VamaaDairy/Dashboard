@@ -340,6 +340,14 @@ async function main() {
     await ap.runAutopay();
     check((await pk.packState(w4.x.id)).open?.days === 14, "renewal pays the same 2 weeks again");
 
+    // ---------------------------------------------------------------- 10b. the UPI page could not be opened: subscription and its payment dropped
+    const y = await newCustomer("Page Failed");
+    const subY = await subscribe(y, 1);
+    const py = await pk.raisePack(y.id);
+    await query(`delete from shop_subscription where id = $1`, [subY]); // what the subscribe route does when Easebuzz refuses
+    await pk.refreshPack(py!.id, y.id);
+    check((await one<{ status: string }>(`select status from shop_charge where id = $1`, [py!.id]))!.status === "cancelled", "the payment it was going to ask for is dropped too");
+
     // ---------------------------------------------------------------- 11. no autopay, no delivery (no cash for subscriptions)
     const w = await newCustomer("No Autopay");
     await subscribe(w, 1);

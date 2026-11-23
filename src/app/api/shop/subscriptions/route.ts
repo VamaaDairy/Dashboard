@@ -53,19 +53,24 @@ export async function POST(req: NextRequest) {
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
   if (period) await setPeriod(c.id, period);
+  // without autopay yet it starts only once its first payment is made: no "started" message before that
+  const autopayOn = !!(await activeMandate(c.id));
   const r = await createSubscription(c.id, plan, {
     name, phone, address,
     pincode: typeof b.pincode === "string" && b.pincode.trim() ? b.pincode.trim() : c.pincode,
     lat: num(b.lat) ?? c.lat, lng: num(b.lng) ?? c.lng,
-  });
+  }, autopayOn);
   if (!r.ok) return fail(400, r.error);
   // days the customer took out while choosing
   if (Array.isArray(b.skipDays)) for (const d of b.skipDays.slice(0, 120)) if (typeof d === "string") await setDay(c.id, r.id, d, 0);
-  if (!(await activeMandate(c.id))) {
+  if (!autopayOn) {
     // no autopay yet: the app opens this page - the customer's UPI app - to approve autopay and pay the first period
     const m = await startMandate(c);
     if (!m.ok) {
-      await query(`delete from shop_subscription where id = $1`, [r.id]); // not saved without its payment
+      // not saved without its payment - nor the payment it was going to ask for
+      await query(`delete from shop_subscription where id = $1`, [r.id]);
+      const open = (await packState(c.id)).open;
+      if (open?.status === "pending") await refreshPack(open.id, c.id);
       return fail(m.status, m.error);
     }
     return NextResponse.json({ id: r.id, url: m.url, pack: { status: "pending", amount: m.amount, days: m.days } }, { status: 201 });
