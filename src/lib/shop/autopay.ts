@@ -222,6 +222,8 @@ export interface AutopayView {
     /** the last pack could not be collected: the app offers "Try again" */
     unpaid: boolean;
   } | null;
+  /** how long each subscription payment covers (the customer's choice) */
+  period: packs.Period;
   unpaid: number;
 }
 
@@ -262,6 +264,7 @@ export async function autopayView(customerId: number): Promise<AutopayView> {
           unpaid: st.lastUnpaid,
         }
       : null,
+    period: await packs.periodOf(customerId),
   };
 }
 

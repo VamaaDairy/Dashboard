@@ -108,13 +108,14 @@ async function main() {
   const extra: number[] = [];
   const newCustomer = async (name: string) => {
     const phone = `9${String(Date.now()).slice(-7)}${String(seq++).padStart(2, "0")}`;
-    const c = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash) values ($1, $2, 'x') returning id`, [name, phone]))!;
+    // a 30-day period, so a daily plan's pack is 30 deliveries (the period cases below set their own)
+    const c = (await one<{ id: number }>(`insert into shop_customer (name, phone, pin_hash, pack_unit, pack_len) values ($1, $2, 'x', 'days', 30) returning id`, [name, phone]))!;
     extra.push(c.id);
     return { id: c.id, name, phone };
   };
   const to = (c: { name: string; phone: string }) => ({ name: c.name, phone: c.phone, address: "Test street 1", pincode: null, lat: null, lng: null });
-  const subscribe = async (c: { id: number; name: string; phone: string }, qty: number, frequency: "daily" | "alternate" = "daily", start = today) => {
-    const r = await subs.createSubscription(c.id, { sku, qty, frequency, weekdays: null, everyN: null, startDate: start, endDate: null }, to(c));
+  const subscribe = async (c: { id: number; name: string; phone: string }, qty: number, frequency: "daily" | "alternate" | "every_n" = "daily", start = today, everyN: number | null = null) => {
+    const r = await subs.createSubscription(c.id, { sku, qty, frequency, weekdays: null, everyN, startDate: start, endDate: null }, to(c));
     if (!r.ok) throw new Error(r.error);
     return r.id;
   };
@@ -335,6 +336,42 @@ async function main() {
     const beforeU = calls.length;
     await ap.runAutopay();
     check((await one<{ kind: string }>(`select kind from shop_mandate where txn_id = $1`, [tu]))!.kind === "enach" && !calls.slice(beforeU).some((x) => x.includes("notify/")), "unknown mandate type is read back, then debited the eNACH way");
+
+    // ---------------------------------------------------------------- 9b. the period the customer pays for
+    check(pk.periodEnd("2027-01-15", { unit: "month", len: 1 }) === "2027-02-15" && pk.periodEnd("2027-01-31", { unit: "month", len: 1 }) === "2027-03-01"
+      && pk.periodEnd("2027-01-31", { unit: "month", len: 2 }) === "2027-03-31" && pk.periodEnd("2027-01-01", { unit: "weeks", len: 4 }) === "2027-01-29",
+      "period ends: a month keeps its day (31 Jan runs to the end of February), 4 weeks is 28 days");
+    check(!pk.parsePeriod({ unit: "days", len: 3 }) && !pk.parsePeriod({ unit: "weeks", len: 30 }) && !pk.parsePeriod({ unit: "year", len: 1 }) && !!pk.parsePeriod({ unit: "days", len: 45 }),
+      "a period of days needs 7 to 366; weeks up to 26; nothing else");
+    const quoteFor = async (name: string, period: { unit: "weeks" | "month" | "days"; len: number }, frequency: "daily" | "alternate" | "every_n", everyN: number | null = null) => {
+      const x = await newCustomer(name);
+      await mandate(x);
+      await query(`update shop_customer set pack_unit = $2, pack_len = $3 where id = $1`, [x.id, period.unit, period.len]);
+      await subscribe(x, 1, frequency, today, everyN);
+      return { x, pack: await pk.raisePack(x.id) };
+    };
+    const w4 = await quoteFor("Four Weeks", { unit: "weeks", len: 4 }, "daily");
+    check(w4.pack?.days === 28 && w4.pack.amount === r2(28 * dayValue(1)), `4 weeks of daily milk: 28 deliveries (got ${w4.pack?.days})`);
+    const monthDays = Math.round((Date.parse(`${pk.periodEnd(today, { unit: "month", len: 1 })}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+    const m1 = await quoteFor("One Month", { unit: "month", len: 1 }, "daily");
+    check(m1.pack?.days === monthDays, `a month of daily milk: ${monthDays} deliveries (got ${m1.pack?.days})`);
+    const c45 = await quoteFor("Custom 45", { unit: "days", len: 45 }, "alternate");
+    check(c45.pack?.days === 23, `a date 45 days out, every other day: 23 deliveries (got ${c45.pack?.days})`);
+    const once = await quoteFor("Once A Month", { unit: "weeks", len: 4 }, "every_n", 30);
+    check(once.pack?.days === 1 && once.pack.amount === dayValue(1), `once a month, paid 4 weeks at a time: 1 delivery a pack, never an empty one (got ${once.pack?.days})`);
+    const twice = await quoteFor("Twice A Month", { unit: "days", len: 30 }, "every_n", 15);
+    check(twice.pack?.days === 2, `twice a month over 30 days: 2 deliveries (got ${twice.pack?.days})`);
+    const m3 = await quoteFor("Three Months", { unit: "month", len: 3 }, "daily");
+    check((m3.pack?.days ?? 0) >= 89 && (m3.pack?.days ?? 0) <= 92, `3 months: about 90 deliveries (got ${m3.pack?.days})`);
+    // changing the period re-prices a pack not yet at the bank, and the renewal repeats the chosen period
+    await pk.setPeriod(w4.x.id, { unit: "weeks", len: 2 });
+    const w2 = (await pk.packState(w4.x.id)).open;
+    check(w2?.days === 14 && w2.amount === r2(14 * dayValue(1)), `changed to 2 weeks before it went to the bank: re-priced to 14 deliveries (got ${w2?.days})`);
+    await settle(w4.x.id);
+    await runDays(today, 11); // 3 left
+    await ap.runAutopay();
+    const r2w = (await pk.packState(w4.x.id)).open;
+    check(r2w?.days === 14, `renewal pays the same 2 weeks again (got ${r2w?.days})`);
 
     // ---------------------------------------------------------------- 10. autopay required
     process.env.AUTOPAY_REQUIRED = "1";

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail, readJson, tooMany } from "@/lib/shop/api";
 import { customerFromRequest } from "@/lib/shop/customer";
 import { mandateLimit, required as autopayRequired, subscriptionMandate } from "@/lib/shop/autopay";
-import { nextPack, PACK_DAYS, packState, raisePack, refreshPack } from "@/lib/shop/packs";
+import { nextPack, packState, parsePeriod, periodLabel, periodOf, raisePack, refreshPack, setPeriod } from "@/lib/shop/packs";
 import { rupees } from "@/lib/shop/pricing";
 import { createSubscription, customerCalendar, parsePlan, setDay, todayIST, type PlanInput } from "@/lib/shop/subscriptions";
 
@@ -36,17 +36,20 @@ export async function POST(req: NextRequest) {
   if (autopayRequired() && !mandate) {
     return NextResponse.json({ error: "Set up autopay to start a subscription.", code: "autopay_required" }, { status: 402 });
   }
-  // on autopay it is paid 30 deliveries at a time: that pack has to fit the autopay's limit
+  // on autopay it is paid a period at a time (4 weeks, a month, up to a date - body.period { unit, len }, or the
+  // customer's last choice): that pack has to fit the autopay's limit
   const plan = { endDate: null, ...p.plan } as PlanInput;
+  const period = b.period === undefined ? null : parsePeriod(b.period);
+  if (b.period !== undefined && !period) return fail(400, "Choose how long to pay for: 4 weeks, a month, or a date up to a year ahead.");
   if (mandate) {
     const quote = await nextPack(c.id, [{
       id: -1, sku_code: plan.sku, qty: plan.qty, frequency: plan.frequency, weekdays: plan.weekdays, every_n: plan.everyN,
       start_date: plan.startDate, end_date: plan.endDate, status: "active", renew: true, ends_after_day: null,
-    }]);
+    }], undefined, period ?? (await periodOf(c.id)));
     const limit = await mandateLimit(c.id);
     if (quote && limit != null && quote.amount > limit) {
       return NextResponse.json(
-        { error: `${PACK_DAYS} deliveries cost ${rupees(quote.amount)}, more than your autopay limit of ${rupees(limit)}. Set up autopay again with a higher limit.`, code: "over_limit" },
+        { error: `${periodLabel(period ?? (await periodOf(c.id)))} of deliveries (${quote.days}) cost ${rupees(quote.amount)}, more than your autopay limit of ${rupees(limit)}. Choose a shorter period, or set up autopay again with a higher limit.`, code: "over_limit" },
         { status: 400 },
       );
     }
@@ -60,6 +63,7 @@ export async function POST(req: NextRequest) {
   if (address.length < 5) return fail(400, "Add the delivery address for your subscription.");
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+  if (mandate && period) await setPeriod(c.id, period);
   const r = await createSubscription(c.id, plan, {
     name, phone, address,
     pincode: typeof b.pincode === "string" && b.pincode.trim() ? b.pincode.trim() : c.pincode,
