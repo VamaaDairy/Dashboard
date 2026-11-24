@@ -13,9 +13,10 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Propose a new customer. Body: { name, kind (Distributor | Super Stockist | Retailer | MFS | Institution), contactPerson?,
- * phone, email?, address, city?, pincode?, state?, lat?, lng?, gstin?, notes? }. It waits for the office's approval on the
- * Dashboard; once approved it is mapped to this officer and orders can be booked for it.
+ * Add a new customer. Body: { name, kind (Distributor | Super Stockist | Retailer | MFS | Institution), contactPerson?,
+ * phone, email?, address, city?, pincode?, state?, lat?, lng?, gstin?, notes? }. A retailer is added at once (status
+ * "approved", mapped to this officer, ready for orders); any other kind waits for the office's approval on the
+ * Dashboard, then is mapped to this officer.
  */
 export async function POST(req: NextRequest) {
   const login = await sfFromRequest(req);

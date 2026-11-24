@@ -79,7 +79,11 @@ const iso = (r: FirmRequest): FirmRequest => ({
 
 const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().replace(/\s+/g, " ").slice(0, max) : "");
 
-/** A sales officer proposes a new customer. Checks what the app sent; nothing is trusted. */
+/**
+ * A sales officer adds a new customer. Checks what the app sent; nothing is trusted. A retailer is added at once (no
+ * approval: Customer Masters on the Retail channel, code RT + mobile, the officer as its sales contact); a distributor,
+ * super stockist, MFS or institution waits for the office on New customers.
+ */
 export async function createFirmRequest(
   staffUid: string,
   loginId: number | null,
@@ -120,7 +124,25 @@ export async function createFirmRequest(
     [staffUid, loginId, name, text(b.contactPerson, 80) || null, phone, email || null, address, text(b.city, 60) || null, pincode || null,
       text(b.state, 60) || null, lat, lng, gstin || null, kind, text(b.notes, 300) || null],
   );
+  if (kind === "Retailer") {
+    // a retailer needs no approval: added now, mapped to this officer, ready for orders
+    const rt = await retailChannel();
+    if (rt) {
+      const done = await approveFirmRequest(r!.id, { code: await retailCode(phone), channelUid: rt }, "Sales app (retailer, automatic)", { quiet: true });
+      if (!done.ok) console.error(`[customers] retailer ${phone} from the sales app stays for the office: ${done.error}`);
+    }
+  }
   return { ok: true, request: iso((await one<FirmRequest>(`${SELECT} where r.id = $1`, [r!.id]))!) };
+}
+
+/** The Retail channel (RT), where every retailer goes; null if it is not set up. */
+const retailChannel = async () => (await one<{ uid: string }>(`select uid from fp_channel where upper(channel_code) = 'RT' order by level nulls last limit 1`))?.uid ?? null;
+
+/** A retailer's customer code: RT + its mobile (RT<mobile>-2 ... if that is taken). */
+async function retailCode(phone: string): Promise<string> {
+  let code = `RT${phone}`;
+  for (let i = 2; await one(`select 1 from fp_firm where upper(firm_code) = $1`, [code]); i++) code = `RT${phone}-${i}`;
+  return code;
 }
 
 // ---------------------------------------------------------------- self sign-up (Gaia Distributors app)
@@ -235,11 +257,9 @@ export async function createSelfSignup(b: Record<string, unknown>): Promise<Sign
   if (kind === "distributor") return { ok: true, status: "pending", ticket };
 
   // a retailer needs no approval: added to Customer Masters on the Retail channel and signed up at once
-  const rt = await one<{ uid: string }>(`select uid from fp_channel where upper(channel_code) = 'RT' order by level nulls last limit 1`);
+  const rt = await retailChannel();
   if (!rt) return { ok: true, status: "pending", ticket }; // no Retail channel set up: the office approves it as before
-  let firmCode = `RT${phone}`;
-  for (let i = 2; await one(`select 1 from fp_firm where upper(firm_code) = $1`, [firmCode]); i++) firmCode = `RT${phone}-${i}`;
-  const done = await approveFirmRequest(r!.id, { code: firmCode, channelUid: rt.uid }, "Retailer sign-up (automatic)");
+  const done = await approveFirmRequest(r!.id, { code: await retailCode(phone), channelUid: rt }, "Retailer sign-up (automatic)", { quiet: true });
   // should that fail the request stays pending for the office, and the retailer is told it is waiting
   return { ok: true, status: done.ok ? "active" : "pending", ticket };
 }
@@ -350,7 +370,8 @@ export interface ApproveInput {
  * list. A party that signed up itself gets its app login with the PIN it chose. All or nothing: should the price list
  * or the login fail, the customer is taken out again and the request stays pending with the reason.
  */
-export async function approveFirmRequest(id: number, input: ApproveInput, who: string): Promise<{ ok: true; firmUid: string } | { ok: false; error: string }> {
+/** [quiet]: added automatically (a retailer) - the officer needs no "approved" message for what it just added. */
+export async function approveFirmRequest(id: number, input: ApproveInput, who: string, opts: { quiet?: boolean } = {}): Promise<{ ok: true; firmUid: string } | { ok: false; error: string }> {
   const r = await one<FirmRequest>(`${SELECT} where r.id = $1`, [id]);
   if (!r) return { ok: false, error: "That request no longer exists." };
   if (r.status !== "pending") return { ok: false, error: `It was already ${r.status}.` };
@@ -430,7 +451,7 @@ export async function approveFirmRequest(id: number, input: ApproveInput, who: s
     [id, saved.id, who, input.priceListUid ?? null, input.creditLimit ?? null, input.firmClass?.trim() || null],
   );
   // the officer who proposed it can now book orders for it
-  await notifyStaff(r.staffUid, { title: "New customer approved", body: `${r.name} is added as ${input.code.trim().toUpperCase()}.`, data: { type: "customer" } });
+  if (!opts.quiet) await notifyStaff(r.staffUid, { title: "New customer approved", body: `${r.name} is added as ${input.code.trim().toUpperCase()}.`, data: { type: "customer" } });
   return { ok: true, firmUid: saved.id };
 }
 
