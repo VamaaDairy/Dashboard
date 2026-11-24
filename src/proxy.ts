@@ -19,7 +19,9 @@ export async function proxy(req: NextRequest) {
     pathname === "/privacy-policy" ||
     // the delivery round with time slots: shared as a link, opens without signing in
     pathname === "/app-orders/slot-route" ||
-    pathname === "/delete-account"
+    pathname === "/delete-account" ||
+    // a batch's public blockchain page, opened from the QR on the pack
+    pathname.startsWith("/trace/")
   ) {
     return NextResponse.next();
   }
