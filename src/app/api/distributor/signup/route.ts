@@ -5,17 +5,17 @@ import { createSelfSignup } from "@/lib/distributor/requests";
 export const dynamic = "force-dynamic";
 
 /**
- * Create account, step 2. Body: { kind: "distributor" | "retailer", firmName, ownerName, phone, city, code, pin } and
- * the master details: address, area, state, pincode, gstin, pan, licenceNo (FSSAI), lat, lng, email - all but email
- * required for a distributor, optional for a retailer.
- * Returns { status: "active" } for a retailer (sign in now with the mobile number and this PIN), or
- * { status: "pending" } for a distributor: the office approves it on the Dashboard (App orders > New customers), and
- * only then can it sign in.
+ * Create account / onboarding, last step. Body: { kind: "distributor" | "retailer", firmName, ownerName, phone, city,
+ * code, pin } and the customer master's details: email, landline, address, area, district, state, pincode, lat, lng,
+ * gstin, pan, licenceNo (FSSAI), aadharNo - a distributor gives them all (landline and Aadhaar optional).
+ * Returns { status, ticket }: "active" for a retailer (sign in now with the mobile number and this PIN), "pending" for a
+ * distributor, which the office approves on the Dashboard (New customers) - the app follows it with the ticket
+ * (POST /api/distributor/signup/status) and the distributor signs in with this PIN once approved.
  */
 export async function POST(req: NextRequest) {
   if (tooMany(req, "dist-signup", 8)) return fail(429, "Too many attempts. Please wait a minute.");
   const b = await readJson(req, 3000);
   if (!b || typeof b !== "object") return fail(400, "Send the details as a JSON object.");
   const r = await createSelfSignup(b as Record<string, unknown>);
-  return r.ok ? NextResponse.json({ status: r.status }, { status: 201 }) : fail(r.status, r.error, r.fields);
+  return r.ok ? NextResponse.json({ status: r.status, ticket: r.ticket }, { status: 201 }) : fail(r.status, r.error, r.fields);
 }

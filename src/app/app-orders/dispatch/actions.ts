@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { cancelTrip, createTrip, previewTripRoad, routeRoadPlan, updateTrip, type TripInput } from "@/lib/dispatch";
-import { approveFirmRequest, rejectFirmRequest } from "@/lib/distributor/requests";
+import { approveFirmRequest, type ApproveInput, rejectFirmRequest } from "@/lib/distributor/requests";
 
 type R = { ok: true; id?: number } | { ok: false; error: string };
 const NO = { ok: false as const, error: "You do not have permission to change this." };
@@ -39,7 +39,7 @@ export async function cancelTripAction(id: number): Promise<R> {
   return r;
 }
 
-export async function approveRequestAction(id: number, input: { code: string; channelUid: string; parentUid?: string | null; beatUid?: string | null }): Promise<R> {
+export async function approveRequestAction(id: number, input: ApproveInput): Promise<R> {
   const who = await editor();
   if (!who) return NO;
   const r = await approveFirmRequest(id, input, who);
