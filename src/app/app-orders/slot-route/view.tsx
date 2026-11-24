@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { DispatchMap, type MapLine, type MapPin } from "@/components/shop/DispatchMap";
+import { ROUTE_COLOURS } from "@/components/shop/route-colors";
 import type { RoundPlan, SlotRoutePlan } from "@/lib/dispatch/slot-route";
 import type { LngLat } from "@/lib/shop/track";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,9 @@ const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
 const min = (s: number) => `${Math.round(s / 60)} min`;
 const clock = (m: number) => { const t = Math.round(m); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 const hours = (s: number) => { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} hr ${m % 60} min`; };
+
+/** Each stretch's colour: the route palette, one per stretch. */
+const legColour = (i: number) => ROUTE_COLOURS[i % ROUTE_COLOURS.length];
 
 /** The point halfway along a road path (by length), where its distance and time label goes - never on a stop. */
 function halfway(path: LngLat[]): LngLat {
@@ -73,14 +77,14 @@ export function SlotRouteView() {
     // each stretch's distance and time halfway along its road
     round.legs.forEach((l, i) => {
       const [lng, lat] = halfway(l.path);
-      const v = round.visits[i];
-      const lateHere = mode === "estimate" ? v.estimate - v.slot > 0.5 : v.late > 0.5;
-      out.push({ id: `l${i}`, lat, lng, kind: "pill", color: lateHere ? LATE : GREEN, label: `${km(l.metres)} | ${min(l.seconds)}`, top: true });
+      // the label in its stretch's own colour
+      out.push({ id: `l${i}`, lat, lng, kind: "pill", color: legColour(i), label: `${km(l.metres)} | ${min(l.seconds)}`, top: true });
     });
     return out;
   }, [plan, round, mode]);
 
-  const lines: MapLine[] = useMemo(() => (round ? [{ id: "road", paths: round.legs.map((l) => l.path), color: GREEN, width: 5, opacity: 0.85 }] : []), [round]);
+  // every stretch from one stop to the next in its own colour
+  const lines: MapLine[] = useMemo(() => (round ? round.legs.map((l, i) => ({ id: `road${i}`, paths: [l.path], color: legColour(i), width: 5, opacity: 0.9 })) : []), [round]);
   const focus = useMemo(() => (plan ? { key: "all", points: plan.stops.map((s) => [s.lng, s.lat] as LngLat) } : null), [plan]);
 
   return (
@@ -167,7 +171,8 @@ export function SlotRouteView() {
                         <span className={late ? "font-semibold text-[#8a2e00]" : ""}>{clock(v.arrive)}</span>
                         <span className="w-16 text-right text-muted-foreground">by {st.slot}</span>
                       </div>
-                      <div className="ml-8 text-[12px] text-muted-foreground">
+                      <div className="ml-8 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        <span className="inline-block h-1 w-4 shrink-0 rounded" style={{ background: legColour(i) }} />
                         {km(round.legs[i].metres)} | {min(round.legs[i].seconds)} from the last stop{v.waited >= 1 ? ` · waits ${Math.round(v.waited)} min` : ""} · hold {st.hold} min{st.phone ? ` · ${st.phone}` : ""}{late ? ` · ${Math.round(v.late)} min late` : ""}
                       </div>
                     </li>
