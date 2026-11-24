@@ -4,9 +4,11 @@ import { olaEnabled, route } from "@/lib/shop/ola";
 import type { LngLat } from "@/lib/shop/track";
 
 /**
- * One delivery round with time slots: from Tumgaon depot, reach every customer by their delivery time and stay there
- * their hold time (unloading) before driving on. A delivery is made at most EARLY_MIN minutes before its time. Ola Maps gives the road distance and driving time between every pair
- * of points; every order is weighed for the shortest by road, and each round says when it must leave the depot.
+ * One delivery round with time slots from Tumgaon depot. A customer cannot take their delivery before their given time:
+ * a vehicle that gets there sooner waits, delivers at the given time, stays the hold time (unloading) and drives on.
+ * So a stop is either on time or late, and lateness carries on down the round. The vehicle leaves the depot so it
+ * reaches its first stop exactly at that stop's time. Ola Maps gives the road distance and driving time; every order
+ * is weighed for the least total lateness, then the fewest km. After the last delivery it drives back to the depot.
  */
 
 export interface SlotStop { name: string; area: string; phone: string | null; slot: string; hold: number; lat: number; lng: number }
@@ -33,18 +35,26 @@ export const clock = (m: number) => { const t = Math.round(m); return `${Math.fl
 
 export interface Leg { from: number; to: number; metres: number; seconds: number; path: LngLat[] }
 export interface Visit {
-  stop: number; /** when it is delivered */ arrive: number; /** minutes waited for its window */ waited: number; leave: number; slot: number; late: number;
-  /** driving straight on with only the hold times, from [RoundPlan.estStart]: when it really gets there */
-  estimate: number;
+  stop: number;
+  slot: number;
+  /** when the vehicle gets there */
+  arrive: number;
+  /** minutes it waits for the given time (it got there early) */
+  waited: number;
+  /** when it is delivered: the given time, or later when the vehicle is late */
+  deliver: number;
+  /** minutes after the given time */
+  late: number;
+  leave: number;
 }
 export interface RoundPlan {
-  order: number[]; legs: Leg[]; visits: Visit[]; metres: number; seconds: number; late: number; onTime: boolean;
-  /** when it leaves the depot and when the last drop is done, minutes after midnight */
-  start: number; finish: number;
-  /** the estimate: leave the depot so the first stop is reached at its given time, then drive on with only the hold times */
-  estStart: number; estFinish: number;
+  order: number[]; legs: Leg[]; visits: Visit[]; metres: number; seconds: number;
+  /** total minutes late over all stops, and how many stops are late */
+  late: number; lateStops: number;
+  /** minutes after midnight: leaving the depot, the last drop done, back at the depot */
+  start: number; lastDrop: number; back: number;
 }
-export interface SlotRoutePlan { stops: SlotStop[]; best: RoundPlan; given: RoundPlan; road: boolean; early: number }
+export interface SlotRoutePlan { stops: SlotStop[]; best: RoundPlan; given: RoundPlan; road: boolean }
 
 // ---------------------------------------------------------------------------------------------- Ola, kept
 
@@ -102,126 +112,96 @@ async function roadMatrix(pts: Pt[]): Promise<{ metres: number[][]; seconds: num
 
 // ---------------------------------------------------------------------------------------------- the order
 
-/** A delivery is made at most this many minutes before its time, never after it; a vehicle there sooner waits. */
-export const EARLY_MIN = 60;
+// ---------------------------------------------------------------------------------------------- the order
 
-/** Minutes after midnight at each stop for this order when leaving the depot at [start]; null when a stop would be missed. */
-function timesFor(order: number[], legMin: number[], start: number, slots: number[], hold: number[]): Array<{ arrive: number; serve: number; leave: number }> | null {
-  let t = start;
-  const out: Array<{ arrive: number; serve: number; leave: number }> = [];
-  for (let i = 1; i < order.length; i++) {
-    const s = order[i];
-    const arrive = t + legMin[i - 1];
-    const serve = Math.max(arrive, slots[s] - EARLY_MIN);
-    if (serve > slots[s] + 1e-9) return null;
-    t = serve + hold[s];
-    out.push({ arrive, serve, leave: t });
+/** Never early: wait for the given time, deliver, stay the hold time. */
+const visit = (t: number, travelMin: number, slot: number, hold: number) => {
+  const arrive = t + travelMin;
+  const deliver = Math.max(arrive, slot);
+  return { arrive, deliver, late: deliver - slot, waited: deliver - arrive, leave: deliver + hold };
+};
+
+/**
+ * The order with the least total lateness, then the fewest road metres. The vehicle leaves the depot so it reaches its
+ * first stop exactly at that stop's time. Exact: over every subset of stops visited so far and the stop it ends at,
+ * keeping each (lateness, metres, time) that no other beats on all three.
+ */
+export function leastLateOrder(metres: number[][], seconds: number[][], slots: number[], hold: number[]): number[] {
+  const n = metres.length;
+  const free = [...Array(n).keys()].filter((i) => i !== 0);
+  type Label = { late: number; m: number; t: number; prev: Label | null; at: number };
+  const add = (list: Label[], x: Label) => {
+    if (list.some((y) => y.late <= x.late && y.m <= x.m && y.t <= x.t)) return;
+    for (let i = list.length - 1; i >= 0; i--) if (x.late <= list[i].late && x.m <= list[i].m && x.t <= list[i].t) list.splice(i, 1);
+    list.push(x);
+  };
+  const step = (l: Label, to: number): Label => {
+    const v = visit(l.t, seconds[l.at][to] / 60, slots[to], hold[to]);
+    return { late: l.late + v.late, m: l.m + metres[l.at][to], t: v.leave, prev: l, at: to };
+  };
+  const F = free.length;
+  const states = new Map<number, Label[]>(); // key: mask * F + index of the stop it ends at
+  for (let j = 0; j < F; j++) {
+    const s = free[j];
+    // leave the depot so this first stop is reached exactly at its time
+    states.set((1 << j) * F + j, [step({ late: 0, m: 0, t: slots[s] - seconds[0][s] / 60, prev: null, at: 0 }, s)]);
   }
-  return out;
-}
-
-/** The latest whole minute the depot can be left so this order is on time everywhere (null when no time works). */
-function latestStart(order: number[], legMin: number[], slots: number[], hold: number[]): number | null {
-  const first = slots[order[1]] - legMin[0];
-  for (let s = Math.floor(first); s > first - 24 * 60; s--) if (timesFor(order, legMin, s, slots, hold)) return s;
-  return null;
+  for (let mask = 1; mask < 1 << F; mask++) {
+    for (let j = 0; j < F; j++) {
+      const here = states.get(mask * F + j);
+      if (!here) continue;
+      for (let k = 0; k < F; k++) {
+        if (mask & (1 << k)) continue;
+        const key = (mask | (1 << k)) * F + k;
+        const list = states.get(key) ?? [];
+        for (const l of here) add(list, step(l, free[k]));
+        states.set(key, list);
+      }
+    }
+  }
+  let best: Label | null = null;
+  const full = (1 << F) - 1;
+  for (let j = 0; j < F; j++) {
+    for (const e of states.get(full * F + j) ?? []) {
+      // the km include the drive back to the depot
+      const m = e.m + metres[e.at][0];
+      if (!best || e.late < best.late - 1e-6 || (Math.abs(e.late - best.late) < 1e-6 && m < best.m + metres[best.at][0])) best = e;
+    }
+  }
+  const order: number[] = [];
+  for (let l: Label | null = best; l; l = l.prev) order.unshift(l.at);
+  return order; // starts at 0, the depot
 }
 
 /**
- * The shortest order by road that delivers to everyone within their window ([slot - EARLY_MIN, slot]), with when to
- * leave the depot. Exact for each leave time: over every subset of stops visited so far and the stop it ends at,
- * keeping each (metres, time) that no other beats on both. Leave times are tried minute by minute; the fewest km wins,
- * then the later leave.
+ * A round by road in this order and back to the depot: leave so the first stop is on time, never deliver early, count
+ * the lateness. The last leg is the drive back to the depot.
  */
-export function shortestOrder(metres: number[][], seconds: number[][], slots: number[], hold: number[]): number[] | null {
-  const n = metres.length;
-  const free = [...Array(n).keys()].filter((i) => i !== 0);
-  const F = free.length;
-  type Label = { m: number; t: number; prev: Label | null; at: number };
-  const solve = (start: number): Label | null => {
-    const add = (list: Label[], x: Label) => {
-      if (list.some((y) => y.m <= x.m && y.t <= x.t)) return;
-      for (let i = list.length - 1; i >= 0; i--) if (x.m <= list[i].m && x.t <= list[i].t) list.splice(i, 1);
-      list.push(x);
-    };
-    const step = (l: Label, to: number): Label | null => {
-      const serve = Math.max(l.t + seconds[l.at][to] / 60, slots[to] - EARLY_MIN);
-      return serve > slots[to] + 1e-9 ? null : { m: l.m + metres[l.at][to], t: serve + hold[to], prev: l, at: to };
-    };
-    const states = new Map<number, Label[]>();
-    for (let j = 0; j < F; j++) {
-      const x = step({ m: 0, t: start, prev: null, at: 0 }, free[j]);
-      if (x) states.set((1 << j) * F + j, [x]);
-    }
-    for (let mask = 1; mask < 1 << F; mask++) {
-      for (let j = 0; j < F; j++) {
-        const here = states.get(mask * F + j);
-        if (!here) continue;
-        for (let k = 0; k < F; k++) {
-          if (mask & (1 << k)) continue;
-          const key = (mask | (1 << k)) * F + k;
-          let list = states.get(key);
-          for (const l of here) {
-            const x = step(l, free[k]);
-            if (!x) continue;
-            if (!list) { list = []; states.set(key, list); }
-            add(list, x);
-          }
-        }
-      }
-    }
-    let best: Label | null = null;
-    const full = (1 << F) - 1;
-    for (let j = 0; j < F; j++) for (const l of states.get(full * F + j) ?? []) if (!best || l.m < best.m) best = l;
-    return best;
-  };
-  // from the latest leave anything could make (the earliest window, straight from the depot) back three hours
-  const top = Math.floor(Math.min(...free.map((s) => slots[s] - seconds[0][s] / 60)));
-  let pick: { m: number; end: Label } | null = null;
-  for (let start = top; start > top - 180; start--) {
-    const end = solve(start);
-    if (end && (!pick || end.m < pick.m - 1)) pick = { m: end.m, end };
-  }
-  if (!pick) return null;
-  const order: number[] = [];
-  for (let l: Label | null = pick.end; l; l = l.prev) order.unshift(l.at);
-  return order;
-}
-
-/** A round by road in this order, leaving the depot as late as still delivers to everyone within their window. */
 async function roundOf(order: number[], metres: number[][], seconds: number[][], slots: number[], road: boolean): Promise<RoundPlan> {
   const legs: Leg[] = [];
-  for (let i = 1; i < order.length; i++) {
-    const a = STOPS[order[i - 1]], b = STOPS[order[i]];
+  const path = [...order, 0];
+  for (let i = 1; i < path.length; i++) {
+    const a = STOPS[path[i - 1]], b = STOPS[path[i]];
     const got = road ? await roadLeg(a, b) : null;
     legs.push(got
-      ? { from: order[i - 1], to: order[i], ...got }
-      : { from: order[i - 1], to: order[i], metres: metres[order[i - 1]][order[i]], seconds: seconds[order[i - 1]][order[i]], path: [[a.lng, a.lat], [b.lng, b.lat]] });
+      ? { from: path[i - 1], to: path[i], ...got }
+      : { from: path[i - 1], to: path[i], metres: metres[path[i - 1]][path[i]], seconds: seconds[path[i - 1]][path[i]], path: [[a.lng, a.lat], [b.lng, b.lat]] });
   }
-  const legMin = legs.map((l) => l.seconds / 60);
-  const hold = STOPS.map((s) => s.hold);
-  const start = latestStart(order, legMin, slots, hold);
-  // no leave time works (the road is slower than the windows allow): leave so the first stop is on time and show lateness
-  const at = start ?? Math.floor(slots[order[1]] - legMin[0]);
-  // the estimate: no waiting anywhere, leaving so the first stop is reached exactly at its given time
-  const estStart = slots[order[1]] - legMin[0];
-  let e = estStart;
-  const est = order.slice(1).map((s, i) => { const arrive = e + legMin[i]; e = arrive + hold[s]; return arrive; });
-  let t = at;
+  const start = slots[order[1]] - legs[0].seconds / 60;
+  let t = start;
   const visits: Visit[] = order.slice(1).map((s, i) => {
-    const arrive = t + legMin[i];
-    const serve = Math.max(arrive, slots[s] - EARLY_MIN);
-    t = serve + hold[s];
-    return { stop: s, arrive: serve, waited: serve - arrive, leave: t, slot: slots[s], late: Math.max(0, serve - slots[s]), estimate: est[i] };
+    const v = visit(t, legs[i].seconds / 60, slots[s], STOPS[s].hold);
+    t = v.leave;
+    return { stop: s, slot: slots[s], ...v };
   });
-  const late = visits.reduce((x, v) => x + v.late, 0);
   return {
-    order, legs, visits, late, onTime: late < 0.5, start: at, finish: t, estStart, estFinish: e,
+    order, legs, visits, start, lastDrop: t, back: t + legs[legs.length - 1].seconds / 60,
+    late: visits.reduce((x, v) => x + v.late, 0), lateStops: visits.filter((v) => v.late >= 0.5).length,
     metres: legs.reduce((x, l) => x + l.metres, 0), seconds: legs.reduce((x, l) => x + l.seconds, 0),
   };
 }
 
-/** The shortest round within the windows, and the customers in delivery-time order - each by road, with its leave time. */
+/** The least-late round and the customers in delivery-time order - each by road. */
 export async function slotRoutePlan(): Promise<SlotRoutePlan> {
   // the stops are fixed: a road plan is kept six hours (working it out takes a few seconds)
   if (planKept && Date.now() - planKept.at < KEEP_MS) return planKept.plan;
@@ -240,10 +220,10 @@ async function workOut(): Promise<SlotRoutePlan> {
   const metres = m?.metres ?? STOPS.map((a) => STOPS.map((b) => haversine(a, b) * 1.3));
   const seconds = m?.seconds ?? metres.map((row) => row.map((v) => (v / 1000 / 30) * 3600));
   const byTime = [0, ...STOPS.map((_, i) => i).slice(1).sort((a, b) => slots[a] - slots[b])];
-  const shortest = shortestOrder(metres, seconds, slots, STOPS.map((s) => s.hold)) ?? byTime;
+  const best = leastLateOrder(metres, seconds, slots, STOPS.map((s) => s.hold));
   return {
-    stops: STOPS, road, early: EARLY_MIN,
-    best: await roundOf(shortest, metres, seconds, slots, road),
+    stops: STOPS, road,
+    best: await roundOf(best, metres, seconds, slots, road),
     given: await roundOf(byTime, metres, seconds, slots, road),
   };
 }
