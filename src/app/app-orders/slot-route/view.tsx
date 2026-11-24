@@ -61,8 +61,8 @@ export function SlotRouteView() {
       const v = round.visits.find((x) => x.stop === s);
       const color = i === 0 ? RED : v && v.late > 0.5 ? LATE : GREEN;
       out.push({
-        id: `s${s}`, lat: st.lat, lng: st.lng, kind: "dot", color,
-        label: i === 0 ? `S · Leave ${clock(round.start)} · ${st.name}` : `${i} · ${st.slot} · ${st.area}`,
+        id: `s${s}`, lat: st.lat, lng: st.lng, kind: "pin", color, mark: i === 0 ? "S" : String(i),
+        label: i === 0 ? `Leave ${clock(round.start)} · ${st.name}` : `${st.slot} · ${st.area}`,
         popup: i === 0 ? `Leave ${clock(round.start)} · ${st.name}` : `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): reach by ${st.slot}, gets there ${v ? clock(v.arrive) : ""}, leaves ${v ? clock(v.leave) : ""}`,
       });
     });
