@@ -6,6 +6,13 @@
 @font-face { font-family: "Baloo Bhai 2"; src: url("/fonts/gaia/BalooBhai2-800.ttf") format("truetype"); font-weight: 800; font-display: swap; }
 @font-face { font-family: "Kamal"; src: url("/fonts/gaia/Kamal-400.ttf") format("truetype"); font-display: swap; }
 
+/* the whole screen is cream, not just the column: the app shell's <main> and the body behind it too */
+html:has(.gt-page),
+body:has(.gt-page),
+main:has(> .gt-page) {
+  background: #f7f5e8;
+}
+
 .gt-page {
   --gt-navy: #2f3992;
   --gt-navy-dark: #232b73;
