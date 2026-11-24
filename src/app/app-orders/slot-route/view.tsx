@@ -38,6 +38,8 @@ export function SlotRouteView() {
   const [plan, setPlan] = useState<SlotRoutePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [show, setShow] = useState<"best" | "given">("best");
+  /** plan: deliveries within their windows (waiting when early); estimate: drive straight on with only the hold times */
+  const [mode, setMode] = useState<"plan" | "estimate">("plan");
 
   useEffect(() => {
     let dead = false;
@@ -59,10 +61,12 @@ export function SlotRouteView() {
     round.order.forEach((s, i) => {
       const st = plan.stops[s];
       const v = round.visits.find((x) => x.stop === s);
-      const color = i === 0 ? RED : v && v.late > 0.5 ? LATE : GREEN;
+      const lateHere = v ? (mode === "estimate" ? v.estimate - v.slot > 0.5 : v.late > 0.5) : false;
+      const color = i === 0 ? RED : lateHere ? LATE : GREEN;
       out.push({
         id: `s${s}`, lat: st.lat, lng: st.lng, kind: "pin", color, mark: i === 0 ? "S" : String(i),
-        label: i === 0 ? `Leave ${clock(round.start)} · ${st.name}` : `${st.slot} · ${st.area}`,
+        label: i === 0 ? `Leave ${clock(mode === "estimate" ? round.estStart : round.start)} · ${st.name}`
+          : mode === "estimate" && v ? `${st.area} · given ${st.slot} · est. ${clock(v.estimate)}` : `${st.slot} · ${st.area}`,
         popup: i === 0 ? `Leave ${clock(round.start)} · ${st.name}` : `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): reach by ${st.slot}, gets there ${v ? clock(v.arrive) : ""}, leaves ${v ? clock(v.leave) : ""}`,
       });
     });
@@ -70,10 +74,11 @@ export function SlotRouteView() {
     round.legs.forEach((l, i) => {
       const [lng, lat] = halfway(l.path);
       const v = round.visits[i];
-      out.push({ id: `l${i}`, lat, lng, kind: "pill", color: v.late > 0.5 ? LATE : GREEN, label: `${km(l.metres)} | ${min(l.seconds)}`, top: true });
+      const lateHere = mode === "estimate" ? v.estimate - v.slot > 0.5 : v.late > 0.5;
+      out.push({ id: `l${i}`, lat, lng, kind: "pill", color: lateHere ? LATE : GREEN, label: `${km(l.metres)} | ${min(l.seconds)}`, top: true });
     });
     return out;
-  }, [plan, round]);
+  }, [plan, round, mode]);
 
   const lines: MapLine[] = useMemo(() => (round ? [{ id: "road", paths: round.legs.map((l) => l.path), color: GREEN, width: 5, opacity: 0.85 }] : []), [round]);
   const focus = useMemo(() => (plan ? { key: "all", points: plan.stops.map((s) => [s.lng, s.lat] as LngLat) } : null), [plan]);
@@ -89,11 +94,18 @@ export function SlotRouteView() {
           </p>
         </div>
         {plan ? (
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {(["best", "given"] as const).map((k) => (
               <button key={k} type="button" onClick={() => setShow(k)}
                 className={cn("h-8 rounded-full border px-3 text-sm", show === k ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}>
                 {k === "best" ? "Shortest route" : "In delivery-time order"}
+              </button>
+            ))}
+            <span className="mx-1 w-px self-stretch bg-border" />
+            {(["plan", "estimate"] as const).map((k) => (
+              <button key={k} type="button" onClick={() => setMode(k)}
+                className={cn("h-8 rounded-full border px-3 text-sm", mode === k ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}>
+                {k === "plan" ? "Plan" : "Estimated vs given time"}
               </button>
             ))}
           </div>
@@ -106,7 +118,11 @@ export function SlotRouteView() {
           {round ? (
             <div className="absolute top-3 left-3 z-10 rounded-lg bg-background/95 px-3 py-2 shadow-sm">
               <div className="text-lg font-bold">Total: {km(round.metres)} | {hours(round.seconds)} driving</div>
-              <div className="text-[12px]">Last drop done at {clock(round.finish)}</div>
+              <div className="text-[12px]">
+                {mode === "estimate"
+                  ? `Leave ${clock(round.estStart)}, last drop done at ${clock(round.estFinish)} (driving + hold times, no waiting)`
+                  : `Last drop done at ${clock(round.finish)}`}
+              </div>
               <div className="text-[12px] text-muted-foreground">
                 {plan!.road ? "Road distance and time from Ola Maps" : "Ola Maps did not answer: straight-line estimates"}
               </div>
@@ -119,7 +135,9 @@ export function SlotRouteView() {
         </div>
 
         <aside className="overflow-y-auto border-t border-border text-sm lg:border-t-0 lg:border-l">
-          {plan && round ? (
+          {plan && round && mode === "estimate" ? (
+            <Estimate plan={plan} round={round} />
+          ) : plan && round ? (
             <>
               <div className="border-b border-border px-4 py-3">
                 <p className="text-base font-semibold">Leave the depot at {clock(round.start)}</p>
@@ -161,5 +179,55 @@ export function SlotRouteView() {
         </aside>
       </div>
     </div>
+  );
+}
+
+/** Each stop's given time against when the vehicle really gets there: driving on with only the hold times, no waiting. */
+function Estimate({ plan, round }: { plan: SlotRoutePlan; round: RoundPlan }) {
+  const lateCount = round.visits.filter((v) => v.estimate - v.slot > 0.5).length;
+  const first = plan.stops[round.order[1]];
+  return (
+    <>
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-base font-semibold">Leave the depot at {clock(round.estStart)}</p>
+        <p className="text-muted-foreground">
+          To reach {first.area} at its {first.slot}, then drive on with only the hold time at each stop (5 or 10 min) - no waiting anywhere.
+          This is when the vehicle really gets to each place.
+        </p>
+        <p className="mt-1 font-medium">
+          {lateCount ? <span className="text-[#8a2e00]">{lateCount} {lateCount === 1 ? "stop is" : "stops are"} after the given time.</span> : "Every stop is reached by the given time."}
+          {" "}Last drop done at {clock(round.estFinish)}.
+        </p>
+      </div>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Stop</th>
+            <th className="px-2 py-2 text-right font-medium">Given</th>
+            <th className="px-2 py-2 text-right font-medium">Estimated</th>
+            <th className="px-3 py-2 text-right font-medium">Difference</th>
+          </tr>
+        </thead>
+        <tbody>
+          {round.visits.map((v, i) => {
+            const st = plan.stops[v.stop];
+            const d = Math.round(v.estimate - v.slot);
+            return (
+              <tr key={v.stop} className="border-b border-border align-top">
+                <td className="px-3 py-2">
+                  <div><span className="font-semibold">{i + 1}.</span> {st.area}</div>
+                  <div className="text-[12px] text-muted-foreground">{st.name} · hold {st.hold} min</div>
+                </td>
+                <td className="num px-2 py-2 text-right">{st.slot}</td>
+                <td className={cn("num px-2 py-2 text-right font-semibold", d > 0 && "text-[#8a2e00]")}>{clock(v.estimate)}</td>
+                <td className={cn("px-3 py-2 text-right whitespace-nowrap", d > 0 ? "font-semibold text-[#8a2e00]" : "text-muted-foreground")}>
+                  {d === 0 ? "on time" : d > 0 ? `${d} min late` : `${-d} min early`}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
   );
 }
