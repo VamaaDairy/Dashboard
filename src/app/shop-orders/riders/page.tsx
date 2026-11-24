@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Bike } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { AddRiderForm, RiderActions } from "@/components/shop/RiderAdmin";
+import { RiderActions } from "@/components/shop/RiderAdmin";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { query } from "@/lib/db";
@@ -67,11 +67,10 @@ export default async function RidersPage({ searchParams }: { searchParams: Promi
           title={kind === "transporter" ? "Transporters" : kind === "delivery" ? "Delivery boys" : "Delivery riders & transporters"}
           subtitle={kind === "transporter"
             ? "Every transporter account: transporters sign up themselves in the Gaia Delivery Partner app, then sign in as Transporter with their mobile number and PIN, and run the trips given to them on the Dispatch page - distributors' and retailers' orders, route by route from the plant."
-            : "Both sign in to the Gaia Delivery Partner app with their mobile number and PIN, choosing Delivery Boy or Transporter. Delivery boys get D2C orders; set pay is what one delivery earns them. Transporters carry distributors' orders route by route."}
+            : "Both sign up themselves in the Gaia Delivery Partner app, choosing Delivery Boy or Transporter, then sign in with their mobile number and PIN. Delivery boys get D2C orders; set pay is what one delivery earns them. Transporters carry distributors' orders route by route."}
           actions={<Link href="/shop-orders/live" className="inline-flex h-8 items-center rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Live map</Link>}
         />
         <div className="flex flex-wrap gap-1.5">{chip("all", "All")}{chip("delivery", "Delivery boys")}{chip("transporter", "Transporters")}</div>
-        {canEdit && kind !== "transporter" ? <AddRiderForm /> : null}
         {kind === "transporter" ? (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
@@ -128,7 +127,7 @@ export default async function RidersPage({ searchParams }: { searchParams: Promi
                   <td className="px-3 py-2">{canEdit ? <RiderActions id={r.id} active={r.active} pay={Number(r.pay_per_delivery)} /> : null}</td>
                 </tr>
               ))}
-              {riders.length === 0 ? <tr><td colSpan={13} className="px-3 py-10 text-center text-muted-foreground">No partners yet. Add one above.</td></tr> : null}
+              {riders.length === 0 ? <tr><td colSpan={13} className="px-3 py-10 text-center text-muted-foreground">No partners yet. Delivery boys and transporters join by downloading the Gaia Delivery Partner app and signing up.</td></tr> : null}
             </tbody>
           </table>
         </div>
