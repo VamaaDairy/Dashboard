@@ -11,15 +11,17 @@ export interface MapLine { id: string; paths: LngLat[][]; color: string; width?:
 
 /**
  * A pin. dot: a ringed dot with its name beside it; num: a numbered circle (hollow for a stop still to do);
- * pill: a label pill (the plant, a truck).
+ * pill: a label pill (the plant, a truck); pin: a location pin with [mark] inside it and [label] beside it.
  */
 export interface MapPin {
   id: string;
   lat: number;
   lng: number;
-  kind: "dot" | "num" | "pill";
+  kind: "dot" | "num" | "pill" | "pin";
   color: string;
   label?: string;
+  /** pin: the few characters inside the pin (a stop number) */
+  mark?: string;
   popup?: string;
   hollow?: boolean;
   dim?: boolean;
@@ -34,6 +36,23 @@ function pinElement(p: MapPin): HTMLElement {
   if (p.kind === "num") {
     el.style.cssText += `;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 11px system-ui;box-shadow:0 1px 3px rgba(0,0,0,.3);border:2px solid ${p.hollow ? p.color : "#fff"};background:${p.hollow ? "#fff" : p.color};color:${p.hollow ? p.color : "#fff"}`;
     el.textContent = p.label ?? "";
+  } else if (p.kind === "pin") {
+    // the pin's tip sits on the point (anchored bottom-left, moved left by half its width)
+    el.style.cssText += ";display:flex;align-items:flex-start;gap:4px;height:40px";
+    const pin = document.createElement("div");
+    pin.style.cssText = "position:relative;width:30px;height:40px;flex:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))";
+    pin.innerHTML = `<svg width="30" height="40" viewBox="0 0 40 52"><path d="M20 50C20 50 3 31 3 19a17 17 0 0 1 34 0c0 12-17 31-17 31z" fill="${p.color}" stroke="#fff" stroke-width="2.5"/></svg>`;
+    const mark = document.createElement("span");
+    mark.style.cssText = "position:absolute;top:5px;left:0;width:30px;text-align:center;color:#fff;font:700 12px system-ui";
+    mark.textContent = p.mark ?? "";
+    pin.append(mark);
+    el.append(pin);
+    if (p.label) {
+      const t = document.createElement("span");
+      t.style.cssText = "margin-top:4px;background:#fff;border:1px solid #9aa0a6;border-radius:6px;padding:1px 6px;font:600 12px/1.35 system-ui,-apple-system,sans-serif;color:#1f2329;white-space:nowrap";
+      t.textContent = p.label;
+      el.append(t);
+    }
   } else if (p.kind === "pill") {
     el.style.cssText += `;background:${p.color};color:#fff;font:600 11px system-ui;padding:3px 8px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);white-space:nowrap`;
     el.textContent = p.label ?? "";
@@ -52,7 +71,7 @@ function pinElement(p: MapPin): HTMLElement {
   return el;
 }
 
-const sig = (p: MapPin) => [p.kind, p.color, p.label, p.popup, p.hollow, p.dim, p.top].join("|");
+const sig = (p: MapPin) => [p.kind, p.color, p.label, p.mark, p.popup, p.hollow, p.dim, p.top].join("|");
 
 /**
  * The Ola map with any number of lines and pins (Dispatch: Live, a trip, the Plan map). It fits itself to everything
@@ -140,7 +159,11 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
       const el = pinElement(p);
       if (p.top) el.style.zIndex = "5";
       el.addEventListener("click", (e) => { if (clicked.current) { e.stopPropagation(); clicked.current(p.id); } });
-      const mk = new maplibregl.Marker({ element: el, anchor: p.kind === "dot" ? "left" : "center", offset: p.kind === "dot" ? [-9, 0] : [0, 0] }).setLngLat([p.lng, p.lat]);
+      const mk = new maplibregl.Marker({
+        element: el,
+        anchor: p.kind === "dot" ? "left" : p.kind === "pin" ? "bottom-left" : "center",
+        offset: p.kind === "dot" ? [-9, 0] : p.kind === "pin" ? [-15, 0] : [0, 0],
+      }).setLngLat([p.lng, p.lat]);
       if (p.popup) mk.setPopup(new maplibregl.Popup({ offset: 14 }).setText(p.popup));
       kept.set(p.id, { m: mk.addTo(m), sig: k });
     }
