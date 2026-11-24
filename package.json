@@ -37,7 +37,7 @@
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "jose": "^6.2.12",
-    "lucide-react": "^1.43.0",
+    "lucide-react": "^1.73.0",
     "maplibre-gl": "^6.16.0",
     "mssql": "^12.7.14",
     "next": "^16.4.5",
