@@ -6,6 +6,7 @@ import { getBatches, getBulkProducts, getIngredientOptions, getProductionDays } 
 import { kgPerLitre } from "@/lib/procurement/data";
 import { getTanksOnDate } from "@/lib/tanks/data";
 import { today } from "@/lib/dates";
+import { lastProductFor, traceProducts, traceStates } from "@/lib/trace/data";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,9 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
 
   const [products, batches, ingredients, history, k, tanks] = await Promise.all([
     getBulkProducts(), getBatches(date), getIngredientOptions(), getProductionDays(), kgPerLitre(), getTanksOnDate(date),
+  ]);
+  const [traceOptions, traces, lastProduct] = await Promise.all([
+    traceProducts(), traceStates(batches.map((b) => b.id)), lastProductFor(products.map((p) => p.id)),
   ]);
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
@@ -38,6 +42,7 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
           kgPerLitre={k}
           history={history}
           tanks={tanks}
+          trace={{ products: traceOptions, states: traces, lastProduct }}
         />
       </div>
     </div>

@@ -17,6 +17,8 @@ import { kgOfSolid } from "@/lib/units";
 import { batchComplete } from "@/lib/production/complete";
 import type { Batch, BatchMilk, BulkProduct, IngredientOption, ProductionDaySummary } from "@/lib/production/data";
 import type { TankDay } from "@/lib/tanks/data";
+import type { TraceProduct, TraceState } from "@/lib/trace/data";
+import { TraceButton } from "@/components/production/TraceDialog";
 
 type Line = { ingredient_id: string | null; name: string; qty: string; unit: string; custom?: boolean };
 /** A tank line; on a draw, fat / snf / clr are the optional lab test of that milk ("" = not tested). */
@@ -118,7 +120,7 @@ function milkOf(draws: Draw[], returns: Draw[], tanks: TankDay[], saved: BatchMi
 }
 
 export function BulkProductionDay({
-  date, today, products, batches, ingredients, kgPerLitre, history, tanks,
+  date, today, products, batches, ingredients, kgPerLitre, history, tanks, trace,
 }: {
   date: string;
   today: string;
@@ -128,6 +130,8 @@ export function BulkProductionDay({
   kgPerLitre: number;
   history: ProductionDaySummary[];
   tanks: TankDay[];
+  /** Stellar: the SKUs a batch can be shown as, batches already on chain, and the SKU last used per product */
+  trace: { products: TraceProduct[]; states: TraceState[]; lastProduct: Record<string, string> };
 }) {
   const router = useRouter();
   const active = products.filter((p) => p.is_active || batches.some((b) => b.bulk_product_id === p.id));
@@ -327,6 +331,19 @@ export function BulkProductionDay({
                           <span className="inline-flex flex-col leading-tight">
                             <span className="inline-flex w-fit items-center rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">Complete</span>
                             {out > 0 ? null : <span className="mt-0.5 text-[10px] text-muted-foreground">Yield pending</span>}
+                            {(() => {
+                              const saved = batches.find((b) => b.bulk_product_id === p.id);
+                              return saved ? (
+                                <TraceButton
+                                  bulkBatchId={saved.id}
+                                  productName={p.name}
+                                  dirty={dirty}
+                                  state={trace.states.find((t) => t.bulk_batch_id === saved.id) ?? null}
+                                  products={trace.products}
+                                  suggested={trace.lastProduct[p.id] ?? null}
+                                />
+                              ) : null;
+                            })()}
                           </span>
                         ) : (
                           <button onClick={() => setEditing(p.id)}
