@@ -87,7 +87,7 @@ const salesMasters = orders("Masters", Database, ["designationMaster", "channelM
 // Pricing
 const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Prices", icon: Tags };
 const marginsSlabs = orders("Margins & slabs", IndianRupee, ["fpchannelrates", "priceSlabs"]);
-const schemes = orders("Schemes", Gift, ["schemes", "schemesQPS"]);
+const schemes = orders("Schemes", Gift, ["schemesQPS"]);
 // Accounts
 const outstandings: NavItem = {
   href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale,
