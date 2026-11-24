@@ -1,41 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { addRiderAction, setRiderAction } from "@/lib/shop/actions";
-
-const box = "h-9 rounded-lg border border-input bg-transparent px-3 text-sm";
-
-/** The office adds delivery boys only: transporters join by signing up in the Gaia Delivery Partner app themselves. */
-export function AddRiderForm() {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState("");
-  const [pending, start] = useTransition();
-  return (
-    <form
-      className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        start(async () => {
-          const r = await addRiderAction(name, phone, pin);
-          if (r.ok) {
-            setName("");
-            setPhone("");
-            setPin("");
-            setError("");
-          } else setError(r.error ?? "Could not add the partner.");
-        });
-      }}
-    >
-      <label className="text-xs text-muted-foreground">Name<input value={name} onChange={(e) => setName(e.target.value)} className={`${box} mt-1 block w-48`} /></label>
-      <label className="text-xs text-muted-foreground">Mobile<input value={phone} inputMode="numeric" maxLength={10} onChange={(e) => setPhone(e.target.value)} className={`${box} mt-1 block w-40 font-mono`} /></label>
-      <label className="text-xs text-muted-foreground">PIN (4-8 digits)<input value={pin} inputMode="numeric" maxLength={8} onChange={(e) => setPin(e.target.value)} className={`${box} mt-1 block w-32 font-mono`} /></label>
-      <button disabled={pending} className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">Add delivery boy</button>
-      {error ? <span className="text-sm text-red-600">{error}</span> : null}
-    </form>
-  );
-}
+import { useTransition } from "react";
+import { setRiderAction } from "@/lib/shop/actions";
 
 export function RiderActions({ id, active, pay }: { id: number; active: boolean; pay: number }) {
   const [pending, start] = useTransition();
