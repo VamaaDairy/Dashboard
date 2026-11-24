@@ -116,8 +116,9 @@ export function SlotRouteView() {
         ) : null}
       </div>
 
-      <div className="grid min-h-[640px] flex-1 overflow-hidden rounded-xl border border-border lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="relative min-h-[420px]">
+      {/* one screen high: the list scrolls on its own, so the map fits the route in what you can see */}
+      <div className="grid overflow-hidden rounded-xl border border-border lg:h-[calc(100vh-150px)] lg:min-h-[560px] lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="relative h-[60vh] min-h-[380px] lg:h-full lg:min-h-0">
           <DispatchMap lines={lines} pins={pins} focus={focus} />
           {round ? (
             <div className="absolute top-3 left-3 z-10 rounded-lg bg-background/95 px-3 py-2 shadow-sm">
@@ -138,7 +139,7 @@ export function SlotRouteView() {
           )}
         </div>
 
-        <aside className="overflow-y-auto border-t border-border text-sm lg:border-t-0 lg:border-l">
+        <aside className="overflow-y-auto border-t border-border text-sm lg:min-h-0 lg:border-t-0 lg:border-l">
           {plan && round && mode === "estimate" ? (
             <Estimate plan={plan} round={round} />
           ) : plan && round ? (
