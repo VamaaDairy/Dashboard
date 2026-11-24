@@ -88,7 +88,7 @@ export interface DispatchOrder {
   deliveryDate: string;
 }
 
-/** The confirmed trade orders for [date], with the trip each is on. */
+/** The confirmed trade orders for [date] from active customers, with the trip each is on. */
 export async function dispatchOrders(date: string): Promise<DispatchOrder[]> {
   return query<DispatchOrder>(
     `select b.uid, b.order_id as "orderId", f.name as buyer, f.firm_code as "buyerCode", f.phone, f.address, f.city,
@@ -99,7 +99,7 @@ export async function dispatchOrders(date: string): Promise<DispatchOrder[]> {
        join fp_firm f on f.uid = b.from_firm_uid
        ${ROUTE_JOIN}
        left join dist_trip_stop s on s.order_uid = b.uid
-      where ${TRADE} and ${DELIVERY} = $1::date and lower(b.status) = 'confirmed'
+      where ${TRADE} and ${DELIVERY} = $1::date and lower(b.status) = 'confirmed' and f.active = 1
       order by ${ROUTE_NAME}, f.name, b.order_id`,
     [date],
   );
