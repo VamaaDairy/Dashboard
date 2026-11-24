@@ -49,36 +49,109 @@ async function guard(fn: () => Promise<void>): Promise<Result> {
   }
 }
 
-/** Name, notes and active - the Transport pages. */
+const PHONE = /^[6-9]\d{9}$/;
+const GSTIN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const PAN = /^[A-Z]{5}\d{4}[A-Z]$/;
+
+/** A 10-digit mobile number (a leading +91 / 0 is dropped), or null when blank. */
+function phone(form: FormData, key: string, label: string): string | null {
+  const raw = text(form, key);
+  if (!raw) return null;
+  const d = raw.replace(/\D/g, "").replace(/^(91|0)(?=\d{10}$)/, "");
+  if (!PHONE.test(d)) throw new Error(`${label}: "${raw}" is not a 10-digit mobile number`);
+  return d;
+}
+
+function code(form: FormData, key: string, label: string, re: RegExp): string | null {
+  const v = text(form, key).toUpperCase().replace(/\s+/g, "");
+  if (!v) return null;
+  if (!re.test(v)) throw new Error(`${label}: "${text(form, key)}" is not valid`);
+  return v;
+}
+
+/** Name, contact, papers, notes and active - the Transport pages. */
 export async function saveTransporter(form: FormData): Promise<Result> {
   return guard(async () => {
     const id = text(form, "id");
     const name = text(form, "name");
     if (!name) throw new Error("Give the transporter a name");
-    const fields = [name, form.get("is_active") !== null, text(form, "notes") || null];
+    const fields = [
+      name, form.get("is_active") !== null, text(form, "notes") || null,
+      text(form, "contact_person") || null, phone(form, "phone", "Phone"), phone(form, "alt_phone", "Other phone"),
+      text(form, "address") || null, code(form, "gstin", "GSTIN", GSTIN), code(form, "pan", "PAN", PAN),
+    ];
 
     if (id) {
       await query(
-        `update transporter set name = $2, is_active = $3, notes = $4 where id = $1`,
+        `update transporter set name = $2, is_active = $3, notes = $4, contact_person = $5, phone = $6, alt_phone = $7,
+                address = $8, gstin = $9, pan = $10 where id = $1`,
         [id, ...fields],
       );
       return;
     }
 
     const s = section(form);
-    const code = slug(name);
-    if (!/^[a-z][a-z0-9_]*$/.test(code)) throw new Error("Use a name that starts with a letter");
+    const code_ = slug(name);
+    if (!/^[a-z][a-z0-9_]*$/.test(code_)) throw new Error("Use a name that starts with a letter");
     const scenario = await activeScenarioId();
     const taken = await query(
       `select 1 from transporter where scenario_id = $1 and section = $2 and code = $3`,
-      [scenario, s, code]);
+      [scenario, s, code_]);
     if (taken.length) throw new Error(`A transporter called "${name}" is already in this section`);
     await query(
-      `insert into transporter (scenario_id, section, code, name, is_active, notes, sort_order)
-       values ($1, $2, $3, $4, $5, $6,
+      `insert into transporter (scenario_id, section, code, name, is_active, notes, contact_person, phone, alt_phone, address, gstin, pan, sort_order)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
                (select coalesce(max(sort_order), 0) + 1 from transporter where scenario_id = $1))`,
-      [scenario, s, code, ...fields],
+      [scenario, s, code_, ...fields],
     );
+  });
+}
+
+/** A transporter's vehicle: number, type, capacity, driver. */
+export async function saveVehicle(form: FormData): Promise<Result> {
+  return guard(async () => {
+    const id = text(form, "id");
+    const transporter = text(form, "transporter_id");
+    const no = text(form, "vehicle_no").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+    if (!/^[A-Z]{2} ?\d{1,2} ?[A-Z]{0,3} ?\d{1,4}$/.test(no)) throw new Error(`Vehicle number: "${text(form, "vehicle_no")}" is not like CG04 HQ 1234`);
+    const fields = [
+      no, text(form, "vehicle_type") || null, text(form, "capacity") || null, text(form, "driver_name") || null,
+      phone(form, "driver_phone", "Driver's phone"), form.get("active") !== null, text(form, "notes") || null,
+    ];
+    try {
+      if (id) {
+        await query(
+          `update transporter_vehicle set vehicle_no = $2, vehicle_type = $3, capacity = $4, driver_name = $5, driver_phone = $6,
+                  active = $7, notes = $8 where id = $1`, [id, ...fields]);
+      } else {
+        if (!transporter) throw new Error("Pick a transporter");
+        await query(
+          `insert into transporter_vehicle (transporter_id, vehicle_no, vehicle_type, capacity, driver_name, driver_phone, active, notes)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)`, [transporter, ...fields]);
+      }
+    } catch (e) {
+      if ((e as { code?: string }).code === "23505") throw new Error(`${no} is already on this transporter's list`);
+      throw e;
+    }
+  });
+}
+
+export async function deleteVehicle(id: string): Promise<Result> {
+  return guard(async () => {
+    await query(`delete from transporter_vehicle where id = $1`, [id]);
+  });
+}
+
+/** Which delivery transporter runs a route ("" = none). */
+export async function setRouteTransporter(routeId: number, transporterId: string): Promise<Result> {
+  return guard(async () => {
+    if (transporterId) {
+      const ok = await query(`select 1 from transporter where id = $1 and section = 'delivery'`, [transporterId]);
+      if (!ok.length) throw new Error("Pick a delivery transporter");
+    }
+    const r = await query(`update route_order_route set transporter_id = $2 where id = $1 returning id`, [routeId, transporterId || null]);
+    if (!r.length) throw new Error("That route is gone");
+    revalidatePath("/app-orders", "layout");
   });
 }
 

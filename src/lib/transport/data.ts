@@ -14,6 +14,34 @@ export interface TransporterRow {
   diesel_litre_per_day: number | null;
   is_active: boolean;
   notes: string | null;
+  contact_person: string | null;
+  phone: string | null;
+  alt_phone: string | null;
+  address: string | null;
+  gstin: string | null;
+  pan: string | null;
+}
+
+/** A vehicle a transporter sends, and who drives it. */
+export interface VehicleRow {
+  id: string;
+  transporter_id: string;
+  vehicle_no: string;
+  vehicle_type: string | null;
+  capacity: string | null;
+  driver_name: string | null;
+  driver_phone: string | null;
+  active: boolean;
+  notes: string | null;
+}
+
+/** A Route sheet route and the transporter that runs it. */
+export interface DeliveryRoute {
+  id: number;
+  name: string;
+  active: boolean;
+  transporter_id: string | null;
+  outlets: number;            // active outlets on the route
 }
 
 export interface RateRow {
@@ -64,11 +92,33 @@ export { today } from "@/lib/dates";
 /** One section's transporters, for its Transport and Fuel pages. */
 export async function getTransporters(section: TransportSection): Promise<TransporterRow[]> {
   return query<TransporterRow>(
-    `select id, code, name, distance_km, trips_per_day, diesel_litre_per_day, is_active, notes
+    `select id, code, name, distance_km, trips_per_day, diesel_litre_per_day, is_active, notes,
+            contact_person, phone, alt_phone, address, gstin, pan
        from transporter
       where scenario_id = $1 and section = $2
       order by sort_order, name`,
     [await activeScenarioId(), section],
+  );
+}
+
+/** The vehicles of a section's transporters. */
+export async function getVehicles(section: TransportSection): Promise<VehicleRow[]> {
+  return query<VehicleRow>(
+    `select v.id, v.transporter_id, v.vehicle_no, v.vehicle_type, v.capacity, v.driver_name, v.driver_phone, v.active, v.notes
+       from transporter_vehicle v join transporter t on t.id = v.transporter_id
+      where t.scenario_id = $1 and t.section = $2
+      order by v.active desc, v.vehicle_no`,
+    [await activeScenarioId(), section],
+  );
+}
+
+/** Every route of the Route sheet with the transporter that runs it. */
+export async function getDeliveryRoutes(): Promise<DeliveryRoute[]> {
+  return query<DeliveryRoute>(
+    `select r.id, r.name, r.active, r.transporter_id,
+            (select count(*)::int from route_order_party p where p.route_id = r.id and p.active) as outlets
+       from route_order_route r
+      order by r.active desc, r.sort, r.id`,
   );
 }
 

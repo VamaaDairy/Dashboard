@@ -39,16 +39,15 @@ export async function assignRiderAction(orderId: number, riderId: number | null)
   return ok ? { ok: true } : { ok: false, error: "This order can no longer be given to a rider." };
 }
 
-export async function addRiderAction(name: string, phone: string, pin: string, kind: "delivery" | "transporter" = "delivery", vehicle = ""): Promise<{ ok: boolean; error?: string }> {
+/** A delivery boy's account, made by the office. Transporters are never added here: they sign up in the Gaia Delivery Partner app. */
+export async function addRiderAction(name: string, phone: string, pin: string): Promise<{ ok: boolean; error?: string }> {
   if (!(await canEdit())) return NO;
   const p = phone.replace(/\D/g, "").slice(-10);
   if (name.trim().length < 2) return { ok: false, error: "Enter the rider's name." };
   if (!/^[6-9]\d{9}$/.test(p)) return { ok: false, error: "Enter a valid 10-digit mobile number." };
   if (!/^\d{4,8}$/.test(pin)) return { ok: false, error: "The PIN must be 4 to 8 digits." };
-  if (kind !== "delivery" && kind !== "transporter") return { ok: false, error: "Choose delivery boy or transporter." };
-  const vehicleNo = vehicle.trim().toUpperCase().replace(/\s+/g, " ").slice(0, 20) || null;
   try {
-    await query(`insert into shop_rider (name, phone, pin_hash, kind, vehicle_no) values ($1, $2, $3, $4, $5)`, [name.trim(), p, hashPin(pin), kind, vehicleNo]);
+    await query(`insert into shop_rider (name, phone, pin_hash, kind) values ($1, $2, $3, 'delivery')`, [name.trim(), p, hashPin(pin)]);
   } catch {
     return { ok: false, error: "A partner with this number already exists." };
   }
