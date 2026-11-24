@@ -4,6 +4,7 @@ import { customerFromRequest } from "@/lib/shop/customer";
 import { getOrderByKey, placeOrder } from "@/lib/shop/orders";
 import { parseOrderBody } from "@/lib/shop/validate";
 import { easebuzzReady } from "@/lib/payments/easebuzz";
+import { deliveryArea } from "@/lib/shop/area";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,10 @@ export async function POST(req: NextRequest) {
 
   const parsed = parseOrderBody(body);
   if (!parsed.ok) return fail(400, parsed.error, parsed.fields);
+
+  // orders are taken only in Raipur and a few km around it (anyone can browse)
+  const area = await deliveryArea(parsed.input);
+  if (!area.ok) return fail(409, area.message);
 
   if (parsed.input.paymentMethod === "online" && !easebuzzReady()) return fail(409, "Online payment is not available right now. Please choose cash on delivery.");
   const r = await placeOrder({ ...parsed.input, customerId: customer.id });

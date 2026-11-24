@@ -4,6 +4,7 @@ import { customerFromRequest } from "@/lib/shop/customer";
 import { activeMandate, MAX_DEBIT, startMandate } from "@/lib/shop/autopay";
 import { nextPack, packState, parsePeriod, periodLabel, periodOf, raisePack, refreshPack, setPeriod } from "@/lib/shop/packs";
 import { query } from "@/lib/db";
+import { deliveryArea } from "@/lib/shop/area";
 import { rupees } from "@/lib/shop/pricing";
 import { createSubscription, customerCalendar, parsePlan, setDay, todayIST, type PlanInput } from "@/lib/shop/subscriptions";
 
@@ -52,14 +53,18 @@ export async function POST(req: NextRequest) {
   if (address.length < 5) return fail(400, "Add the delivery address for your subscription.");
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+  const where = {
+    pincode: typeof b.pincode === "string" && b.pincode.trim() ? b.pincode.trim() : c.pincode,
+    lat: num(b.lat) ?? c.lat, lng: num(b.lng) ?? c.lng,
+  };
+  // deliveries only in Raipur and a few km around it
+  const area = await deliveryArea(where);
+  if (!area.ok) return fail(409, area.message);
+
   if (period) await setPeriod(c.id, period);
   // without autopay yet it starts only once its first payment is made: no "started" message before that
   const autopayOn = !!(await activeMandate(c.id));
-  const r = await createSubscription(c.id, plan, {
-    name, phone, address,
-    pincode: typeof b.pincode === "string" && b.pincode.trim() ? b.pincode.trim() : c.pincode,
-    lat: num(b.lat) ?? c.lat, lng: num(b.lng) ?? c.lng,
-  }, autopayOn);
+  const r = await createSubscription(c.id, plan, { name, phone, address, ...where }, autopayOn);
   if (!r.ok) return fail(400, r.error);
   // days the customer took out while choosing
   if (Array.isArray(b.skipDays)) for (const d of b.skipDays.slice(0, 120)) if (typeof d === "string") await setDay(c.id, r.id, d, 0);

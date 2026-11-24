@@ -116,6 +116,19 @@ export async function reverse(lat: number, lng: number): Promise<{ address: stri
   return { address: r.formatted_address, pincode: pin };
 }
 
+/**
+ * The town / city a point is in, as Ola names it (its "locality": "Raipur", "Atal Nagar", "Abhanpur" ...); "" when
+ * Ola gives none there (open country). null when Ola could not be asked.
+ */
+export async function localityAt(lat: number, lng: number): Promise<string | null> {
+  const j = await call<{ results?: Array<{ address_components?: Array<{ long_name: string; types: string[] }> }> }>(
+    "/places/v1/reverse-geocode",
+    { latlng: `${lat},${lng}` },
+  );
+  if (!j) return null;
+  return j.results?.[0]?.address_components?.find((c) => c.types?.includes("locality"))?.long_name?.trim() ?? "";
+}
+
 export interface RouteStep { text: string; distanceM: number; maneuver: string }
 export interface Route {
   distanceM: number;
