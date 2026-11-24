@@ -12,6 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TraceProduct, TraceState } from "@/lib/trace/data";
 
+const STEP_NAME: Record<string, string> = {
+  collected: "milk collected", processed: "processed", packed: "packed", dispatched: "dispatched",
+};
+
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -71,7 +75,7 @@ function TraceBody({
   const [uid, setUid] = useState(suggested ?? "");
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ link: string; traceId: string; unchanged?: boolean } | null>(null);
+  const [done, setDone] = useState<{ link: string; traceId: string; sent: string[] } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -85,7 +89,7 @@ function TraceBody({
   const link = done?.link ?? state?.link ?? null;
   useEffect(() => {
     if (!link) return;
-    QRCode.toDataURL(link, { margin: 1, width: 480, color: { dark: "#2F3992", light: "#FFFFFF" } }).then(setQr).catch(() => setQr(null));
+    QRCode.toDataURL(link, { margin: 1, width: 480, color: { dark: "#2F3992", light: "#F7F5E8" } }).then(setQr).catch(() => setQr(null));
   }, [link]);
 
   function record() {
@@ -93,7 +97,7 @@ function TraceBody({
     start(async () => {
       const res = await recordBatchOnChain(bulkBatchId, uid);
       if (!res.ok) { setError(res.error); return; }
-      setDone({ link: res.link, traceId: res.traceId, unchanged: res.unchanged });
+      setDone({ link: res.link, traceId: res.traceId, sent: res.sent });
       router.refresh();
     });
   }
@@ -105,7 +109,7 @@ function TraceBody({
         <DialogDescription>
           {state
             ? `Recorded as ${state.trace_id} · ${state.records} record${state.records === 1 ? "" : "s"}, last ${when(state.last_at)}. If the batch was edited since, record it again to add the update.`
-            : "Puts this batch's milk, lab test, ingredients and yield on Stellar, so a customer scanning the pack can check them. Costs, tank names and recipe quantities stay private."}
+            : "Stores this batch in full on Stellar - where the milk was collected, processing at the plant with the lab test, packing (use-by, storage, nutrition) and dispatch - so a customer scanning the pack reads it straight from the blockchain. Costs, farmer and customer names, tank names and recipe quantities stay private."}
         </DialogDescription>
       </DialogHeader>
 
@@ -147,7 +151,11 @@ function TraceBody({
             <img src={qr} alt="QR code for the public batch page" className="h-28 w-28" />
           ) : null}
           <div className="min-w-0 space-y-1 text-[13px]">
-            {done ? <div className="font-semibold">{done.unchanged ? "Nothing changed since the last record." : "Recorded on Stellar."}</div> : null}
+            {done ? (
+              <div className="font-semibold">
+                {done.sent.length ? `Stored on Stellar: ${done.sent.map((k) => STEP_NAME[k] ?? k).join(", ")}.` : "Nothing changed since the last record."}
+              </div>
+            ) : null}
             <a href={link!} target="_blank" rel="noreferrer" className="block truncate font-semibold underline">
               {link}
             </a>
@@ -164,7 +172,7 @@ function TraceBody({
         <Button variant="outline" onClick={onClose}>Close</Button>
         {!dirty ? (
           <Button onClick={record} disabled={pending || !uid} className="bg-foreground text-background hover:bg-foreground/85">
-            {pending ? "Recording… (up to 30 s)" : state ? "Record update" : "Record on Stellar"}
+            {pending ? "Recording… (up to a minute)" : state ? "Record update" : "Record on Stellar"}
           </Button>
         ) : null}
       </DialogFooter>

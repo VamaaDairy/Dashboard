@@ -131,7 +131,7 @@ export function BulkProductionDay({
   history: ProductionDaySummary[];
   tanks: TankDay[];
   /** Stellar: the SKUs a batch can be shown as, batches already on chain, and the SKU last used per product */
-  trace: { products: TraceProduct[]; states: TraceState[]; lastProduct: Record<string, string> };
+  trace: { products: TraceProduct[]; states: TraceState[]; lastProduct: Record<string, string> } | null;
 }) {
   const router = useRouter();
   const active = products.filter((p) => p.is_active || batches.some((b) => b.bulk_product_id === p.id));
@@ -333,7 +333,7 @@ export function BulkProductionDay({
                             {out > 0 ? null : <span className="mt-0.5 text-[10px] text-muted-foreground">Yield pending</span>}
                             {(() => {
                               const saved = batches.find((b) => b.bulk_product_id === p.id);
-                              return saved ? (
+                              return saved && trace ? (
                                 <TraceButton
                                   bulkBatchId={saved.id}
                                   productName={p.name}
