@@ -17,6 +17,8 @@ export async function proxy(req: NextRequest) {
     pathname.includes(".") ||
     pathname === "/favicon.ico" ||
     pathname === "/privacy-policy" ||
+    // the delivery round with time slots: shared as a link, opens without signing in
+    pathname === "/app-orders/slot-route" ||
     pathname === "/delete-account"
   ) {
     return NextResponse.next();
