@@ -11,7 +11,7 @@
  */
 import {
   Archive, BadgePercent, BarChart3, Beaker, Bike, Boxes, CalendarDays, ClipboardCheck, Contact, Cylinder, Database, Droplets, Factory,
-  Briefcase, FileClock, Fuel, Gift, HardHat, Home, IndianRupee, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
+  Briefcase, FileClock, Fuel, HardHat, Home, IndianRupee, MapPinned, MessageCircle, Network, Package, PackageCheck, PackageSearch,
   ReceiptText, Route, Scale, Settings2, ShoppingBag, Smartphone, Star, Store, Tags, Target, Truck, UserPlus, Users, Wallet, Warehouse, Waypoints, Zap,
 } from "lucide-react";
 import ordersSidebar from "@/lib/orders/sidebar.json";
@@ -87,7 +87,6 @@ const salesMasters = orders("Masters", Database, ["designationMaster", "channelM
 // Pricing
 const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Prices", icon: Tags };
 const marginsSlabs = orders("Margins & slabs", IndianRupee, ["fpchannelrates", "priceSlabs"]);
-const schemes = orders("Schemes", Gift, ["schemesQPS"]);
 // Accounts
 const outstandings: NavItem = {
   href: "/outstandings", key: "outstandings", label: "Outstandings", icon: Scale,
@@ -357,7 +356,6 @@ const WORKING: NavSection[] = [
               { href: "/product-master/retail", key: "productmaster.retail", label: "Retail app" },
             ],
           },
-          schemes,
           {
             // the Gaia Distributors app's own offers and banners (the D2C app's are under D2C > Marketing)
             href: "/app-orders/marketing/offers", key: "shop", label: "Marketing", icon: BadgePercent,
@@ -392,7 +390,7 @@ const WORKING: NavSection[] = [
     groups: [
       { label: "Prices", items: [priceList] },
       { label: "Names", items: [{ href: "/product-names", key: "productnames", label: "Product names check", icon: ClipboardCheck }] },
-      { label: "Distributor & retail", items: items(marginsSlabs, schemes) },
+      { label: "Distributor & retail", items: items(marginsSlabs) },
       {
         label: "Milk purchase",
         items: [{ href: "/procurement/rate-chart", key: "procurement.rates", label: "Milk rate chart", icon: Droplets }],
@@ -507,7 +505,7 @@ const WORKING: NavSection[] = [
       { label: "Accounts", items: [dash.creditNotes, dash.cn] },
       { label: "Distributor & retail orders", items: items(distAppOrders, salesStock) },
       { label: "Distributor & retail masters", items: items(distCustomers, salesMasters) },
-      { label: "Distributor & retail prices", items: items(priceList, marginsSlabs, schemes) },
+      { label: "Distributor & retail prices", items: items(priceList, marginsSlabs) },
     ],
   },
   {
