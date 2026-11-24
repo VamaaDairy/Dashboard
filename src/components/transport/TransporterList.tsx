@@ -152,7 +152,7 @@ function Details({ t, vehicles, routes }: { t: TransporterRow; vehicles: Vehicle
         <div className="space-y-1">
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Routes</span>
           <p className="text-[13px]">
-            {runs.length ? runs.map((r) => `${r.name} (${r.outlets} outlets)`).join(" · ") : <span className="text-muted-foreground">No route yet - pick one under Routes below.</span>}
+            {runs.length ? runs.map((r) => `${r.name} (${r.outlets} active)`).join(" · ") : <span className="text-muted-foreground">No route yet - pick one under Routes below.</span>}
           </p>
         </div>
       ) : null}
@@ -172,7 +172,7 @@ function RoutesTable({ routes, transporters }: { routes: DeliveryRoute[]; transp
         <table className="w-full text-[13px]">
           <THead>
             <Th align="left">Route</Th>
-            <Th>Outlets</Th>
+            <Th>Active customers</Th>
             <Th align="left">Transporter</Th>
           </THead>
           <tbody>

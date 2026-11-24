@@ -41,7 +41,7 @@ export interface DeliveryRoute {
   name: string;
   active: boolean;
   transporter_id: string | null;
-  outlets: number;            // active outlets on the route
+  outlets: number;            // outlets on the route that are an active customer in Customer Masters
 }
 
 export interface RateRow {
@@ -116,7 +116,8 @@ export async function getVehicles(section: TransportSection): Promise<VehicleRow
 export async function getDeliveryRoutes(): Promise<DeliveryRoute[]> {
   return query<DeliveryRoute>(
     `select r.id, r.name, r.active, r.transporter_id,
-            (select count(*)::int from route_order_party p where p.route_id = r.id and p.active) as outlets
+            (select count(*)::int from route_order_party p join fp_firm f on f.uid = p.firm_uid and f.active = 1
+              where p.route_id = r.id and p.active) as outlets
        from route_order_route r
       order by r.active desc, r.sort, r.id`,
   );
