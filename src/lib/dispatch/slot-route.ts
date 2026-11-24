@@ -54,7 +54,7 @@ export interface RoundPlan {
   /** minutes after midnight: leaving the depot, the last drop done, back at the depot */
   start: number; lastDrop: number; back: number;
 }
-export interface SlotRoutePlan { stops: SlotStop[]; best: RoundPlan; given: RoundPlan; road: boolean }
+export interface SlotRoutePlan { stops: SlotStop[]; best: RoundPlan; road: boolean }
 
 // ---------------------------------------------------------------------------------------------- Ola, kept
 
@@ -201,7 +201,7 @@ async function roundOf(order: number[], metres: number[][], seconds: number[][],
   };
 }
 
-/** The least-late round and the customers in delivery-time order - each by road. */
+/** The round: the least-late order, by road. */
 export async function slotRoutePlan(): Promise<SlotRoutePlan> {
   // the stops are fixed: a road plan is kept six hours (working it out takes a few seconds)
   if (planKept && Date.now() - planKept.at < KEEP_MS) return planKept.plan;
@@ -219,11 +219,9 @@ async function workOut(): Promise<SlotRoutePlan> {
   // without Ola: straight line x 1.3 at 30 km/h, so the page still says something
   const metres = m?.metres ?? STOPS.map((a) => STOPS.map((b) => haversine(a, b) * 1.3));
   const seconds = m?.seconds ?? metres.map((row) => row.map((v) => (v / 1000 / 30) * 3600));
-  const byTime = [0, ...STOPS.map((_, i) => i).slice(1).sort((a, b) => slots[a] - slots[b])];
   const best = leastLateOrder(metres, seconds, slots, STOPS.map((s) => s.hold));
   return {
     stops: STOPS, road,
     best: await roundOf(best, metres, seconds, slots, road),
-    given: await roundOf(byTime, metres, seconds, slots, road),
   };
 }

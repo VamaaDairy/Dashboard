@@ -46,7 +46,6 @@ function halfway(path: LngLat[]): LngLat {
 export function SlotRouteView() {
   const [plan, setPlan] = useState<SlotRoutePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [show, setShow] = useState<"best" | "given">("best");
 
   useEffect(() => {
     let dead = false;
@@ -60,7 +59,7 @@ export function SlotRouteView() {
     return () => { dead = true; };
   }, []);
 
-  const round: RoundPlan | null = plan ? plan[show] : null;
+  const round: RoundPlan | null = plan ? plan.best : null;
 
   const pins = useMemo(() => {
     if (!plan || !round) return [] as MapPin[];
@@ -103,16 +102,6 @@ export function SlotRouteView() {
             stays the hold time. The vehicle leaves so it reaches the first stop on time. Distances and driving times are Ola Maps&apos; road figures.
           </p>
         </div>
-        {plan ? (
-          <div className="flex gap-1.5">
-            {(["best", "given"] as const).map((k) => (
-              <button key={k} type="button" onClick={() => setShow(k)}
-                className={cn("h-8 rounded-full border px-3 text-sm", show === k ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}>
-                {k === "best" ? "Least late route" : "In delivery-time order"}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
 
       {/* one screen high: the list scrolls on its own, so the map fits the route in what you can see */}
@@ -135,7 +124,7 @@ export function SlotRouteView() {
         </div>
 
         <aside className="overflow-y-auto border-t border-border text-sm lg:min-h-0 lg:border-t-0 lg:border-l">
-          {plan && round ? <Stops plan={plan} round={round} show={show} /> : null}
+          {plan && round ? <Stops plan={plan} round={round} /> : null}
         </aside>
       </div>
     </div>
@@ -143,7 +132,7 @@ export function SlotRouteView() {
 }
 
 /** Given time against when each stop is really delivered, and how late. */
-function Stops({ plan, round, show }: { plan: SlotRoutePlan; round: RoundPlan; show: "best" | "given" }) {
+function Stops({ plan, round }: { plan: SlotRoutePlan; round: RoundPlan }) {
   const depot = plan.stops[0];
   const back = round.legs[round.legs.length - 1];
   return (
@@ -153,12 +142,8 @@ function Stops({ plan, round, show }: { plan: SlotRoutePlan; round: RoundPlan; s
           {round.lateStops ? <span className={LATE_TEXT}>{round.lateStops} of {round.visits.length} stops late · {lateText(round.late)} late in all</span> : "Every stop on time"}
         </p>
         <p className="text-muted-foreground">
-          {show === "best" ? "The order with the least lateness, then the fewest km." : "The customers in order of their delivery time."}
-          {" "}Leave the depot at {clock(round.start)}.
+          The order with the least lateness, then the fewest km. Leave the depot at {clock(round.start)}.
         </p>
-        {show === "given" && round.late - plan.best.late >= 1 ? (
-          <p className="mt-1 text-muted-foreground">The least late route is {lateText(round.late - plan.best.late)} less late in all ({km(plan.best.metres)}).</p>
-        ) : null}
       </div>
       <table className="w-full">
         <thead>
