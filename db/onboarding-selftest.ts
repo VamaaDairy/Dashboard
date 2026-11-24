@@ -22,7 +22,7 @@ const codeFromSms = () => /\b(\d{6})\b(?!.*\b\d{6}\b)/.exec(lastSms.split(": ").
 (async () => {
   const { one, query, pool } = await import("@/lib/db");
   const { sendEmployeeOtp } = await import("@/lib/employee");
-  const { createSelfSignup, signupStatus, selfSignupNotice, approveFirmRequest, rejectFirmRequest } = await import("@/lib/distributor/requests");
+  const { createSelfSignup, signupStatus, selfSignupNotice, approveFirmRequest, rejectFirmRequest, createFirmRequest } = await import("@/lib/distributor/requests");
   const { distLogin, firmPrices } = await import("@/lib/distributor");
 
   const STATE = "Selftest Pradesh";
@@ -140,6 +140,21 @@ const codeFromSms = () => /\b(\d{6})\b(?!.*\b\d{6}\b)/.exec(lastSms.split(": ").
     check(r.ok && r.status === "active", "a retailer is ready at once");
     const rr = await one<{ id: number; firm_uid: string }>(`select id, firm_uid from dist_firm_request where phone = $1`, [rphone]);
     if (rr) { made.requests.push(rr.id); if (rr.firm_uid) made.firms.push(rr.firm_uid); }
+
+    // 7. a sales officer adds a retailer: in at once, theirs; a distributor still waits for the office
+    const sphone = `9${String(Date.now() + 7).slice(-9)}`;
+    const dphone = `8${String(Date.now() + 7).slice(-9)}`;
+    made.phones.push(sphone, dphone);
+    const sr = await createFirmRequest(staff.uid, null, { name: "Selftest Corner Store", kind: "Retailer", phone: sphone, address: "Shop 4, Main Market Road" });
+    const sf = sr.ok ? await one<{ code: string; channel: string; sc: string; active: number }>(
+      `select f.firm_code as code, upper(ch.channel_code) as channel, f.sales_contact_uid::text as sc, f.active from fp_firm f join fp_channel ch on ch.uid = f.channel_uid where f.uid = $1`, [sr.request.firmUid],
+    ) : null;
+    if (sr.ok) { made.requests.push(sr.request.id); if (sr.request.firmUid) made.firms.push(sr.request.firmUid); }
+    check(sr.ok && sr.request.status === "approved" && sf?.channel === "RT" && sf.code === `RT${sphone}` && sf.sc === staff.uid && sf.active === 1,
+      `a retailer added by a sales officer is in at once (${sr.ok ? sr.request.status : sr.error}, ${sf?.code}, officer's)`);
+    const sd = await createFirmRequest(staff.uid, null, { name: "Selftest Agencies", kind: "Distributor", phone: dphone, address: "Plot 9, Industrial Area" });
+    if (sd.ok) made.requests.push(sd.request.id);
+    check(sd.ok && sd.request.status === "pending" && !sd.request.firmUid, "a distributor added by a sales officer waits for the office");
   } finally {
     await query(`delete from dist_session where login_id in (select id from dist_login where phone = any($1))`, [made.phones]).catch(() => null);
     await query(`delete from dist_login where phone = any($1)`, [made.phones]);
