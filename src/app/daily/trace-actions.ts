@@ -4,11 +4,12 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { one, query } from "@/lib/db";
 import { userFromToken } from "@/lib/access-server";
-import { batchFacts, buildRecord, recordLink, traceLink, type TraceProduct } from "@/lib/trace/data";
-import { ChainError, STELLAR, anchor, createBatch, isConfigured } from "@/lib/trace/stellar";
+import { batchSteps, traceLink, type TraceProduct } from "@/lib/trace/data";
+import { buildRecord, sameContent } from "@/lib/trace/records";
+import { ChainError, STELLAR, createBatch, isConfigured, recordFull } from "@/lib/trace/stellar";
 
 export type TraceResult =
-  | { ok: true; traceId: string; link: string; unchanged?: boolean }
+  | { ok: true; traceId: string; link: string; sent: string[]; unchanged: string[] }
   | { ok: false; error: string };
 
 /** "toned_milk" + 2026-11-25 -> "GAIA-TONED-MILK-20261125": one per product per day, like the batch itself. */
@@ -17,8 +18,9 @@ function traceIdFor(code: string, date: string) {
 }
 
 /**
- * Puts a saved production batch on the Stellar blockchain: the first time it creates the batch twin and
- * records "processed"; later, if the batch was edited, it records "updated". Nothing changed = nothing sent.
+ * Puts a saved production batch on the Stellar blockchain, in full: up to four records (milk collected,
+ * processed, packed, dispatched), each stored whole on chain. The first time it also creates the batch
+ * twin. Recording again sends only the steps whose content changed (e.g. dispatch added later).
  */
 export async function recordBatchOnChain(bulkBatchId: string, productUid: string): Promise<TraceResult> {
   try {
@@ -40,8 +42,9 @@ export async function recordBatchOnChain(bulkBatchId: string, productUid: string
     );
     if (!product) throw new Error("Pick the product this batch is sold as");
 
-    const facts = await batchFacts(bulkBatchId);
-    if (!facts || (!facts.milk && !facts.output && !facts.ingredients)) {
+    const steps = await batchSteps(bulkBatchId, product);
+    const processed = steps?.find((s) => s.kind === "processed")?.data as { milk?: unknown; output?: unknown; ingredients?: unknown } | undefined;
+    if (!steps || !processed || (!processed.milk && !processed.output && !processed.ingredients)) {
       throw new Error("Enter the milk or the yield before recording the batch");
     }
 
@@ -69,41 +72,38 @@ export async function recordBatchOnChain(bulkBatchId: string, productUid: string
       await query(`update trace_batch set product_uid = $2, title = $3 where trace_id = $1`, [trace.trace_id, product.uid, title]);
     }
 
-    const before = await one<{ n: number }>(`select count(*)::int as n from trace_record where trace_id = $1`, [trace.trace_id]);
-    const kind = before && before.n > 0 ? "updated" : "processed";
-    const { bytes, hash } = buildRecord(trace.trace_id, kind, product, facts);
-
-    const same = await one<{ hash: string }>(
-      `select hash from trace_record where trace_id = $1 order by created_at desc limit 1`, [trace.trace_id]);
-    // "updated" with the same facts as last time hashes differently only by kind, so compare the facts
-    if (same) {
-      const last = await one<{ body: Buffer }>(`select body from trace_record where hash = $1`, [same.hash]);
-      const lastData = last ? JSON.parse(last.body.toString("utf8")) : null;
-      if (lastData && JSON.stringify(lastData.data) === JSON.stringify(JSON.parse(bytes.toString("utf8")).data)
-          && JSON.stringify(lastData.product) === JSON.stringify(JSON.parse(bytes.toString("utf8")).product)) {
-        return { ok: true, traceId: trace.trace_id, link: traceLink(trace.trace_id), unchanged: true };
+    const sent: string[] = [];
+    const unchanged: string[] = [];
+    for (const step of steps) {
+      const { bytes, hash } = buildRecord(trace.trace_id, STELLAR.contractId, step.kind, product, step.on, step.data);
+      const last = await one<{ body: Buffer }>(
+        `select body from trace_record where trace_id = $1 and kind = $2 order by created_at desc limit 1`,
+        [trace.trace_id, step.kind],
+      );
+      if (last && sameContent(last.body, bytes)) {
+        unchanged.push(step.kind);
+        continue;
       }
-    }
-
-    // keep the bytes first, so the link on chain works the moment it lands
-    await query(
-      `insert into trace_record (trace_id, kind, hash, body, created_by) values ($1, $2, $3, $4, $5)
-       on conflict (hash) do nothing`,
-      [trace.trace_id, kind, hash, bytes, who],
-    );
-    try {
-      const res = await anchor(trace.trace_id, kind, hash, recordLink(hash));
-      await query(`update trace_record set anchor_no = $2, tx_hash = $3, ledger = $4 where hash = $1`,
-        [hash, res.index, res.txHash, res.ledger]);
-    } catch (e) {
-      if (!(e instanceof ChainError && e.code === 5)) {
+      // a copy for the Dashboard; the public page reads the record from Stellar itself
+      await query(
+        `insert into trace_record (trace_id, kind, hash, body, created_by) values ($1, $2, $3, $4, $5)
+         on conflict (hash) do nothing`,
+        [trace.trace_id, step.kind, hash, bytes, who],
+      );
+      try {
+        const res = await recordFull(trace.trace_id, step.kind, bytes);
+        await query(`update trace_record set anchor_no = $2, tx_hash = $3, ledger = $4 where hash = $1`,
+          [hash, res.index, res.txHash, res.ledger]);
+        sent.push(step.kind);
+      } catch (e) {
+        if (e instanceof ChainError && e.code === 5) { unchanged.push(step.kind); continue; }
         await query(`delete from trace_record where hash = $1 and tx_hash is null`, [hash]);
         throw e;
       }
     }
 
     revalidatePath("/daily");
-    return { ok: true, traceId: trace.trace_id, link: traceLink(trace.trace_id) };
+    return { ok: true, traceId: trace.trace_id, link: traceLink(trace.trace_id), sent, unchanged };
   } catch (e) {
     console.error("[trace] record failed:", e);
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

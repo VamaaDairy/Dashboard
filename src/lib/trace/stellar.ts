@@ -108,6 +108,18 @@ export function createBatch(traceId: string, title: string) {
   return invoke("create_batch", [operator(), str(traceId), str(title.slice(0, 64))]);
 }
 
+/** v2: stores the record's exact bytes on chain; the contract hashes them. Returns the anchor's index. */
+export async function recordFull(traceId: string, kind: string, bytes: Buffer) {
+  const res = await invoke("record_full", [
+    operator(),
+    str(traceId),
+    nativeToScVal(kind, { type: "symbol" }),
+    nativeToScVal(bytes),
+  ]);
+  return { ...res, index: typeof res.value === "number" ? res.value : null };
+}
+
+/** v1: anchors only a hash; the record lives at `uri`. Kept for records made before v2. */
 export async function anchor(traceId: string, kind: string, hashHex: string, uri: string) {
   const res = await invoke("anchor", [
     operator(),

@@ -118,3 +118,22 @@ main:has(> .gt-page) {
 .gt-foot { text-align: center; margin-top: 32px; }
 .gt-village { width: 100%; height: auto; opacity: 0.9; }
 .gt-foot p { margin: 6px 0; font-weight: 700; }
+
+/* v2: detailed steps */
+.gt-icon { margin-right: 8px; }
+.gt-line { margin: 0 0 8px; }
+.gt-card dl { margin: 6px 0 0; }
+.gt-product { margin-bottom: 8px; }
+.gt-about { margin: 0 0 10px; color: var(--gt-title); font-weight: 500; }
+.gt-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0 0 12px; }
+.gt-chips li { background: var(--gt-lavender); color: var(--gt-navy-dark); border-radius: 999px; padding: 3px 12px; font-size: 13px; font-weight: 700; }
+.gt-keep { background: var(--gt-cream); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+.gt-keep p { margin: 4px 0 0; font-weight: 600; color: var(--gt-title); }
+.gt-useby { color: var(--gt-navy) !important; }
+.gt-nutrition dl { margin-top: 4px; }
+.gt-centres { display: grid; gap: 8px; margin-top: 10px; }
+.gt-centre { background: var(--gt-cream); border-radius: 12px; padding: 10px 12px; }
+.gt-centre-name { font-weight: 800; color: var(--gt-navy); }
+.gt-centre-grid { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--gt-title); margin: 2px 0; }
+.gt-centre .gt-row { padding: 6px 0; }
+.gt-pre { font-family: ui-monospace, Menlo, monospace; font-size: 11px; background: var(--gt-cream); border-radius: 10px; padding: 10px; overflow-x: auto; max-height: 320px; }
