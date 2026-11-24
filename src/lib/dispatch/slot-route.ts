@@ -52,14 +52,15 @@ const legKept = new Map<string, { at: number; leg: Omit<Leg, "from" | "to"> | nu
 const KEEP_MS = 6 * 3600_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** The road from a to b (Ola directions), kept six hours. Null when Ola could not say. */
+/** The fastest road from a to b (the quickest of Ola's alternatives), kept six hours. Null when Ola could not say. */
 async function roadLeg(a: Pt, b: Pt): Promise<Omit<Leg, "from" | "to"> | null> {
   const k = `${a.lat},${a.lng}|${b.lat},${b.lng}`;
   const kept = legKept.get(k);
   if (kept && Date.now() - kept.at < KEEP_MS && kept.leg) return kept.leg;
   if (!olaEnabled()) return null;
   // Ola allows only so many requests a minute: one more try after a pause
-  const r = (await route(a, b)) ?? (await sleep(12000), await route(a, b));
+  // the quickest of the roads Ola offers between the two stops
+  const r = (await route(a, b, { fastest: true })) ?? (await sleep(12000), await route(a, b, { fastest: true }));
   const leg = r ? { metres: r.distanceM, seconds: r.durationS, path: r.points.map(([lat, lng]) => [lng, lat] as LngLat) } : null;
   legKept.set(k, { at: Date.now(), leg });
   return leg;
