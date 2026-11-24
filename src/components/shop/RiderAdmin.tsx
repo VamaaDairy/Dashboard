@@ -5,12 +5,11 @@ import { addRiderAction, setRiderAction } from "@/lib/shop/actions";
 
 const box = "h-9 rounded-lg border border-input bg-transparent px-3 text-sm";
 
-export function AddRiderForm({ initialKind = "delivery" }: { initialKind?: "delivery" | "transporter" }) {
+/** The office adds delivery boys only: transporters join by signing up in the Gaia Delivery Partner app themselves. */
+export function AddRiderForm() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
-  const [kind, setKind] = useState<"delivery" | "transporter">(initialKind);
-  const [vehicle, setVehicle] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   return (
@@ -19,31 +18,20 @@ export function AddRiderForm({ initialKind = "delivery" }: { initialKind?: "deli
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const r = await addRiderAction(name, phone, pin, kind, vehicle);
+          const r = await addRiderAction(name, phone, pin);
           if (r.ok) {
             setName("");
             setPhone("");
             setPin("");
-            setVehicle("");
             setError("");
           } else setError(r.error ?? "Could not add the partner.");
         });
       }}
     >
-      <label className="text-xs text-muted-foreground">
-        Signs in as
-        <select value={kind} onChange={(e) => setKind(e.target.value as "delivery" | "transporter")} className={`${box} mt-1 block w-40`}>
-          <option value="delivery">Delivery boy</option>
-          <option value="transporter">Transporter</option>
-        </select>
-      </label>
       <label className="text-xs text-muted-foreground">Name<input value={name} onChange={(e) => setName(e.target.value)} className={`${box} mt-1 block w-48`} /></label>
       <label className="text-xs text-muted-foreground">Mobile<input value={phone} inputMode="numeric" maxLength={10} onChange={(e) => setPhone(e.target.value)} className={`${box} mt-1 block w-40 font-mono`} /></label>
       <label className="text-xs text-muted-foreground">PIN (4-8 digits)<input value={pin} inputMode="numeric" maxLength={8} onChange={(e) => setPin(e.target.value)} className={`${box} mt-1 block w-32 font-mono`} /></label>
-      {kind === "transporter" ? (
-        <label className="text-xs text-muted-foreground">Vehicle no.<input value={vehicle} maxLength={20} placeholder="CG 04 AB 1234" onChange={(e) => setVehicle(e.target.value)} className={`${box} mt-1 block w-40 font-mono uppercase`} /></label>
-      ) : null}
-      <button disabled={pending} className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">{kind === "transporter" ? "Add transporter" : "Add rider"}</button>
+      <button disabled={pending} className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">Add delivery boy</button>
       {error ? <span className="text-sm text-red-600">{error}</span> : null}
     </form>
   );

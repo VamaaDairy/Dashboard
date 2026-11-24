@@ -112,6 +112,7 @@ export function RoutesView({ routes, plant, stats }: { routes: RouteOnMap[]; pla
                     <span className="min-w-0 flex-1 truncate font-medium">{r.name}</span>
                     <span className={cn("shrink-0 text-[12px]", pinned < r.customers.length ? "text-amber-700" : "text-muted-foreground")}>{pinned}/{r.customers.length} on the map</span>
                   </div>
+                  <div className="mt-0.5 text-[12px] text-muted-foreground">{r.transporter ?? <span className="text-amber-700">No transporter</span>}</div>
                   <div className="mt-0.5 text-[12px] text-muted-foreground">
                     {st
                       ? [`${st.trips} ${st.trips === 1 ? "trip" : "trips"}`, st.avgStops !== null ? `${st.avgStops} stops each` : null, pct !== null ? `${pct}% delivered` : null,
@@ -123,8 +124,7 @@ export function RoutesView({ routes, plant, stats }: { routes: RouteOnMap[]; pla
             })}
             {noPin.length ? (
               <p className="px-4 py-3 text-[12px] text-amber-700">
-                Not on the map ({noPin.length}): {noPin.slice(0, 12).map((c) => c.name).join(", ")}{noPin.length > 12 ? ", …" : ""}. Link them to their customer on
-                Route orders → Customers &amp; products, or set the pin in Customer Masters.
+                Not on the map ({noPin.length}): {noPin.slice(0, 12).map((c) => c.name).join(", ")}{noPin.length > 12 ? ", …" : ""}. Set their pin in Customer Masters.
               </p>
             ) : null}
           </aside>

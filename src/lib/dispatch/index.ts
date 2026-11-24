@@ -584,25 +584,27 @@ export async function truckAway(tripId: number, truck: { lat: number; lng: numbe
 // ------------------------------------------------------------------------------------------------ routes map
 
 export interface RouteCustomer { name: string; channel: string; lat: number | null; lng: number | null; code: string | null }
-export interface RouteOnMap { id: number; name: string; customers: RouteCustomer[] }
+export interface RouteOnMap { id: number; name: string; transporter: string | null; customers: RouteCustomer[] }
 
 /**
  * Every route of the Route sheet with its customers and their map pins (from Customer Masters, i.e. the Recibo data):
- * the route's parties linked to a customer, in the shortest order from the plant.
+ * the route's parties linked to an active customer, in the shortest order from the plant. Outlets not linked to one, or
+ * whose customer is inactive, are left out - they have no pin to check.
  */
 export async function routesOnMap(): Promise<RouteOnMap[]> {
-  const rows = await query<{ route_id: number; route: string; name: string; channel: string; code: string | null; lat: number | null; lng: number | null }>(
-    `select r.id as route_id, r.name as route, coalesce(f.name, p.name) as name, p.channel, f.firm_code as code,
+  const rows = await query<{ route_id: number; route: string; transporter: string | null; name: string; channel: string; code: string | null; lat: number | null; lng: number | null }>(
+    `select r.id as route_id, r.name as route, tr.name as transporter, coalesce(f.name, p.name) as name, p.channel, f.firm_code as code,
             case when f.latitude::float between 6 and 37 and f.longitude::float between 68 and 98 then f.latitude::float end as lat,
             case when f.latitude::float between 6 and 37 and f.longitude::float between 68 and 98 then f.longitude::float end as lng
        from route_order_route r
-       left join route_order_party p on p.route_id = r.id and p.active
-       left join fp_firm f on f.uid = p.firm_uid
+       left join transporter tr on tr.id = r.transporter_id
+       -- only outlets that are an active customer in Customer Masters (the pins come from there)
+       left join (route_order_party p join fp_firm f on f.uid = p.firm_uid and f.active = 1) on p.route_id = r.id and p.active
       order by r.sort nulls last, r.id, p.name`,
   );
   const out = new Map<number, RouteOnMap>();
   for (const x of rows) {
-    const r = out.get(x.route_id) ?? { id: x.route_id, name: x.route, customers: [] };
+    const r = out.get(x.route_id) ?? { id: x.route_id, name: x.route, transporter: x.transporter, customers: [] };
     if (x.name) r.customers.push({ name: x.name, channel: x.channel, code: x.code, lat: x.lat, lng: x.lng });
     out.set(x.route_id, r);
   }
