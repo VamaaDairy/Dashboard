@@ -1,10 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { one, query } from "@/lib/db";
-import { userFromToken } from "@/lib/access-server";
 import { batchSteps, traceLink, type TraceProduct } from "@/lib/trace/data";
+import { traceUser } from "@/lib/trace/access";
 import { buildRecord, sameContent } from "@/lib/trace/records";
 import { ChainError, STELLAR, createBatch, isConfigured, recordFull } from "@/lib/trace/stellar";
 
@@ -24,9 +23,10 @@ function traceIdFor(code: string, date: string) {
  */
 export async function recordBatchOnChain(bulkBatchId: string, productUid: string): Promise<TraceResult> {
   try {
+    const me = await traceUser();
+    if (!me) throw new Error("Recording on Stellar is not open to this login");
     if (!isConfigured()) throw new ChainError("Stellar is not set up on this server yet");
-    const me = await userFromToken((await cookies()).get("session")?.value);
-    const who = me ? me.name || me.email : null;
+    const who = me.name || me.email;
 
     const batch = await one<{ code: string; batch_date: string }>(
       `select p.code, to_char(b.batch_date, 'YYYY-MM-DD') as batch_date

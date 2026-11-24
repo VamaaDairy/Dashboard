@@ -20,6 +20,8 @@ main:has(> .gt-page) {
   --gt-panel: #efecd9;
   --gt-line: #e6e2cc;
   --gt-lavender: #d5d7e9;
+  --gt-card: #e6e7f2;      /* the Fresh app's own cards: a lighter lavender */
+  --gt-rule: rgba(47, 57, 146, 0.14);
   --gt-muted: #6a70a8;
   --gt-title: #2c3c4d;
   --gt-green: #1e8e3e;
@@ -64,7 +66,7 @@ main:has(> .gt-page) {
 .gt-verdict.bad { color: var(--gt-red); }
 
 .gt-card {
-  background: #fff;
+  background: var(--gt-card);
   border-radius: 16px;
   padding: 18px;
   box-shadow: 0 6px 18px rgba(17, 24, 39, 0.06);
@@ -74,7 +76,7 @@ main:has(> .gt-page) {
 .gt-card h3 { font-size: 18px; }
 
 .gt-facts dl { margin: 8px 0 0; }
-.gt-row { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-top: 1px solid var(--gt-line); }
+.gt-row { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-top: 1px solid var(--gt-rule); }
 .gt-row dt { color: var(--gt-muted); font-weight: 500; }
 .gt-row dd { margin: 0; text-align: right; font-weight: 700; color: var(--gt-title); }
 
@@ -102,7 +104,7 @@ main:has(> .gt-page) {
 .gt-small { font-size: 13px; }
 .gt-mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
 
-.gt-status { margin: 10px 0; padding-top: 10px; border-top: 1px solid var(--gt-line); font-weight: 600; font-size: 15px; }
+.gt-status { margin: 10px 0; padding-top: 10px; border-top: 1px solid var(--gt-rule); font-weight: 600; font-size: 15px; }
 .gt-status.match { color: var(--gt-green); }
 .gt-status.mismatch { color: var(--gt-red); }
 .gt-status.checking, .gt-status.unreachable { color: var(--gt-warn); }
@@ -126,7 +128,7 @@ main:has(> .gt-page) {
 .gt-product { margin-bottom: 8px; }
 .gt-about { margin: 0 0 10px; color: var(--gt-title); font-weight: 500; }
 .gt-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0 0 12px; }
-.gt-chips li { background: var(--gt-lavender); color: var(--gt-navy-dark); border-radius: 999px; padding: 3px 12px; font-size: 13px; font-weight: 700; }
+.gt-chips li { background: var(--gt-navy); color: var(--gt-cream); border-radius: 999px; padding: 3px 12px; font-size: 13px; font-weight: 700; }
 .gt-keep { background: var(--gt-cream); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
 .gt-keep p { margin: 4px 0 0; font-weight: 600; color: var(--gt-title); }
 .gt-useby { color: var(--gt-navy) !important; }

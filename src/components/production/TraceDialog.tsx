@@ -89,7 +89,7 @@ function TraceBody({
   const link = done?.link ?? state?.link ?? null;
   useEffect(() => {
     if (!link) return;
-    QRCode.toDataURL(link, { margin: 1, width: 480, color: { dark: "#2F3992", light: "#FFFFFF" } }).then(setQr).catch(() => setQr(null));
+    QRCode.toDataURL(link, { margin: 1, width: 480, color: { dark: "#2F3992", light: "#F7F5E8" } }).then(setQr).catch(() => setQr(null));
   }, [link]);
 
   function record() {

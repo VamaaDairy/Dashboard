@@ -7,6 +7,7 @@ import { kgPerLitre } from "@/lib/procurement/data";
 import { getTanksOnDate } from "@/lib/tanks/data";
 import { today } from "@/lib/dates";
 import { lastProductFor, traceProducts, traceStates } from "@/lib/trace/data";
+import { traceUser } from "@/lib/trace/access";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +20,12 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
   const [products, batches, ingredients, history, k, tanks] = await Promise.all([
     getBulkProducts(), getBatches(date), getIngredientOptions(), getProductionDays(), kgPerLitre(), getTanksOnDate(date),
   ]);
-  const [traceOptions, traces, lastProduct] = await Promise.all([
-    traceProducts(), traceStates(batches.map((b) => b.id)), lastProductFor(products.map((p) => p.id)),
-  ]);
+  // Stellar recording is only for the logins in TRACE_USERS: everyone else gets the page exactly as before
+  const trace = (await traceUser())
+    ? await Promise.all([
+        traceProducts(), traceStates(batches.map((b) => b.id)), lastProductFor(products.map((p) => p.id)),
+      ]).then(([traceOptions, states, lastProduct]) => ({ products: traceOptions, states, lastProduct }))
+    : null;
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="w-full space-y-5">
@@ -42,7 +46,7 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
           kgPerLitre={k}
           history={history}
           tanks={tanks}
-          trace={{ products: traceOptions, states: traces, lastProduct }}
+          trace={trace}
         />
       </div>
     </div>
