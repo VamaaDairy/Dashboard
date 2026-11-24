@@ -32,11 +32,17 @@ const mins = (hm: string) => { if (!hm) return Infinity; const [h, m] = hm.split
 export const clock = (m: number) => { const t = Math.round(m); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 
 export interface Leg { from: number; to: number; metres: number; seconds: number; path: LngLat[] }
-export interface Visit { stop: number; /** when it is delivered */ arrive: number; /** minutes waited for its window */ waited: number; leave: number; slot: number; late: number }
+export interface Visit {
+  stop: number; /** when it is delivered */ arrive: number; /** minutes waited for its window */ waited: number; leave: number; slot: number; late: number;
+  /** driving straight on with only the hold times, from [RoundPlan.estStart]: when it really gets there */
+  estimate: number;
+}
 export interface RoundPlan {
   order: number[]; legs: Leg[]; visits: Visit[]; metres: number; seconds: number; late: number; onTime: boolean;
   /** when it leaves the depot and when the last drop is done, minutes after midnight */
   start: number; finish: number;
+  /** the estimate: leave the depot so the first stop is reached at its given time, then drive on with only the hold times */
+  estStart: number; estFinish: number;
 }
 export interface SlotRoutePlan { stops: SlotStop[]; best: RoundPlan; given: RoundPlan; road: boolean; early: number }
 
@@ -196,16 +202,20 @@ async function roundOf(order: number[], metres: number[][], seconds: number[][],
   const start = latestStart(order, legMin, slots, hold);
   // no leave time works (the road is slower than the windows allow): leave so the first stop is on time and show lateness
   const at = start ?? Math.floor(slots[order[1]] - legMin[0]);
+  // the estimate: no waiting anywhere, leaving so the first stop is reached exactly at its given time
+  const estStart = slots[order[1]] - legMin[0];
+  let e = estStart;
+  const est = order.slice(1).map((s, i) => { const arrive = e + legMin[i]; e = arrive + hold[s]; return arrive; });
   let t = at;
   const visits: Visit[] = order.slice(1).map((s, i) => {
     const arrive = t + legMin[i];
     const serve = Math.max(arrive, slots[s] - EARLY_MIN);
     t = serve + hold[s];
-    return { stop: s, arrive: serve, waited: serve - arrive, leave: t, slot: slots[s], late: Math.max(0, serve - slots[s]) };
+    return { stop: s, arrive: serve, waited: serve - arrive, leave: t, slot: slots[s], late: Math.max(0, serve - slots[s]), estimate: est[i] };
   });
   const late = visits.reduce((x, v) => x + v.late, 0);
   return {
-    order, legs, visits, late, onTime: late < 0.5, start: at, finish: t,
+    order, legs, visits, late, onTime: late < 0.5, start: at, finish: t, estStart, estFinish: e,
     metres: legs.reduce((x, l) => x + l.metres, 0), seconds: legs.reduce((x, l) => x + l.seconds, 0),
   };
 }
