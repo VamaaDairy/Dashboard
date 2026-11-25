@@ -10,7 +10,8 @@ import { ROUTES, type OffStop, type SheetStop } from "./slot-routes-data";
  * (unloading) and drives on. So a stop is either on time or late, and lateness carries on down the round. A stop with
  * a window (9–11) is on time anywhere in it; a stop with no time is delivered when the vehicle gets there. The vehicle
  * leaves the depot so it reaches its first timed stop exactly on time. Ola Maps gives the road distance and driving
- * time. The stops go in the order of their given times; stops with the same time or none are placed to save km.
+ * time. The sheet's route goes in the order of the given times; the other options keep the times in another order,
+ * or change the times for fewer km or less driving.
  */
 
 export const DEPOT: SheetStop = { name: "Tumgaon depot", area: "Tumgaon", phone: null, segment: "", slot: "", open: null, close: null, hold: 0, lat: 21.085, lng: 81.985 };
@@ -18,54 +19,62 @@ export const DEPOT: SheetStop = { name: "Tumgaon depot", area: "Tumgaon", phone:
 export interface RouteTab { id: string; name: string; stops: number }
 export const routeTabs = (): RouteTab[] => ROUTES.map((r) => ({ id: r.id, name: r.name, stops: r.stops.length }));
 
-export interface Leg { from: number; to: number; metres: number; seconds: number; path: LngLat[] }
+export interface Leg { from: number; to: number; metres: number; seconds: number }
 export interface Visit {
   stop: number;
   /** when the vehicle gets there */
   arrive: number;
   /** minutes it waits for the given time (it got there early) */
   waited: number;
-  /** when it is delivered: the given time, or later when the vehicle is late */
+  /** when it is delivered: the given time, or later when the vehicle is late; on a route with new times, on arrival */
   deliver: number;
   /** minutes after the given time (the end of a window) */
   late: number;
   leave: number;
+  /** on a route with new times: the new time against the given one, in minutes (+ later, - earlier); null with no given time */
+  shift: number | null;
 }
 export interface RoundPlan {
   order: number[]; legs: Leg[]; visits: Visit[]; metres: number; seconds: number;
-  /** total minutes late over all stops, and how many stops are late */
+  /** total minutes late over all stops, and how many stops are late (0 on a route with new times) */
   late: number; lateStops: number;
+  /** delivered when the vehicle gets there: the times change to these */
+  newTimes: boolean;
   /** minutes from midnight of the delivery day (before it: negative): leaving the depot, the last drop done, back */
   start: number; lastDrop: number; back: number;
 }
+/** One way to run the route: the sheet's, the same times in another order, or another order with new times. */
+export interface RouteOption { key: string; title: string; note: string; round: RoundPlan }
 export interface SlotRoutePlan {
   id: string; name: string;
   /** stops[0] is the depot */
   stops: SheetStop[];
-  /** stops of the sheet not on this round, and why */
+  /** stops of the sheet not on this route, and why */
   off: OffStop[];
   /** false when no stop has a given time: the times are then from leaving the depot */
   timed: boolean;
-  best: RoundPlan; road: boolean;
+  /** options[0] is the sheet's own: the given times in order */
+  options: RouteOption[];
+  road: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------- Ola, kept
 
 const KEEP_MS = 6 * 3600_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const legKept = new Map<string, { at: number; leg: Omit<Leg, "from" | "to"> | null }>();
+const legKept = new Map<string, { at: number; path: LngLat[] | null }>();
 
-/** The fastest road from a to b (the quickest of Ola's alternatives), kept six hours. Null when Ola could not say. */
-async function roadLeg(a: Pt, b: Pt): Promise<Omit<Leg, "from" | "to"> | null> {
+/** The road drawn from a to b (the quickest of Ola's alternatives), kept six hours. Null when Ola could not say. */
+async function roadPath(a: Pt, b: Pt): Promise<LngLat[] | null> {
   const k = `${a.lat},${a.lng}|${b.lat},${b.lng}`;
   const kept = legKept.get(k);
-  if (kept && Date.now() - kept.at < KEEP_MS && kept.leg) return kept.leg;
+  if (kept && Date.now() - kept.at < KEEP_MS && kept.path) return kept.path;
   if (!olaEnabled()) return null;
   // Ola allows only so many requests a minute: one more try after a pause
   const r = (await route(a, b, { fastest: true })) ?? (await sleep(12000), await route(a, b, { fastest: true }));
-  const leg = r ? { metres: r.distanceM, seconds: r.durationS, path: r.points.map(([lat, lng]) => [lng, lat] as LngLat) } : null;
-  legKept.set(k, { at: Date.now(), leg });
-  return leg;
+  const path = r ? r.points.map(([lat, lng]) => [lng, lat] as LngLat) : null;
+  legKept.set(k, { at: Date.now(), path });
+  return path;
 }
 
 type Matrix = { metres: number[][]; seconds: number[][] };
@@ -128,8 +137,8 @@ function startFor(order: number[], stops: SheetStop[], seconds: number[][]): num
   return 0;
 }
 
-/** The total lateness and road metres (with the drive back) of visiting [order] (no depot) from the depot. */
-function score(order: number[], stops: SheetStop[], metres: number[][], seconds: number[][]): [number, number] {
+/** The total lateness and road metres (with the drive back) of keeping the given times in [order] (no depot). */
+function lateness(order: number[], stops: SheetStop[], metres: number[][], seconds: number[][]): [number, number] {
   let t = startFor(order, stops, seconds), prev = 0, late = 0, m = 0;
   for (const s of order) {
     const v = visit(t, seconds[prev][s] / 60, stops[s]);
@@ -138,21 +147,67 @@ function score(order: number[], stops: SheetStop[], metres: number[][], seconds:
   return [late, m + metres[prev][0]];
 }
 
+/** Road totals of [order] (no depot) and back: by [a] first, then [b]. */
+const along = (a: number[][], b: number[][]) => (order: number[]): [number, number] => {
+  let x = 0, y = 0, prev = 0;
+  for (const s of [...order, 0]) { x += a[prev][s]; y += b[prev][s]; prev = s; }
+  return [x, y];
+};
+
 const better = (a: [number, number], b: [number, number]) => a[0] < b[0] - 1e-6 || (Math.abs(a[0] - b[0]) <= 1e-6 && a[1] < b[1] - 1e-6);
 
+/** Moves one stop elsewhere, or drives a stretch the other way round, while that lowers [cost] (and keeps [ok]). */
+function improve(start: number[], cost: (o: number[]) => [number, number], ok: (o: number[]) => boolean = () => true): { o: number[]; c: [number, number] } {
+  let o = start, c = cost(o);
+  const consider = (t: number[]) => {
+    if (!ok(t)) return false;
+    const tc = cost(t);
+    if (!better(tc, c)) return false;
+    o = t; c = tc;
+    return true;
+  };
+  for (let moved = true; moved;) {
+    moved = false;
+    for (let i = 0; i < o.length; i++) {
+      for (let j = 0; j < o.length; j++) {
+        if (i === j) continue;
+        const t = [...o]; const [s] = t.splice(i, 1); t.splice(j, 0, s);
+        if (consider(t)) moved = true;
+      }
+    }
+    for (let i = 0; i < o.length - 1; i++) {
+      for (let j = i + 1; j < o.length; j++) {
+        if (consider([...o.slice(0, i), ...o.slice(i, j + 1).reverse(), ...o.slice(j + 1)])) moved = true;
+      }
+    }
+  }
+  return { o, c };
+}
+
+/** Each no-time stop where it adds least to [cost], never before the first timed stop. */
+function placeNoTime(o: number[], stops: SheetStop[], cost: (o: number[]) => [number, number]): number[] {
+  const timed = o.length > 0;
+  for (const s of stops.map((_, i) => i).slice(1).filter((i) => stops[i].open == null)) {
+    let best: number[] | null = null, bc: [number, number] | null = null;
+    for (let p = timed ? 1 : 0; p <= o.length; p++) {
+      const t = [...o.slice(0, p), s, ...o.slice(p)], c = cost(t);
+      if (!bc || better(c, bc)) { best = t; bc = c; }
+    }
+    o = best!;
+  }
+  return o;
+}
+
 /**
- * The order: the given times in order, as the sheet sets them - a later given time never goes before an earlier one.
- * Stops with the same given time, and stops with no time (never before the first timed stop, so the vehicle does not
- * leave earlier for them), are placed for the least lateness, then the fewest road metres (with the drive back):
- * starting from each no-time stop where it adds least, then moving one stop elsewhere or turning a stretch round
- * while that helps and keeps the times in order.
+ * The sheet's route: the given times in order - a later given time never goes before an earlier one. Stops with the
+ * same given time, and stops with no time (never before the first timed stop, so the vehicle does not leave earlier
+ * for them), are placed for the least lateness, then the fewest road metres (with the drive back).
  */
-export function leastLateOrder(stops: SheetStop[], metres: number[][], seconds: number[][]): number[] {
-  const cost = (o: number[]) => score(o, stops, metres, seconds);
-  const ids = stops.map((_, i) => i).slice(1);
-  const timed = ids.some((i) => stops[i].open != null);
+export function sheetOrder(stops: SheetStop[], metres: number[][], seconds: number[][]): number[] {
+  const cost = (o: number[]) => lateness(o, stops, metres, seconds);
+  const timedIds = stops.map((_, i) => i).slice(1).filter((i) => stops[i].open != null);
   const inOrder = (o: number[]) => {
-    if (timed && stops[o[0]].open == null) return false;
+    if (timedIds.length && stops[o[0]].open == null) return false;
     let last = -Infinity;
     for (const s of o) {
       const t = stops[s].open;
@@ -162,81 +217,186 @@ export function leastLateOrder(stops: SheetStop[], metres: number[][], seconds: 
     }
     return true;
   };
+  const byTime = timedIds.sort((a, b) => stops[a].open! - stops[b].open! || stops[a].close! - stops[b].close! || a - b);
+  return [0, ...improve(placeNoTime(byTime, stops, cost), cost, inOrder).o];
+}
 
-  // by the given times (a window by its start), then each stop with no time where it adds least
-  const o = ids.filter((i) => stops[i].open != null).sort((a, b) => stops[a].open! - stops[b].open! || stops[a].close! - stops[b].close! || a - b);
-  for (const s of ids.filter((i) => stops[i].open == null)) {
-    let best: number[] | null = null, bc: [number, number] | null = null;
-    for (let p = timed ? 1 : 0; p <= o.length; p++) {
-      const t = [...o.slice(0, p), s, ...o.slice(p)], c = cost(t);
-      if (!bc || better(c, bc)) { best = t; bc = c; }
-    }
-    o.splice(0, o.length, ...best!);
-  }
+/** The given times kept, in any order: the least lateness, then the fewest metres. Null on a route with no times. */
+function keepTimesOrder(sheet: number[], stops: SheetStop[], metres: number[][], seconds: number[][]): number[] | null {
+  if (!stops.some((s) => s.open != null)) return null;
+  const cost = (o: number[]) => lateness(o, stops, metres, seconds);
+  const firstTimed = (o: number[]) => stops[o[0]].open != null;
+  return [0, ...improve(sheet.slice(1), cost, firstTimed).o];
+}
 
-  let order = o, c = cost(order);
-  const consider = (t: number[]) => {
-    if (!inOrder(t)) return false;
-    const tc = cost(t);
-    if (!better(tc, c)) return false;
-    order = t; c = tc;
-    return true;
-  };
-  for (let moved = true; moved;) {
-    moved = false;
-    // move one stop to another place
-    for (let i = 0; i < order.length; i++) {
-      for (let j = 0; j < order.length; j++) {
-        if (i === j) continue;
-        const t = [...order]; const [s] = t.splice(i, 1); t.splice(j, 0, s);
-        if (consider(t)) moved = true;
-      }
-    }
-    // drive a stretch the other way round
-    for (let i = 0; i < order.length - 1; i++) {
-      for (let j = i + 1; j < order.length; j++) {
-        if (consider([...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)])) moved = true;
-      }
-    }
-  }
-  return [0, ...order];
+/** With new times: delivered on arrival, or - more than [early] minutes before the given time - it waits till then. */
+function newTime(arrive: number, st: SheetStop, early: number) {
+  const deliver = st.open == null ? arrive : Math.max(arrive, st.open - early);
+  const shift = st.open == null ? null : deliver < st.open ? deliver - st.open : deliver > st.close! ? deliver - st.close! : 0;
+  return { deliver, shift };
+}
+
+/** How far each new time is from the given one (0 inside a window), leaving at [start]. */
+function shifts(order: number[], stops: SheetStop[], seconds: number[][], start: number, early: number): Array<number | null> {
+  let t = start, prev = 0;
+  return order.map((s) => {
+    const v = newTime(t + seconds[prev][s] / 60, stops[s], early);
+    t = v.deliver + stops[s].hold; prev = s;
+    return v.shift;
+  });
 }
 
 /**
- * A round by road in this order and back to the depot: leave so the first timed stop is on time, never deliver early,
- * count the lateness. The last leg is the drive back to the depot.
+ * New times that move at most [limit] minutes from the given ones: the fewest km within that. Starts from the sheet's
+ * order and changes it while the minutes beyond the limit (over all stops) do not grow, then the km fall.
  */
-async function roundOf(order: number[], stops: SheetStop[], metres: number[][], seconds: number[][], road: boolean): Promise<RoundPlan> {
-  const legs: Leg[] = [];
-  const path = [...order, 0];
-  for (let i = 1; i < path.length; i++) {
-    const a = stops[path[i - 1]], b = stops[path[i]];
-    const same = a.lat === b.lat && a.lng === b.lng;
-    const got = road && !same ? await roadLeg(a, b) : null;
-    legs.push(got
-      ? { from: path[i - 1], to: path[i], ...got }
-      : { from: path[i - 1], to: path[i], metres: metres[path[i - 1]][path[i]], seconds: seconds[path[i - 1]][path[i]], path: [[a.lng, a.lat], [b.lng, b.lat]] });
+function boundedOrder(sheet: number[], stops: SheetStop[], metres: number[][], seconds: number[][], start: number, limit: number): number[] {
+  const km = along(metres, seconds);
+  const cost = (o: number[]): [number, number] => [
+    shifts(o, stops, seconds, start, limit).reduce((x: number, v) => x + (v == null ? 0 : Math.max(0, Math.abs(v) - limit)), 0),
+    km(o)[0],
+  ];
+  return [0, ...improve(sheet.slice(1), cost).o];
+}
+
+/**
+ * How many drives from one place to the next of [a] are not in [b] - shops at one spot (or within ~300 m) are one
+ * place, so swapping them is not a different route. Two routes count as different options from 3 on.
+ */
+const differs = (stops: SheetStop[], a: number[], b: number[]) => {
+  const place = (s: number) => `${stops[s].lat.toFixed(3)},${stops[s].lng.toFixed(3)}`;
+  const drives = (o: number[]) => [...o, 0].map(place).filter((p, i, all) => i === 0 || p !== all[i - 1]).map((p, i, all) => `${p}>${all[i + 1] ?? ""}`);
+  const next = new Set(drives(b));
+  return drives(a).filter((d) => !next.has(d)).length;
+};
+
+/**
+ * Orders by [cost] alone, the times free: from every stop as the first, the nearest stop each time, then improved.
+ * The distinct ones, best first.
+ */
+function freeOrders(stops: SheetStop[], metres: number[][], cost: (o: number[]) => [number, number]): Array<{ order: number[]; c: [number, number] }> {
+  const ids = stops.map((_, i) => i).slice(1);
+  const found: Array<{ order: number[]; c: [number, number] }> = [];
+  for (const first of ids) {
+    const o = [first];
+    for (let prev = first, left = new Set(ids.filter((i) => i !== first)); left.size;) {
+      const s = [...left].reduce((a, b) => (metres[prev][b] < metres[prev][a] ? b : a));
+      o.push(s); left.delete(s); prev = s;
+    }
+    const r = improve(o, cost);
+    const order = [0, ...r.o];
+    if (!found.some((f) => f.order.join() === order.join())) found.push({ order, c: r.c });
   }
-  // the timings follow the roads drawn (Ola's fastest), from the same rule as the order
-  const legSeconds = stops.map(() => Array<number>(stops.length).fill(0));
-  legs.forEach((l) => { legSeconds[l.from][l.to] = l.seconds; });
-  const start = startFor(order.slice(1), stops, legSeconds);
+  return found.sort((a, b) => (better(a.c, b.c) ? -1 : better(b.c, a.c) ? 1 : 0));
+}
+
+/**
+ * A route in this order and back to the depot. Keeping the given times: leave so the first timed stop is on time,
+ * never deliver early, count the lateness. With new times: leave at [start] and deliver each stop on arrival.
+ */
+function roundOf(order: number[], stops: SheetStop[], metres: number[][], seconds: number[][], newTimes: { start: number; early: number } | null): RoundPlan {
+  const path = [...order, 0];
+  const legs: Leg[] = path.slice(1).map((to, i) => ({ from: path[i], to, metres: metres[path[i]][to], seconds: seconds[path[i]][to] }));
+  const start = newTimes?.start ?? startFor(order.slice(1), stops, seconds);
   let t = start;
   const visits: Visit[] = order.slice(1).map((s, i) => {
-    const v = visit(t, legs[i].seconds / 60, stops[s]);
-    t = v.leave;
-    return { stop: s, ...v };
+    const st = stops[s];
+    if (newTimes == null) {
+      const v = visit(t, legs[i].seconds / 60, st);
+      t = v.leave;
+      return { stop: s, ...v, shift: null };
+    }
+    const arrive = t + legs[i].seconds / 60;
+    const { deliver, shift } = newTime(arrive, st, newTimes.early);
+    t = deliver + st.hold;
+    return { stop: s, arrive, waited: deliver - arrive, deliver, late: 0, leave: t, shift };
   });
   return {
-    order, legs, visits, start, lastDrop: t, back: t + legs[legs.length - 1].seconds / 60,
+    order, legs, visits, start, lastDrop: t, back: t + legs[legs.length - 1].seconds / 60, newTimes: newTimes != null,
     late: visits.reduce((x, v) => x + v.late, 0), lateStops: visits.filter((v) => v.late >= 0.5).length,
     metres: legs.reduce((x, l) => x + l.metres, 0), seconds: legs.reduce((x, l) => x + l.seconds, 0),
   };
 }
 
+/** How many routes with new times to offer, besides the fastest. */
+const SHORT_OPTIONS = 4;
+
+/**
+ * Every way to run the route worth showing: the sheet's (the given times in order), the given times in the order
+ * with the least lateness, and routes with new delivery times - the fewest km, other short ones different enough
+ * to be a real choice, and the least driving. New times leave the depot when the sheet's route does.
+ */
+function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][], timed: boolean): RouteOption[] {
+  const sheet = sheetOrder(stops, metres, seconds);
+  const sheetRound = roundOf(sheet, stops, metres, seconds, null);
+  const out: RouteOption[] = [{
+    key: "sheet", title: timed ? "As per sheet" : "Fewest km",
+    note: timed ? "Your given times, in their order." : "No given times on this route: the fewest km.",
+    round: sheetRound,
+  }];
+  const taken = [sheet];
+  const fresh = (o: number[]) => taken.every((t) => differs(stops, o, t) >= 3);
+
+  const keep = keepTimesOrder(sheet, stops, metres, seconds);
+  if (keep && fresh(keep)) {
+    out.push({ key: "keep", title: "Same times, new order", note: "Your given times stay; the order changes for the least lateness, then the fewest km.", round: roundOf(keep, stops, metres, seconds, null) });
+    taken.push(keep);
+  }
+
+  const leave = timed ? sheetRound.start : 0;
+  // times that may move a little: the fewest km keeping each within a limit (a vehicle much too early waits). Shown
+  // when it saves km and no other such option moves the times less with fewer km; named by how far they really move.
+  if (timed) {
+    const found = [30, 60, 120].map((limit) => {
+      const order = boundedOrder(sheet, stops, metres, seconds, leave, limit);
+      const round = roundOf(order, stops, metres, seconds, { start: leave, early: limit });
+      return { limit, order, round, most: Math.ceil(Math.max(0, ...round.visits.map((v) => Math.abs(v.shift ?? 0))) / 5) * 5 };
+    });
+    const kept = found
+      .filter((f) => sheetRound.metres - f.round.metres >= 1000)
+      .filter((f) => !found.some((g) => g !== f && g.most <= f.most && g.round.metres <= f.round.metres && (g.most < f.most || g.round.metres < f.round.metres)))
+      .sort((a, b) => a.most - b.most);
+    for (const f of kept) {
+      if (!fresh(f.order)) continue;
+      const label = f.most < 60 ? `${f.most} min` : `${Math.floor(f.most / 60)} hr${f.most % 60 ? ` ${f.most % 60} min` : ""}`;
+      out.push({
+        key: `move${f.limit}`, title: `Times move ≤ ${label}`,
+        note: `New delivery times, none more than ${label} from the given time; the fewest km within that. A vehicle much too early waits. Leaving the depot at the sheet's time.`,
+        round: f.round,
+      });
+      taken.push(f.order);
+    }
+  }
+  const timesNote = timed ? ` Delivery times change to when the vehicle gets there, leaving the depot at the sheet's time.` : "";
+  const short = freeOrders(stops, metres, along(metres, seconds));
+  let n = 0;
+  for (const { order } of short) {
+    if (n >= SHORT_OPTIONS) break;
+    if (!fresh(order)) continue;
+    out.push({
+      key: `km${n}`, title: n === 0 ? "Shortest" : `Short route ${n + 1}`,
+      note: (n === 0 ? "The fewest km." : "Another short way round, a different order.") + timesNote,
+      round: roundOf(order, stops, metres, seconds, { start: leave, early: Infinity }),
+    });
+    taken.push(order);
+    n++;
+  }
+  // the shortest loop the other way round: about the same km, other customers early
+  const back = short[0] ? [0, ...short[0].order.slice(1).reverse()] : null;
+  if (back && fresh(back)) {
+    out.push({ key: "back", title: "Shortest, other way round", note: "The shortest loop driven the other way." + timesNote, round: roundOf(back, stops, metres, seconds, { start: leave, early: Infinity }) });
+    taken.push(back);
+  }
+  const fastest = freeOrders(stops, metres, along(seconds, metres))[0]?.order;
+  if (fastest && fresh(fastest)) {
+    out.push({ key: "fast", title: "Fastest", note: "The least driving time." + timesNote, round: roundOf(fastest, stops, metres, seconds, { start: leave, early: Infinity }) });
+  }
+  return out;
+}
+
 const planKept = new Map<string, { at: number; plan: SlotRoutePlan }>();
 
-/** One route's round: the least-late order, by road. Kept six hours (working it out takes up to a minute). */
+/** One route's options, by road. Kept six hours (working it out takes up to a minute). */
 export async function slotRoutePlan(id: string): Promise<SlotRoutePlan | null> {
   const sheet = ROUTES.find((r) => r.id === id);
   if (!sheet) return null;
@@ -248,12 +408,25 @@ export async function slotRoutePlan(id: string): Promise<SlotRoutePlan | null> {
   // without Ola: straight line x 1.3 at 30 km/h, so the page still says something
   const metres = m?.metres ?? stops.map((a) => stops.map((b) => haversine(a, b) * 1.3));
   const seconds = m?.seconds ?? metres.map((row) => row.map((v) => (v / 1000 / 30) * 3600));
-  const order = leastLateOrder(stops, metres, seconds);
-  const plan: SlotRoutePlan = {
-    id: sheet.id, name: sheet.name, stops, off: sheet.off, road,
-    timed: sheet.stops.some((s) => s.open != null),
-    best: await roundOf(order, stops, metres, seconds, road),
-  };
+  const timed = sheet.stops.some((s) => s.open != null);
+  const plan: SlotRoutePlan = { id: sheet.id, name: sheet.name, stops, off: sheet.off, road, timed, options: optionsFor(stops, metres, seconds, timed) };
   if (road) planKept.set(id, { at: Date.now(), plan });
   return plan;
+}
+
+/** The roads to draw for a route in this order and back (straight lines where Ola cannot say). */
+export async function slotRoutePaths(id: string, order: number[]): Promise<LngLat[][] | null> {
+  const sheet = ROUTES.find((r) => r.id === id);
+  if (!sheet) return null;
+  const stops = [DEPOT, ...sheet.stops];
+  // only a full round of this route's stops
+  if (order[0] !== 0 || order.length !== stops.length || new Set(order).size !== stops.length || order.some((s) => !Number.isInteger(s) || s < 0 || s >= stops.length)) return null;
+  const path = [...order, 0];
+  const out: LngLat[][] = [];
+  for (let i = 1; i < path.length; i++) {
+    const a = stops[path[i - 1]], b = stops[path[i]];
+    const same = a.lat === b.lat && a.lng === b.lng;
+    out.push((!same && (await roadPath(a, b))) || [[a.lng, a.lat], [b.lng, b.lat]]);
+  }
+  return out;
 }
