@@ -4,12 +4,17 @@ import "./globals.css";
 import { ConditionalShell } from "@/components/conditional-shell";
 import { getClasses, getLastCalc } from "@/lib/data";
 import type { SidebarClass } from "@/components/app-sidebar";
+import { COMPANY, SITE_NAME, SITE_URL } from "@/lib/site";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Gaia",
-  description: "Product costing workspace",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_NAME,
+  description: `${SITE_NAME} portal by ${COMPANY}.`,
+  applicationName: SITE_NAME,
+  // out of search by default: only the public pages (sign in, forgot password, privacy policy, delete account) say otherwise
+  robots: { index: false, follow: false },
 };
 
 export const dynamic = "force-dynamic";

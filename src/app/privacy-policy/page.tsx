@@ -4,6 +4,8 @@ import { GaiaLogo } from "@/components/brand";
 export const metadata: Metadata = {
   title: "Privacy Policy | Gaia Dairy",
   description: "Privacy Policy for the Gaia Fresh, Gaia Delivery Partner, Gaia Distributors and Gaia Salesforce apps, operated by Vamaa Dairy Private Limited.",
+  robots: { index: true, follow: true },
+  alternates: { canonical: "/privacy-policy" },
 };
 
 const SECTIONS: { title?: string; paras?: string[]; list?: string[]; after?: string[] }[] = [

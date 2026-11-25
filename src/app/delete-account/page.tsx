@@ -5,6 +5,8 @@ import { DeletionForm } from "./form";
 export const metadata: Metadata = {
   title: "Delete your account | Gaia Dairy",
   description: "Ask Vamaa Dairy to delete your Gaia Dairy app account and its data.",
+  robots: { index: true, follow: true },
+  alternates: { canonical: "/delete-account" },
 };
 
 /** Public: where a Gaia Dairy app customer asks for their account to be deleted (linked from the Play Store). */
