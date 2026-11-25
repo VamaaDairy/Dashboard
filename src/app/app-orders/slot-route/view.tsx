@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DispatchMap, type MapLine, type MapPin } from "@/components/shop/DispatchMap";
 import { ROUTE_COLOURS } from "@/components/shop/route-colors";
-import type { RoundPlan, SlotRoutePlan } from "@/lib/dispatch/slot-route";
+import type { RoundPlan, RouteTab, SlotRoutePlan } from "@/lib/dispatch/slot-route";
 import type { LngLat } from "@/lib/shop/track";
 import { cn } from "@/lib/utils";
 import { slotRouteAction } from "./actions";
@@ -15,7 +16,10 @@ const LATE_TEXT = "text-[#8a2e00]";
 
 const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
 const min = (s: number) => `${Math.round(s / 60)} min`;
-const clock = (m: number) => { const t = Math.round(m); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+/** A time of day; times before midnight of the delivery day are negative, so wrap round the clock. */
+const clock = (m: number) => { const t = ((Math.round(m) % 1440) + 1440) % 1440; return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+/** Without given times a round has no clock: times are from leaving the depot. */
+const elapsed = (m: number) => { const t = Math.round(m); return `+${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 const hours = (s: number) => { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} hr ${m % 60} min`; };
 const lateText = (m: number) => { const r = Math.round(m); return r < 60 ? `${r} min` : `${Math.floor(r / 60)} hr ${r % 60} min`; };
 
@@ -40,16 +44,16 @@ function halfway(path: LngLat[]): LngLat {
 }
 
 /**
- * A delivery round with time slots. Nobody takes a delivery before their given time: a vehicle there sooner waits, so
- * every stop is on time or late, and the page shows by how much. The round ends back at the depot.
+ * The route sheet's delivery rounds, one route at a time. Nobody takes a delivery before their given time: a vehicle
+ * there sooner waits, so every stop is on time or late, and the page shows by how much. Each round ends back at the depot.
  */
-export function SlotRouteView() {
+export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
   const [plan, setPlan] = useState<SlotRoutePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let dead = false;
-    slotRouteAction()
+    slotRouteAction(id)
       .then((r) => {
         if (dead) return;
         if ("error" in r) setError(r.error);
@@ -57,25 +61,26 @@ export function SlotRouteView() {
       })
       .catch(() => { if (!dead) setError("Could not load the route."); });
     return () => { dead = true; };
-  }, []);
+  }, [id]);
 
   const round: RoundPlan | null = plan ? plan.best : null;
+  const at = useCallback((m: number) => (plan?.timed ? clock(m) : elapsed(m - (round?.start ?? 0))), [plan, round]);
 
   const pins = useMemo(() => {
     if (!plan || !round) return [] as MapPin[];
     const depot = plan.stops[0];
     const out: MapPin[] = [{
       id: "depot", lat: depot.lat, lng: depot.lng, kind: "pin", color: RED, mark: "S",
-      label: `${depot.name} · leave ${clock(round.start)} · back ${clock(round.back)}`,
-      popup: `${depot.name}: leave ${clock(round.start)}, back ${clock(round.back)}`,
+      label: `${depot.name} · leave ${at(round.start)} · back ${at(round.back)}`,
+      popup: `${depot.name}: leave ${at(round.start)}, back ${at(round.back)}`,
     }];
     round.visits.forEach((v, i) => {
       const st = plan.stops[v.stop];
       const late = v.late >= 0.5;
       out.push({
         id: `s${v.stop}`, lat: st.lat, lng: st.lng, kind: "pin", color: late ? LATE : GREEN, mark: String(i + 1),
-        label: `${st.area} · ${st.slot}${late ? ` · ${lateText(v.late)} late` : ""}`,
-        popup: `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): given ${st.slot}, delivered ${clock(v.deliver)}${late ? `, ${lateText(v.late)} late` : ""}`,
+        label: `${st.area}${st.slot ? ` · ${st.slot}` : ""}${late ? ` · ${lateText(v.late)} late` : ""}`,
+        popup: `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}delivered ${at(v.deliver)}${late ? `, ${lateText(v.late)} late` : ""}`,
       });
     });
     // each stretch's distance and time halfway along its road, in its colour
@@ -84,25 +89,42 @@ export function SlotRouteView() {
       out.push({ id: `l${i}`, lat, lng, kind: "pill", color: legColour(i), label: `${km(l.metres)} | ${min(l.seconds)}`, top: true });
     });
     return out;
-  }, [plan, round]);
+  }, [plan, round, at]);
 
   // every stretch from one stop to the next in its own colour; the drive back dashed
   const lines: MapLine[] = useMemo(() => (round
     ? round.legs.map((l, i) => ({ id: `road${i}`, paths: [l.path], color: legColour(i), width: 5, opacity: 0.9, dashed: i === round.legs.length - 1 }))
     : []), [round]);
-  const focus = useMemo(() => (plan ? { key: "all", points: plan.stops.map((s) => [s.lng, s.lat] as LngLat) } : null), [plan]);
+  const focus = useMemo(() => (plan ? { key: plan.id, points: plan.stops.map((s) => [s.lng, s.lat] as LngLat) } : null), [plan]);
 
   return (
     <div className="flex flex-1 flex-col gap-3 p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">Delivery round with time slots</h1>
+          <h1 className="text-lg font-semibold">Delivery rounds with time slots</h1>
           <p className="text-sm text-muted-foreground">
-            From Tumgaon depot and back. No customer takes a delivery before their given time: a vehicle there sooner waits, delivers at the given time and
-            stays the hold time. The vehicle leaves so it reaches the first stop on time. Distances and driving times are Ola Maps&apos; road figures.
+            Every route of the route sheet, from Tumgaon depot and back. No customer takes a delivery before their given time: a vehicle there sooner waits,
+            delivers at the given time and stays the hold time. The vehicle leaves so it reaches the first timed stop on time. Distances and driving times are
+            Ola Maps&apos; road figures.
           </p>
         </div>
       </div>
+
+      <nav className="flex flex-wrap gap-1.5">
+        {tabs.map((t) => (
+          <Link
+            key={t.id}
+            href={`?route=${t.id}`}
+            scroll={false}
+            className={cn(
+              "rounded-md border px-3 py-1.5 text-sm",
+              t.id === id ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.name} <span className="opacity-70">· {t.stops}</span>
+          </Link>
+        ))}
+      </nav>
 
       {/* one screen high: the list scrolls on its own, so the map fits the route in what you can see */}
       <div className="grid overflow-hidden rounded-xl border border-border lg:h-[calc(100vh-150px)] lg:min-h-[560px] lg:grid-cols-[minmax(0,1fr)_420px]">
@@ -111,7 +133,11 @@ export function SlotRouteView() {
           {round ? (
             <div className="absolute top-3 left-3 z-10 rounded-lg bg-background/95 px-3 py-2 shadow-sm">
               <div className="text-lg font-bold">Total: {km(round.metres)} | {hours(round.seconds)} driving</div>
-              <div className="text-[12px]">Leave {clock(round.start)} · last drop {clock(round.lastDrop)} · back at the depot {clock(round.back)}</div>
+              <div className="text-[12px]">
+                {plan!.timed
+                  ? `Leave ${clock(round.start)} · last drop ${clock(round.lastDrop)} · back at the depot ${clock(round.back)}`
+                  : `No given times · last drop ${elapsed(round.lastDrop - round.start)} · back at the depot ${elapsed(round.back - round.start)} after leaving`}
+              </div>
               <div className="text-[12px] text-muted-foreground">
                 {plan!.road ? "Road distance and time from Ola Maps" : "Ola Maps did not answer: straight-line estimates"}
               </div>
@@ -124,7 +150,7 @@ export function SlotRouteView() {
         </div>
 
         <aside className="overflow-y-auto border-t border-border text-sm lg:min-h-0 lg:border-t-0 lg:border-l">
-          {plan && round ? <Stops plan={plan} round={round} /> : null}
+          {plan && round ? <Stops plan={plan} round={round} at={at} /> : null}
         </aside>
       </div>
     </div>
@@ -132,7 +158,7 @@ export function SlotRouteView() {
 }
 
 /** Given time against when each stop is really delivered, and how late. */
-function Stops({ plan, round }: { plan: SlotRoutePlan; round: RoundPlan }) {
+function Stops({ plan, round, at }: { plan: SlotRoutePlan; round: RoundPlan; at: (m: number) => string }) {
   const depot = plan.stops[0];
   const back = round.legs[round.legs.length - 1];
   return (
@@ -142,7 +168,7 @@ function Stops({ plan, round }: { plan: SlotRoutePlan; round: RoundPlan }) {
           {round.lateStops ? <span className={LATE_TEXT}>{round.lateStops} of {round.visits.length} stops late · {lateText(round.late)} late in all</span> : "Every stop on time"}
         </p>
         <p className="text-muted-foreground">
-          The order with the least lateness, then the fewest km. Leave the depot at {clock(round.start)}.
+          {plan.timed ? <>In the order of the given times; stops with the same time or none placed for the fewest km. Leave the depot at {clock(round.start)}.</> : "No given times on this route: the order with the fewest km."}
         </p>
       </div>
       <table className="w-full">
@@ -157,7 +183,7 @@ function Stops({ plan, round }: { plan: SlotRoutePlan; round: RoundPlan }) {
         <tbody>
           <tr className="border-b border-border">
             <td className="px-3 py-2" colSpan={2}><span className="font-semibold" style={{ color: RED }}>S</span> {depot.name}</td>
-            <td className="num px-2 py-2 text-right">leave {clock(round.start)}</td>
+            <td className="num px-2 py-2 text-right">leave {at(round.start)}</td>
             <td />
           </tr>
           {round.visits.map((v, i) => {
@@ -170,11 +196,11 @@ function Stops({ plan, round }: { plan: SlotRoutePlan; round: RoundPlan }) {
                   <div className="text-[12px] text-muted-foreground">{st.name} · hold {st.hold} min</div>
                   <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
                     <span className="inline-block h-1 w-4 shrink-0 rounded" style={{ background: legColour(i) }} />
-                    {km(round.legs[i].metres)} | {min(round.legs[i].seconds)} · gets there {clock(v.arrive)}{v.waited >= 1 ? `, waits ${Math.round(v.waited)} min` : ""}
+                    {km(round.legs[i].metres)} | {min(round.legs[i].seconds)} · gets there {at(v.arrive)}{v.waited >= 1 ? `, waits ${Math.round(v.waited)} min` : ""}
                   </div>
                 </td>
-                <td className="num px-2 py-2 text-right">{st.slot}</td>
-                <td className={cn("num px-2 py-2 text-right font-semibold", late && LATE_TEXT)}>{clock(v.deliver)}</td>
+                <td className="num px-2 py-2 text-right">{st.slot || <span className="text-muted-foreground">any</span>}</td>
+                <td className={cn("num px-2 py-2 text-right font-semibold", late && LATE_TEXT)}>{at(v.deliver)}</td>
                 <td className={cn("px-3 py-2 text-right whitespace-nowrap", late ? cn("font-semibold", LATE_TEXT) : "text-muted-foreground")}>
                   {late ? lateText(v.late) : "on time"}
                 </td>
@@ -189,11 +215,24 @@ function Stops({ plan, round }: { plan: SlotRoutePlan; round: RoundPlan }) {
                 {km(back.metres)} | {min(back.seconds)} after the last drop
               </div>
             </td>
-            <td className="num px-2 py-2 text-right">{clock(round.back)}</td>
+            <td className="num px-2 py-2 text-right">{at(round.back)}</td>
             <td />
           </tr>
         </tbody>
       </table>
+      {plan.off.length ? (
+        <div className="px-4 py-3">
+          <p className="font-semibold">Not on this round ({plan.off.length})</p>
+          <ul className="mt-1 space-y-1.5">
+            {plan.off.map((o, i) => (
+              <li key={i}>
+                <div>{o.name}{o.area ? <span className="text-muted-foreground"> · {o.area}</span> : null}</div>
+                <div className="text-[12px] text-muted-foreground">{o.why}{o.phone ? ` · ${o.phone}` : ""}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </>
   );
 }
