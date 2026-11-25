@@ -175,7 +175,7 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
       >
         <div className={cn("relative min-h-0", showList ? "h-[70vh] lg:h-full" : "h-full")}>
           <DispatchMap lines={lines} pins={pins} focus={focus} />
-          <div className="absolute top-3 right-12 z-10 flex gap-1.5">
+          <div className="absolute bottom-3 left-3 z-10 flex flex-wrap gap-1.5">
             <Button variant="outline" size="sm" className="bg-background/95" onClick={() => setShowFigures((v) => !v)} aria-pressed={!showFigures}>
               <Ruler /> {showFigures ? "Hide km" : "Show km"}
             </Button>
