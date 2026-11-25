@@ -145,6 +145,10 @@ export default function LoginPage() {
             Sign in with Google
           </button>
         </div>
+        <nav className="mt-5 flex justify-center gap-4 text-xs text-muted-foreground">
+          <Link href="/privacy-policy" className="hover:text-foreground">Privacy policy</Link>
+          <Link href="/delete-account" className="hover:text-foreground">Delete account</Link>
+        </nav>
       </div>
     </div>
   );
