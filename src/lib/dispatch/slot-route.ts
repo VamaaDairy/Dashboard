@@ -50,6 +50,8 @@ export interface RouteOption {
   key: string; title: string; note: string; round: RoundPlan;
   /** a delivery window of this many minutes either side of each stop's time (the suggested route) */
   window?: number;
+  /** the windows are shown for reference only: delivered on arrival */
+  onHold?: boolean;
 }
 export interface SlotRoutePlan {
   id: string; name: string;
@@ -360,7 +362,7 @@ function suggestedRound(list: SuggestedStop[], stops: SheetStop[], metres: numbe
  * windows first, then the fewest km, then the least driving - tried from the suggested order and from every
  * nearest-next order, the best kept. Leaves the depot at [start].
  */
-function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: number[][], seconds: number[][], start: number, win: number, fixed?: string[]): RoundPlan | null {
+function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: number[][], seconds: number[][], start: number, win: number, fixed?: string[], timesOnHold = false): RoundPlan | null {
   const ids = suggestedIds(list, stops);
   if (!ids) return null;
   // stops set by hand go first, in that order; the rest are ordered after them
@@ -371,7 +373,8 @@ function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: numb
     let t = start, prev = 0, out = 0;
     const vs = o.map((s) => {
       const arrive = t + seconds[prev][s] / 60, c = target.get(s)!;
-      const deliver = Math.max(arrive, c - win);
+      // times on hold: delivered on arrival, never waiting for a window
+      const deliver = timesOnHold ? arrive : Math.max(arrive, c - win);
       out += Math.max(0, deliver - (c + win));
       t = deliver + stops[s].hold; prev = s;
       return { s, arrive, deliver, leave: t };
@@ -380,7 +383,7 @@ function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: numb
   };
   const km = along(metres, seconds);
   // minutes outside the windows, then km with driving time as the tie-break (1 s counts as 1 cm)
-  const cost = (o: number[]): [number, number] => { const [m, sec] = km(o); return [walk(o).out, m + sec / 100]; };
+  const cost = (o: number[]): [number, number] => { const [m, sec] = km(o); return [timesOnHold ? 0 : walk(o).out, m + sec / 100]; };
   let best: { o: number[]; c: [number, number] } | null = null;
   if (head.length) {
     // only the stops after the hand-set ones move: from the suggested order, and from the nearest stop each time
@@ -424,7 +427,7 @@ const SHORT_OPTIONS = 4;
  * with the least lateness, and routes with new delivery times - the fewest km, other short ones different enough
  * to be a real choice, and the least driving. New times leave the depot when the sheet's route does.
  */
-function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][], timed: boolean, suggested?: SuggestedStop[], win = 30, planned?: string[]): RouteOption[] {
+function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][], timed: boolean, suggested?: SuggestedStop[], win = 30, planned?: string[], timesOnHold = false): RouteOption[] {
   const sheet = sheetOrder(stops, metres, seconds);
   const sheetRound = roundOf(sheet, stops, metres, seconds, null);
   const out: RouteOption[] = [{
@@ -440,11 +443,13 @@ function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][],
       note: `The suggested route: each stop at its new time, delivered any time from ${win} min before to ${win} min after it.`,
     });
     taken.push(sug.order);
-    const own = planned ? bestWindowRound(suggested!, stops, metres, seconds, sheetRound.start, win, planned) : null;
+    const own = planned ? bestWindowRound(suggested!, stops, metres, seconds, sheetRound.start, win, planned, timesOnHold) : null;
     if (own) {
       out.push({
-        key: "planned", title: `Your route ±${win} min`, window: win, round: own,
-        note: `The first ${planned!.length} stops in the order set for this route, the rest for the fewest km; each stop within ${win} min of its suggested time (a vehicle there before the window waits for it).`,
+        key: "planned", title: timesOnHold ? "Your route" : `Your route ±${win} min`, window: win, onHold: timesOnHold, round: own,
+        note: timesOnHold
+          ? `The first ${planned!.length} stops in the order set for this route, the rest for the fewest km. Times on hold: every stop delivered when the vehicle gets there; the ±${win} min windows are shown for reference.`
+          : `The first ${planned!.length} stops in the order set for this route, the rest for the fewest km; each stop within ${win} min of its suggested time (a vehicle there before the window waits for it).`,
       });
       taken.push(own.order);
     }
@@ -531,7 +536,7 @@ export async function slotRoutePlan(id: string): Promise<SlotRoutePlan | null> {
   const metres = m?.metres ?? stops.map((a) => stops.map((b) => haversine(a, b) * 1.3));
   const seconds = m?.seconds ?? metres.map((row) => row.map((v) => (v / 1000 / 30) * 3600));
   const timed = sheet.stops.some((s) => s.open != null);
-  const plan: SlotRoutePlan = { id: sheet.id, name: sheet.name, stops, off: sheet.off, road, timed, options: optionsFor(stops, metres, seconds, timed, sheet.suggested, sheet.window, sheet.planned) };
+  const plan: SlotRoutePlan = { id: sheet.id, name: sheet.name, stops, off: sheet.off, road, timed, options: optionsFor(stops, metres, seconds, timed, sheet.suggested, sheet.window, sheet.planned, sheet.timesOnHold) };
   if (road) planKept.set(id, { at: Date.now(), plan });
   return plan;
 }
