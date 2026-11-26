@@ -15,8 +15,9 @@ export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off:
 export const ROUTES: SheetRoute[] = [
   {
     id: "raipur-1", name: "Raipur 1", window: 45, timesOnHold: true,
-    // ends Ashokaratan, Mahaveer Nagar, Mandir Hasaud; the stops after Railway Station and before these by fewest km
-    plannedLast: ["Tao Hospitality Private Limited", "Goyal Ventures", "Chahna Palace"],
+    // after Purani Basti: Shankar Nagar and Devendra Nagar together (whichever order is shorter), then the curve
+    // Transport Nagar, Sarora, Siltara, Mova, Ashokaratan, Mahaveer Nagar, Mandir Hasaud
+    plannedLast: ["Ganga Prashad Enterprise", "Amit Kirana Stores", "Godavari Power and Ispat Limited", "The Lunchbox", "Tao Hospitality Private Limited", "Goyal Ventures", "Chahna Palace"],
     // set by hand: Telibandha after Mangeto, Santoshi Nagar after Pachpedi, then Raipura, Amanaka, Railway Station, Purani Basti; the Devendra Nagar side by fewest km (times on hold)
     planned: [
       "Deepak Kumar Sharma",
