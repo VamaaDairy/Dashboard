@@ -90,7 +90,7 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
   }, [id]);
 
   const option: RouteOption | null = plan
-    ? (plan.options.find((o) => o.key === pick) ?? plan.options.find((o) => o.key === "best") ?? plan.options.find((o) => o.window) ?? plan.options[0])
+    ? (plan.options.find((o) => o.key === pick) ?? plan.options.find((o) => o.key === "planned") ?? plan.options.find((o) => o.key === "best") ?? plan.options.find((o) => o.window) ?? plan.options[0])
     : null;
   const round = option?.round ?? null;
 

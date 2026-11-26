@@ -360,9 +360,12 @@ function suggestedRound(list: SuggestedStop[], stops: SheetStop[], metres: numbe
  * windows first, then the fewest km, then the least driving - tried from the suggested order and from every
  * nearest-next order, the best kept. Leaves the depot at [start].
  */
-function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: number[][], seconds: number[][], start: number, win: number): RoundPlan | null {
+function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: number[][], seconds: number[][], start: number, win: number, fixed?: string[]): RoundPlan | null {
   const ids = suggestedIds(list, stops);
   if (!ids) return null;
+  // a hand-set order: only these stops in this order, the times then follow the windows
+  const fixedIds = fixed?.map((n) => stops.findIndex((s, i) => i > 0 && s.name === n));
+  if (fixedIds && (fixedIds.some((i) => i < 1) || new Set(fixedIds).size !== stops.length - 1)) return null;
   const target = new Map(ids.map((s, i) => [s, toMin(list[i].time)]));
   const walk = (o: number[]) => {
     let t = start, prev = 0, out = 0;
@@ -379,8 +382,8 @@ function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: numb
   // minutes outside the windows, then km with driving time as the tie-break (1 s counts as 1 cm)
   const cost = (o: number[]): [number, number] => { const [m, sec] = km(o); return [walk(o).out, m + sec / 100]; };
   const starts = [ids, ...freeOrders(stops, metres, along(metres, seconds)).map((f) => f.order.slice(1))];
-  let best: { o: number[]; c: [number, number] } | null = null;
-  for (const o of starts) {
+  let best: { o: number[]; c: [number, number] } | null = fixedIds ? { o: fixedIds, c: cost(fixedIds) } : null;
+  if (!fixedIds) for (const o of starts) {
     const r = improve(o, cost);
     if (!best || better(r.c, best.c)) best = r;
   }
@@ -406,7 +409,7 @@ const SHORT_OPTIONS = 4;
  * with the least lateness, and routes with new delivery times - the fewest km, other short ones different enough
  * to be a real choice, and the least driving. New times leave the depot when the sheet's route does.
  */
-function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][], timed: boolean, suggested?: SuggestedStop[], win = 30): RouteOption[] {
+function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][], timed: boolean, suggested?: SuggestedStop[], win = 30, planned?: string[]): RouteOption[] {
   const sheet = sheetOrder(stops, metres, seconds);
   const sheetRound = roundOf(sheet, stops, metres, seconds, null);
   const out: RouteOption[] = [{
@@ -422,8 +425,16 @@ function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][],
       note: `The suggested route: each stop at its new time, delivered any time from ${win} min before to ${win} min after it.`,
     });
     taken.push(sug.order);
+    const own = planned ? bestWindowRound(suggested!, stops, metres, seconds, sheetRound.start, win, planned) : null;
+    if (own) {
+      out.push({
+        key: "planned", title: `Your route ±${win} min`, window: win, round: own,
+        note: `The order set for this route; each stop delivered within ${win} min of its suggested time (a vehicle there before the window waits for it).`,
+      });
+      taken.push(own.order);
+    }
     const best = bestWindowRound(suggested!, stops, metres, seconds, sheetRound.start, win);
-    if (best && best.order.join() !== sug.order.join()) {
+    if (best && best.order.join() !== sug.order.join() && best.order.join() !== own?.order.join()) {
       out.push({
         key: "best", title: `Best in ±${win} min`, window: win, round: best,
         note: `The shortest and quickest round that keeps every stop within ${win} min of its suggested time: a vehicle there before the window waits for it.`,
@@ -505,7 +516,7 @@ export async function slotRoutePlan(id: string): Promise<SlotRoutePlan | null> {
   const metres = m?.metres ?? stops.map((a) => stops.map((b) => haversine(a, b) * 1.3));
   const seconds = m?.seconds ?? metres.map((row) => row.map((v) => (v / 1000 / 30) * 3600));
   const timed = sheet.stops.some((s) => s.open != null);
-  const plan: SlotRoutePlan = { id: sheet.id, name: sheet.name, stops, off: sheet.off, road, timed, options: optionsFor(stops, metres, seconds, timed, sheet.suggested, sheet.window) };
+  const plan: SlotRoutePlan = { id: sheet.id, name: sheet.name, stops, off: sheet.off, road, timed, options: optionsFor(stops, metres, seconds, timed, sheet.suggested, sheet.window, sheet.planned) };
   if (road) planKept.set(id, { at: Date.now(), plan });
   return plan;
 }

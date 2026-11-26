@@ -5,11 +5,33 @@ export interface OffStop { name: string; area: string; phone: string | null; why
 /** The suggested round (Raipur 1 and 2 - Suggested Route.xlsx): the stops in this order, each at its new time. */
 export interface SuggestedStop { name: string; time: string }
 /** [window]: minutes either side of a suggested time that its delivery may come (early or late). */
-export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[]; window?: number }
+/** [planned]: the order the route is to be driven (stop names), set by hand; times then follow the windows. */
+export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[]; window?: number; planned?: string[] }
 
 export const ROUTES: SheetRoute[] = [
   {
     id: "raipur-1", name: "Raipur 1", window: 45,
+    // the best ±45 round, with Telibandha straight after Mangeto Mall and Santoshi Nagar after Pachpedi Naka
+    planned: [
+      "Deepak Kumar Sharma",
+      "Aryavarta Hospitality",
+      "Santosh Kumar Sagar",
+      "Anand Milk Agency",
+      "Chhutki Dairy",
+      "Milky Way Dairy Raipur",
+      "Modi Tea Stall",
+      "Kanger Valley Academy school",
+      "Jai Maa Bhagwati Daily Needs",
+      "Ramkrishna Kirana Shop",
+      "NEMRAS & co",
+      "Ganga Prashad Enterprise",
+      "Amit Kirana Stores",
+      "Godavari Power and Ispat Limited",
+      "Chahna Palace",
+      "The Lunchbox",
+      "Tao Hospitality Private Limited",
+      "Goyal Ventures",
+    ],
     stops: [
       { name: "Deepak Kumar Sharma", area: "Fundhar", phone: "9399855783", segment: "GT", slot: "3:00", open: 180, close: 180, hold: 5, lat: 21.2174781, lng: 81.6923535 },
       { name: "Anand Milk Agency", area: "Pachpedi Naka", phone: "9827851997", segment: "GT", slot: "3:20", open: 200, close: 200, hold: 5, lat: 21.2190794, lng: 81.6517618 },
