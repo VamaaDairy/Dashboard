@@ -5,37 +5,28 @@ export interface OffStop { name: string; area: string; phone: string | null; why
 /** The suggested round (Raipur 1 and 2 - Suggested Route.xlsx): the stops in this order, each at its new time. */
 export interface SuggestedStop { name: string; time: string }
 /** [window]: minutes either side of a suggested time that its delivery may come (early or late). */
-/** [planned]: the order the route is to be driven (stop names), set by hand; times then follow the windows. */
+/** [planned]: the first stops of the route in this order (names), set by hand; the rest are ordered for the fewest km within the windows. */
 export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[]; window?: number; planned?: string[] }
 
 export const ROUTES: SheetRoute[] = [
   {
     id: "raipur-1", name: "Raipur 1", window: 45,
-    // the best ±45 round, with Telibandha straight after Mangeto Mall and Santoshi Nagar after Pachpedi Naka
+    // set by hand: Telibandha after Mangeto, Santoshi Nagar after Pachpedi, then Raipura, Amanaka, Railway Station; the rest optimised
     planned: [
       "Deepak Kumar Sharma",
       "Aryavarta Hospitality",
       "Santosh Kumar Sagar",
       "Anand Milk Agency",
       "Chhutki Dairy",
-      "Milky Way Dairy Raipur",
-      "Modi Tea Stall",
-      "Kanger Valley Academy school",
       "Jai Maa Bhagwati Daily Needs",
-      "Ramkrishna Kirana Shop",
-      "NEMRAS & co",
-      "Ganga Prashad Enterprise",
-      "Amit Kirana Stores",
-      "Godavari Power and Ispat Limited",
-      "Chahna Palace",
-      "The Lunchbox",
-      "Tao Hospitality Private Limited",
-      "Goyal Ventures",
+      "Kanger Valley Academy school",
+      "Modi Tea Stall",
     ],
     stops: [
       { name: "Deepak Kumar Sharma", area: "Fundhar", phone: "9399855783", segment: "GT", slot: "3:00", open: 180, close: 180, hold: 5, lat: 21.2174781, lng: 81.6923535 },
       { name: "Anand Milk Agency", area: "Pachpedi Naka", phone: "9827851997", segment: "GT", slot: "3:20", open: 200, close: 200, hold: 5, lat: 21.2190794, lng: 81.6517618 },
-      { name: "Chhutki Dairy", area: "Santoshi Nagar", phone: "7999945185", segment: "GT", slot: "3:40", open: 220, close: 220, hold: 5, lat: 21.2567465, lng: 81.6639476 },
+      // the sheet's pin was near Shankar Nagar: Santoshi Nagar Chowk (Ola) for now
+      { name: "Chhutki Dairy", area: "Santoshi Nagar", phone: "7999945185", segment: "GT", slot: "3:40", open: 220, close: 220, hold: 5, lat: 21.2163, lng: 81.642 },
       { name: "Santosh Kumar Sagar", area: "Telibandha", phone: "9009450020", segment: "GT", slot: "3:55", open: 235, close: 235, hold: 5, lat: 21.2333121, lng: 81.6625637 },
       { name: "Aryavarta Hospitality", area: "Mangeto Mall", phone: "7600870852", segment: "Institution", slot: "4:10", open: 250, close: 250, hold: 5, lat: 21.2391252, lng: 81.6807679 },
       { name: "Modi Tea Stall", area: "Railway Station", phone: "7000249233", segment: "GT", slot: "4:35", open: 275, close: 275, hold: 5, lat: 21.2528925, lng: 81.6273945 },
