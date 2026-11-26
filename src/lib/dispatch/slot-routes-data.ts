@@ -4,11 +4,12 @@ export interface SheetStop { name: string; area: string; phone: string | null; s
 export interface OffStop { name: string; area: string; phone: string | null; why: string }
 /** The suggested round (Raipur 1 and 2 - Suggested Route.xlsx): the stops in this order, each at its new time. */
 export interface SuggestedStop { name: string; time: string }
-export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[] }
+/** [window]: minutes either side of a suggested time that its delivery may come (early or late). */
+export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[]; window?: number }
 
 export const ROUTES: SheetRoute[] = [
   {
-    id: "raipur-1", name: "Raipur 1",
+    id: "raipur-1", name: "Raipur 1", window: 45,
     stops: [
       { name: "Deepak Kumar Sharma", area: "Fundhar", phone: "9399855783", segment: "GT", slot: "3:00", open: 180, close: 180, hold: 5, lat: 21.2174781, lng: 81.6923535 },
       { name: "Anand Milk Agency", area: "Pachpedi Naka", phone: "9827851997", segment: "GT", slot: "3:20", open: 200, close: 200, hold: 5, lat: 21.2190794, lng: 81.6517618 },
@@ -58,7 +59,7 @@ export const ROUTES: SheetRoute[] = [
     ],
   },
   {
-    id: "raipur-2", name: "Raipur 2",
+    id: "raipur-2", name: "Raipur 2", window: 30,
     stops: [
       { name: "Chourasiya Marketing", area: "Mandir Hasaud", phone: "8319998621", segment: "GT", slot: "3:00", open: 180, close: 180, hold: 5, lat: 21.21848611, lng: 81.76260218 },
       { name: "Mukesh Kirana Store", area: "Mandir Hasaud", phone: "9303535166", segment: "GT", slot: "3:15", open: 195, close: 195, hold: 5, lat: 21.229799, lng: 81.770541 },

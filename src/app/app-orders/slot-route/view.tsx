@@ -90,7 +90,7 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
   }, [id]);
 
   const option: RouteOption | null = plan
-    ? (plan.options.find((o) => o.key === pick) ?? plan.options.find((o) => o.window) ?? plan.options[0])
+    ? (plan.options.find((o) => o.key === pick) ?? plan.options.find((o) => o.key === "best") ?? plan.options.find((o) => o.window) ?? plan.options[0])
     : null;
   const round = option?.round ?? null;
 
@@ -126,12 +126,12 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
       const st = plan.stops[v.stop];
       const late = v.late >= 0.5;
       const label = win
-        ? `${st.area} · ${windowText(v.deliver, win)}`
+        ? `${st.area} · ${windowText(v.target ?? v.deliver, win)}`
         : round.newTimes
         ? `${st.area} · ${at(v.deliver)}${v.shift != null && Math.abs(v.shift) >= 0.5 ? ` (${shiftText(v.shift)})` : ""}`
         : `${st.area}${st.slot ? ` · ${st.slot}` : ""}${late ? ` · ${lateText(v.late)} late` : ""}`;
       const popup = win
-        ? `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}new time ${clock(v.deliver)}, deliver ${windowText(v.deliver, win)}`
+        ? `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}new time ${clock(v.deliver)}, deliver ${windowText(v.target ?? v.deliver, win)}`
         : round.newTimes
         ? `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}new time ${at(v.deliver)}`
         : `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}delivered ${at(v.deliver)}${late ? `, ${lateText(v.late)} late` : ""}`;
@@ -250,7 +250,7 @@ function Options({ plan, pick, onPick }: { plan: SlotRoutePlan; pick: string; on
             <div className="text-[12px] text-muted-foreground">
               {i === 0 ? "the sheet's route" : Math.abs(saved) < 50 ? "same km" : saved > 0 ? `saves ${km(saved)}` : `${km(-saved)} more`}
               {" · "}
-              {o.window ? `±${o.window} min windows` : r.newTimes ? "new times" : r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} late</span> : "on time"}
+              {o.window ? (r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} outside ±{o.window}</span> : `all in ±${o.window} min`) : r.newTimes ? "new times" : r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} late</span> : "on time"}
             </div>
           </button>
         );
@@ -307,7 +307,7 @@ function Stops({ plan, option, at }: { plan: SlotRoutePlan; option: RouteOption;
                 <td className={cn("num px-2 py-2 text-right font-semibold", late && LATE_TEXT)}>{at(v.deliver)}</td>
                 {option.window ? (
                   <td className="num px-3 py-2 text-right whitespace-nowrap">
-                    <div className="font-semibold">{windowText(v.deliver, option.window)}</div>
+                    <div className={cn("font-semibold", late && LATE_TEXT)}>{windowText(v.target ?? v.deliver, option.window)}</div>
                     <div className="text-[12px] text-muted-foreground">{shiftText(v.shift)}</div>
                   </td>
                 ) : round.newTimes ? (
