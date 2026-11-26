@@ -363,9 +363,9 @@ function suggestedRound(list: SuggestedStop[], stops: SheetStop[], metres: numbe
 function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: number[][], seconds: number[][], start: number, win: number, fixed?: string[]): RoundPlan | null {
   const ids = suggestedIds(list, stops);
   if (!ids) return null;
-  // a hand-set order: only these stops in this order, the times then follow the windows
-  const fixedIds = fixed?.map((n) => stops.findIndex((s, i) => i > 0 && s.name === n));
-  if (fixedIds && (fixedIds.some((i) => i < 1) || new Set(fixedIds).size !== stops.length - 1)) return null;
+  // stops set by hand go first, in that order; the rest are ordered after them
+  const head = fixed?.map((n) => stops.findIndex((s, i) => i > 0 && s.name === n)) ?? [];
+  if (head.some((i) => i < 1) || new Set(head).size !== head.length) return null;
   const target = new Map(ids.map((s, i) => [s, toMin(list[i].time)]));
   const walk = (o: number[]) => {
     let t = start, prev = 0, out = 0;
@@ -381,11 +381,26 @@ function bestWindowRound(list: SuggestedStop[], stops: SheetStop[], metres: numb
   const km = along(metres, seconds);
   // minutes outside the windows, then km with driving time as the tie-break (1 s counts as 1 cm)
   const cost = (o: number[]): [number, number] => { const [m, sec] = km(o); return [walk(o).out, m + sec / 100]; };
-  const starts = [ids, ...freeOrders(stops, metres, along(metres, seconds)).map((f) => f.order.slice(1))];
-  let best: { o: number[]; c: [number, number] } | null = fixedIds ? { o: fixedIds, c: cost(fixedIds) } : null;
-  if (!fixedIds) for (const o of starts) {
-    const r = improve(o, cost);
-    if (!best || better(r.c, best.c)) best = r;
+  let best: { o: number[]; c: [number, number] } | null = null;
+  if (head.length) {
+    // only the stops after the hand-set ones move: from the suggested order, and from the nearest stop each time
+    const rest = ids.filter((s) => !head.includes(s));
+    const nearest: number[] = [];
+    for (let prev = head[head.length - 1], left = new Set(rest); left.size;) {
+      const s = [...left].reduce((a, b) => (metres[prev][b] < metres[prev][a] ? b : a));
+      nearest.push(s); left.delete(s); prev = s;
+    }
+    for (const o of [rest, nearest]) {
+      const r = improve(o, (t) => cost([...head, ...t]));
+      const full = { o: [...head, ...r.o], c: r.c };
+      if (!best || better(full.c, best.c)) best = full;
+    }
+  } else {
+    const starts = [ids, ...freeOrders(stops, metres, along(metres, seconds)).map((f) => f.order.slice(1))];
+    for (const o of starts) {
+      const r = improve(o, cost);
+      if (!best || better(r.c, best.c)) best = r;
+    }
   }
   const order = [0, ...best!.o];
   const round = roundOf(order, stops, metres, seconds, { start, early: Infinity });
@@ -429,7 +444,7 @@ function optionsFor(stops: SheetStop[], metres: number[][], seconds: number[][],
     if (own) {
       out.push({
         key: "planned", title: `Your route ±${win} min`, window: win, round: own,
-        note: `The order set for this route; each stop delivered within ${win} min of its suggested time (a vehicle there before the window waits for it).`,
+        note: `The first ${planned!.length} stops in the order set for this route, the rest for the fewest km; each stop within ${win} min of its suggested time (a vehicle there before the window waits for it).`,
       });
       taken.push(own.order);
     }
