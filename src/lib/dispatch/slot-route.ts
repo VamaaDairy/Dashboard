@@ -70,19 +70,53 @@ export interface SlotRoutePlan {
 
 const KEEP_MS = 6 * 3600_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const legKept = new Map<string, { at: number; path: LngLat[] | null }>();
+const legKept = new Map<string, { at: number; road: { path: LngLat[]; metres: number; seconds: number } | null }>();
 
-/** The road drawn from a to b (the quickest of Ola's alternatives), kept six hours. Null when Ola could not say. */
-async function roadPath(a: Pt, b: Pt): Promise<LngLat[] | null> {
+/** The road from a to b - the shortest of Ola's alternatives (fewest km) - with its km and time, kept six hours. Null when Ola could not say. */
+async function road(a: Pt, b: Pt): Promise<{ path: LngLat[]; metres: number; seconds: number } | null> {
   const k = `${a.lat},${a.lng}|${b.lat},${b.lng}`;
   const kept = legKept.get(k);
-  if (kept && Date.now() - kept.at < KEEP_MS && kept.path) return kept.path;
+  if (kept && Date.now() - kept.at < KEEP_MS && kept.road) return kept.road;
   if (!olaEnabled()) return null;
   // Ola allows only so many requests a minute: one more try after a pause
-  const r = (await route(a, b, { fastest: true })) ?? (await sleep(12000), await route(a, b, { fastest: true }));
-  const path = r ? r.points.map(([lat, lng]) => [lng, lat] as LngLat) : null;
-  legKept.set(k, { at: Date.now(), path });
-  return path;
+  const r = (await route(a, b, { shortest: true })) ?? (await sleep(12000), await route(a, b, { shortest: true }));
+  const got = r ? { path: r.points.map(([lat, lng]) => [lng, lat] as LngLat), metres: r.distanceM, seconds: r.durationS } : null;
+  legKept.set(k, { at: Date.now(), road: got });
+  return got;
+}
+const roadPath = async (a: Pt, b: Pt) => (await road(a, b))?.path ?? null;
+
+/**
+ * The route each tab opens on, on the shortest roads: each stretch's km and time become those of the shortest of
+ * Ola's alternatives, and the times down the round follow (delivered on arrival when times are on hold, otherwise
+ * waiting for a window as before). The order stays as worked out from Ola's distance matrix.
+ */
+async function onShortestRoads(option: RouteOption, stops: SheetStop[]): Promise<void> {
+  const r = option.round;
+  const legs = await Promise.all(r.legs.map(async (l) => {
+    const a = stops[l.from], b = stops[l.to];
+    if (a.lat === b.lat && a.lng === b.lng) return l;
+    const got = await road(a, b);
+    return got ? { ...l, metres: got.metres, seconds: got.seconds } : l;
+  }));
+  let t = r.start;
+  const visits = r.visits.map((v, i) => {
+    const st = stops[v.stop];
+    const arrive = t + legs[i].seconds / 60;
+    let deliver = arrive;
+    if (!option.onHold && option.window != null && v.target != null) deliver = Math.max(arrive, v.target - option.window);
+    else if (!option.onHold && !r.newTimes && st.open != null) deliver = Math.max(arrive, st.open);
+    const late = option.window != null && v.target != null && !option.onHold
+      ? Math.max(0, deliver - (v.target + option.window))
+      : !r.newTimes && st.close != null ? Math.max(0, deliver - st.close) : 0;
+    t = deliver + st.hold;
+    return { ...v, arrive, waited: deliver - arrive, deliver, late, leave: t, shift: st.open == null ? null : deliver - st.open };
+  });
+  option.round = {
+    ...r, legs, visits, lastDrop: t, back: t + legs[legs.length - 1].seconds / 60,
+    metres: legs.reduce((x, l) => x + l.metres, 0), seconds: legs.reduce((x, l) => x + l.seconds, 0),
+    late: visits.reduce((x, v) => x + v.late, 0), lateStops: visits.filter((v) => v.late >= 0.5).length,
+  };
 }
 
 type Matrix = { metres: number[][]; seconds: number[][] };
@@ -533,13 +567,16 @@ export async function slotRoutePlan(id: string): Promise<SlotRoutePlan | null> {
   if (kept && Date.now() - kept.at < KEEP_MS) return kept.plan;
   const stops = [DEPOT, ...sheet.stops];
   const m = await roadMatrix(id, stops);
-  const road = !!m;
+  const roadOk = !!m;
   // without Ola: straight line x 1.3 at 30 km/h, so the page still says something
   const metres = m?.metres ?? stops.map((a) => stops.map((b) => haversine(a, b) * 1.3));
   const seconds = m?.seconds ?? metres.map((row) => row.map((v) => (v / 1000 / 30) * 3600));
   const timed = sheet.stops.some((s) => s.open != null);
-  const plan: SlotRoutePlan = { id: sheet.id, name: sheet.name, stops, off: sheet.off, road, timed, options: optionsFor(stops, metres, seconds, timed, sheet.suggested, sheet.window, sheet.planned, sheet.timesOnHold, sheet.plannedLast) };
-  if (road) planKept.set(id, { at: Date.now(), plan });
+  const plan: SlotRoutePlan = { id: sheet.id, name: sheet.name, stops, off: sheet.off, road: roadOk, timed, options: optionsFor(stops, metres, seconds, timed, sheet.suggested, sheet.window, sheet.planned, sheet.timesOnHold, sheet.plannedLast) };
+  // the route the tab opens on: km, time and arrivals on the shortest roads (the ones drawn on the map)
+  const first = plan.options.find((o) => o.key === "planned") ?? plan.options.find((o) => o.key === "best");
+  if (roadOk && first) await onShortestRoads(first, stops);
+  if (roadOk) planKept.set(id, { at: Date.now(), plan });
   return plan;
 }
 
