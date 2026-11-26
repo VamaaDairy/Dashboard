@@ -27,6 +27,9 @@ const lateText = (m: number) => { const r = Math.round(m); return r < 60 ? `${r}
 /** A new time against the given one. */
 const shiftText = (s: number | null) => (s == null ? "" : Math.abs(s) < 0.5 ? "same" : `${lateText(Math.abs(s))} ${s > 0 ? "later" : "earlier"}`);
 
+/** A delivery window round a time: [w] minutes early to [w] minutes late. */
+const windowText = (m: number, w: number) => `${clock(m - w)}–${clock(m + w)}`;
+
 /** Each stretch's colour: the route palette, one per stretch. */
 const legColour = (i: number) => ROUTE_COLOURS[i % ROUTE_COLOURS.length];
 
@@ -55,7 +58,8 @@ function halfway(path: LngLat[]): LngLat {
 export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
   const [plan, setPlan] = useState<SlotRoutePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pick, setPick] = useState("sheet");
+  // null: the suggested route where there is one, else the sheet's
+  const [pick, setPick] = useState<string | null>(null);
   /** the roads drawn for each option, as Ola gives them */
   const [paths, setPaths] = useState<Record<string, LngLat[][]>>({});
   // the map takes the screen: the list and the km | min labels can be hidden, and the map shown full screen
@@ -85,7 +89,9 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
     return () => { dead = true; };
   }, [id]);
 
-  const option: RouteOption | null = plan ? (plan.options.find((o) => o.key === pick) ?? plan.options[0]) : null;
+  const option: RouteOption | null = plan
+    ? (plan.options.find((o) => o.key === pick) ?? plan.options.find((o) => o.window) ?? plan.options[0])
+    : null;
   const round = option?.round ?? null;
 
   // the chosen option's roads, once
@@ -115,13 +121,18 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
       label: `${depot.name} · leave ${at(round.start)} · back ${at(round.back)}`,
       popup: `${depot.name}: leave ${at(round.start)}, back ${at(round.back)}`,
     }];
+    const win = option?.window;
     round.visits.forEach((v, i) => {
       const st = plan.stops[v.stop];
       const late = v.late >= 0.5;
-      const label = round.newTimes
+      const label = win
+        ? `${st.area} · ${windowText(v.deliver, win)}`
+        : round.newTimes
         ? `${st.area} · ${at(v.deliver)}${v.shift != null && Math.abs(v.shift) >= 0.5 ? ` (${shiftText(v.shift)})` : ""}`
         : `${st.area}${st.slot ? ` · ${st.slot}` : ""}${late ? ` · ${lateText(v.late)} late` : ""}`;
-      const popup = round.newTimes
+      const popup = win
+        ? `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}new time ${clock(v.deliver)}, deliver ${windowText(v.deliver, win)}`
+        : round.newTimes
         ? `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}new time ${at(v.deliver)}`
         : `${st.name} (${st.area}${st.phone ? `, ${st.phone}` : ""}): ${st.slot ? `given ${st.slot}, ` : ""}delivered ${at(v.deliver)}${late ? `, ${lateText(v.late)} late` : ""}`;
       out.push({ id: `s${v.stop}`, lat: st.lat, lng: st.lng, kind: "pin", color: late ? LATE : GREEN, mark: String(i + 1), label, popup });
@@ -132,7 +143,7 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
       out.push({ id: `l${i}`, lat, lng, kind: "pill", color: legColour(i), label: `${km(l.metres)} | ${min(l.seconds)}`, top: true });
     });
     return out;
-  }, [plan, round, roads, at, showFigures]);
+  }, [plan, round, option, roads, at, showFigures]);
 
   // every stretch from one stop to the next in its own colour; the drive back dashed
   const lines: MapLine[] = useMemo(
@@ -239,7 +250,7 @@ function Options({ plan, pick, onPick }: { plan: SlotRoutePlan; pick: string; on
             <div className="text-[12px] text-muted-foreground">
               {i === 0 ? "the sheet's route" : Math.abs(saved) < 50 ? "same km" : saved > 0 ? `saves ${km(saved)}` : `${km(-saved)} more`}
               {" · "}
-              {r.newTimes ? "new times" : r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} late</span> : "on time"}
+              {o.window ? `±${o.window} min windows` : r.newTimes ? "new times" : r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} late</span> : "on time"}
             </div>
           </button>
         );
@@ -270,7 +281,7 @@ function Stops({ plan, option, at }: { plan: SlotRoutePlan; option: RouteOption;
             <th className="px-3 py-2 font-medium">Stop</th>
             <th className="px-2 py-2 text-right font-medium">Given</th>
             <th className="px-2 py-2 text-right font-medium">{round.newTimes ? "New time" : "Delivered"}</th>
-            <th className="px-3 py-2 text-right font-medium">{round.newTimes ? "Change" : "Late"}</th>
+            <th className="px-3 py-2 text-right font-medium">{option.window ? `Window ±${option.window}` : round.newTimes ? "Change" : "Late"}</th>
           </tr>
         </thead>
         <tbody>
@@ -294,7 +305,12 @@ function Stops({ plan, option, at }: { plan: SlotRoutePlan; option: RouteOption;
                 </td>
                 <td className="num px-2 py-2 text-right">{st.slot || <span className="text-muted-foreground">any</span>}</td>
                 <td className={cn("num px-2 py-2 text-right font-semibold", late && LATE_TEXT)}>{at(v.deliver)}</td>
-                {round.newTimes ? (
+                {option.window ? (
+                  <td className="num px-3 py-2 text-right whitespace-nowrap">
+                    <div className="font-semibold">{windowText(v.deliver, option.window)}</div>
+                    <div className="text-[12px] text-muted-foreground">{shiftText(v.shift)}</div>
+                  </td>
+                ) : round.newTimes ? (
                   <td className="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{shiftText(v.shift) || "—"}</td>
                 ) : (
                   <td className={cn("px-3 py-2 text-right whitespace-nowrap", late ? cn("font-semibold", LATE_TEXT) : "text-muted-foreground")}>

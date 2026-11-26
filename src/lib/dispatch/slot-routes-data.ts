@@ -2,7 +2,9 @@
  * from midnight of the delivery day (an evening time before it is negative), an empty window means any time. */
 export interface SheetStop { name: string; area: string; phone: string | null; segment: string; slot: string; open: number | null; close: number | null; hold: number; lat: number; lng: number }
 export interface OffStop { name: string; area: string; phone: string | null; why: string }
-export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[] }
+/** The suggested round (Raipur 1 and 2 - Suggested Route.xlsx): the stops in this order, each at its new time. */
+export interface SuggestedStop { name: string; time: string }
+export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[] }
 
 export const ROUTES: SheetRoute[] = [
   {
@@ -34,6 +36,26 @@ export const ROUTES: SheetRoute[] = [
       { name: "BS Hospitality Service Pind Balluchi Restaurant", area: "", phone: "8839165149", why: "Delivered by the city office" },
       { name: "Sukh Sagar Restaurants", area: "", phone: "9425204192", why: "Delivered by the city office" },
     ],
+    suggested: [
+      { name: "Deepak Kumar Sharma", time: "03:00" },
+      { name: "Aryavarta Hospitality", time: "03:13" },
+      { name: "Chhutki Dairy", time: "03:31" },
+      { name: "Santosh Kumar Sagar", time: "03:49" },
+      { name: "Anand Milk Agency", time: "04:02" },
+      { name: "Milky Way Dairy Raipur", time: "04:19" },
+      { name: "Modi Tea Stall", time: "04:35" },
+      { name: "Kanger Valley Academy school", time: "05:01" },
+      { name: "Jai Maa Bhagwati Daily Needs", time: "05:31" },
+      { name: "Ramkrishna Kirana Shop", time: "06:23" },
+      { name: "NEMRAS & co", time: "06:41" },
+      { name: "Ganga Prashad Enterprise", time: "07:13" },
+      { name: "Amit Kirana Stores", time: "07:35" },
+      { name: "Godavari Power and Ispat Limited", time: "07:50" },
+      { name: "The Lunchbox", time: "08:31" },
+      { name: "Chahna Palace", time: "08:55" },
+      { name: "Tao Hospitality Private Limited", time: "10:00" },
+      { name: "Goyal Ventures", time: "10:27" },
+    ],
   },
   {
     id: "raipur-2", name: "Raipur 2",
@@ -60,6 +82,27 @@ export const ROUTES: SheetRoute[] = [
     ],
     off: [
       { name: "Kurud", area: "Kurud", phone: null, why: "No location in the sheet" },
+    ],
+    suggested: [
+      { name: "Mukesh Kirana Store", time: "02:57" },
+      { name: "Chourasiya Marketing", time: "03:05" },
+      { name: "Tandan Milk", time: "03:30" },
+      { name: "Manoj Kumar Sarkar", time: "04:00" },
+      { name: "Saha Agency", time: "04:06" },
+      { name: "Jeevan Dairy", time: "04:29" },
+      { name: "J P Cafe & Restaurant", time: "04:48" },
+      { name: "Kanha Dairy", time: "05:20" },
+      { name: "Sodexo India Services Pvt Ltd Kalinga U", time: "06:16" },
+      { name: "Vedanta Medical-Balco hospital", time: "06:38" },
+      { name: "Shree Sai Services IIIT New Raipur", time: "06:46" },
+      { name: "Aaranyam Enterprises", time: "06:55" },
+      { name: "Shree Sai Services HNLU", time: "07:10" },
+      { name: "CLEAN WORLD", time: "07:16" },
+      { name: "Ankit Traders", time: "09:45" },
+      { name: "Pratham Baking Mart", time: "10:50" },
+      { name: "Mahesh Pan & Daily Needs", time: "11:03" },
+      { name: "SKM - Abhanpur", time: "12:26" },
+      { name: "SKM - Rajim", time: "12:49" },
     ],
   },
   {
