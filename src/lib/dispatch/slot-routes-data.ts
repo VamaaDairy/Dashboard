@@ -6,12 +6,14 @@ export interface OffStop { name: string; area: string; phone: string | null; why
 export interface SuggestedStop { name: string; time: string }
 /** [window]: minutes either side of a suggested time that its delivery may come (early or late). */
 /** [planned]: the first stops of the route in this order (names), set by hand; the rest are ordered for the fewest km within the windows. */
-export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[]; window?: number; planned?: string[] }
+export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[]; window?: number; planned?: string[];
+  /** times on hold: the planned route ignores the windows (fewest km, delivered on arrival) */
+  timesOnHold?: boolean }
 
 export const ROUTES: SheetRoute[] = [
   {
-    id: "raipur-1", name: "Raipur 1", window: 45,
-    // set by hand: Telibandha after Mangeto, Santoshi Nagar after Pachpedi, then Raipura, Amanaka, Railway Station; the rest optimised
+    id: "raipur-1", name: "Raipur 1", window: 45, timesOnHold: true,
+    // set by hand: Telibandha after Mangeto, Santoshi Nagar after Pachpedi, then Raipura, Amanaka, Railway Station; the rest for the fewest km (times on hold)
     planned: [
       "Deepak Kumar Sharma",
       "Aryavarta Hospitality",

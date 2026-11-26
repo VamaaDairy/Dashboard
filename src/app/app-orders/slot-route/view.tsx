@@ -250,7 +250,7 @@ function Options({ plan, pick, onPick }: { plan: SlotRoutePlan; pick: string; on
             <div className="text-[12px] text-muted-foreground">
               {i === 0 ? "the sheet's route" : Math.abs(saved) < 50 ? "same km" : saved > 0 ? `saves ${km(saved)}` : `${km(-saved)} more`}
               {" · "}
-              {o.window ? (r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} outside ±{o.window}</span> : `all in ±${o.window} min`) : r.newTimes ? "new times" : r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} late</span> : "on time"}
+              {o.onHold ? "times on hold" : o.window ? (r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} outside ±{o.window}</span> : `all in ±${o.window} min`) : r.newTimes ? "new times" : r.lateStops ? <span className={LATE_TEXT}>{r.lateStops} late</span> : "on time"}
             </div>
           </button>
         );
