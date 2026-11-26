@@ -159,15 +159,18 @@ export function decodePolyline(s: string): Array<[number, number]> {
  * The road from one point to another. With [fastest], Ola is asked for its alternative roads too and the quickest is
  * taken ([alternatives] says how many Ola offered).
  */
-export async function route(from: { lat: number; lng: number }, to: { lat: number; lng: number }, opts: { fastest?: boolean } = {}): Promise<(Route & { alternatives: number }) | null> {
+export async function route(from: { lat: number; lng: number }, to: { lat: number; lng: number }, opts: { fastest?: boolean; shortest?: boolean } = {}): Promise<(Route & { alternatives: number }) | null> {
   const j = await call<{ routes?: Array<{ overview_polyline?: string; legs?: Array<{ distance?: number; duration?: number; steps?: Array<{ instructions?: string; distance?: number; maneuver?: string }> }> }> }>(
     "/routing/v1/directions",
-    { origin: `${from.lat},${from.lng}`, destination: `${to.lat},${to.lng}`, alternatives: opts.fastest ? "true" : "false", steps: "true", overview: "full", mode: "driving" },
+    { origin: `${from.lat},${from.lng}`, destination: `${to.lat},${to.lng}`, alternatives: opts.fastest || opts.shortest ? "true" : "false", steps: "true", overview: "full", mode: "driving" },
     "POST",
   );
   const routes = (j?.routes ?? []).filter((x) => x.overview_polyline);
   if (!routes.length) return null;
-  const r = opts.fastest
+  // shortest: the fewest metres of Ola's alternatives; fastest: the least time
+  const r = opts.shortest
+    ? routes.reduce((a, b) => (Number(b.legs?.[0]?.distance ?? Infinity) < Number(a.legs?.[0]?.distance ?? Infinity) ? b : a))
+    : opts.fastest
     ? routes.reduce((a, b) => (Number(b.legs?.[0]?.duration ?? Infinity) < Number(a.legs?.[0]?.duration ?? Infinity) ? b : a))
     : routes[0];
   const leg = r.legs?.[0];
