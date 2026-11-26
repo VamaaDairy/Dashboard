@@ -8,12 +8,16 @@ export interface SuggestedStop { name: string; time: string }
 /** [planned]: the first stops of the route in this order (names), set by hand; the rest are ordered for the fewest km within the windows. */
 export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off: OffStop[]; suggested?: SuggestedStop[]; window?: number; planned?: string[];
   /** times on hold: the planned route ignores the windows (fewest km, delivered on arrival) */
-  timesOnHold?: boolean }
+  timesOnHold?: boolean;
+  /** the last stops of the route in this order (names), set by hand */
+  plannedLast?: string[] }
 
 export const ROUTES: SheetRoute[] = [
   {
     id: "raipur-1", name: "Raipur 1", window: 45, timesOnHold: true,
-    // set by hand: Telibandha after Mangeto, Santoshi Nagar after Pachpedi, then Raipura, Amanaka, Railway Station; the rest for the fewest km (times on hold)
+    // ends Ashokaratan, Mahaveer Nagar, Mandir Hasaud; the stops after Railway Station and before these by fewest km
+    plannedLast: ["Tao Hospitality Private Limited", "Goyal Ventures", "Chahna Palace"],
+    // set by hand: Telibandha after Mangeto, Santoshi Nagar after Pachpedi, then Raipura, Amanaka, Railway Station, Purani Basti; the Devendra Nagar side by fewest km (times on hold)
     planned: [
       "Deepak Kumar Sharma",
       "Aryavarta Hospitality",
@@ -23,6 +27,7 @@ export const ROUTES: SheetRoute[] = [
       "Jai Maa Bhagwati Daily Needs",
       "Kanger Valley Academy school",
       "Modi Tea Stall",
+      "Milky Way Dairy Raipur",
     ],
     stops: [
       { name: "Deepak Kumar Sharma", area: "Fundhar", phone: "9399855783", segment: "GT", slot: "3:00", open: 180, close: 180, hold: 5, lat: 21.2174781, lng: 81.6923535 },
