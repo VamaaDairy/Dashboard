@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/sidebar";
 import { GaiaLogo } from "@/components/brand";
 import { recalculate } from "@/app/actions";
-import { CLASS_ICONS, SECTIONS, sectionFor, type NavItem, type NavSection } from "@/lib/nav";
+import { CLASS_ICONS, OPEN_KEY, SECTIONS, sectionFor, type NavItem, type NavSection } from "@/lib/nav";
 
 export interface SidebarClass {
   code: string;
@@ -88,7 +88,7 @@ export function AppSidebar({
 
   // Until we know who is signed in, show nothing that needs access.
   const isOwner = user?.role === "owner";
-  const can = (key: string) => isOwner || (!!user && (user.levels[key] ?? "none") !== "none");
+  const can = (key: string) => key === OPEN_KEY || isOwner || (!!user && (user.levels[key] ?? "none") !== "none");
   const showMasters = can("masters");
   const visibleItem = (item: NavItem): NavItem[] => {
     if (item.ownerOnly) return isOwner ? [item] : [];
