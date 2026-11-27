@@ -45,7 +45,9 @@ export async function proxy(req: NextRequest) {
   if (match.kind === "open") return NextResponse.next();
 
   // Reading needs "view"; anything else (server actions are POSTs to the page) needs "edit".
-  const reading = req.method === "GET" || req.method === "HEAD";
+  // Dispatch: Routes loads its route map through server actions (POSTs) that only read, so viewing is enough there
+  const readsByAction = pathname === "/app-orders/dispatch/routes" && req.method === "POST" && req.headers.has("next-action");
+  const reading = req.method === "GET" || req.method === "HEAD" || readsByAction;
   const allowed =
     match.kind === "owner"
       ? user.role === "owner"
