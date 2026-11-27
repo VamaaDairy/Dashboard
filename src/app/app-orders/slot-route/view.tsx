@@ -209,6 +209,30 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
 
       {plan ? <Options plan={plan} pick={option!.key} onPick={setPick} /> : null}
 
+      {/* the round in figures and how to read the map: above the map, so nothing covers the route */}
+      {plan && round && option ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-border px-3 py-2">
+          <div>
+            <div className="text-base font-bold md:text-lg">{option.title}: {km(round.metres)} | {hours(round.seconds)} driving</div>
+            <div className="text-[12px]">
+              {plan.timed
+                ? `Leave ${clock(round.start)} · last drop ${clock(round.lastDrop)} · back at the depot ${clock(round.back)}`
+                : `No given times · last drop ${elapsed(round.lastDrop - round.start)} · back at the depot ${elapsed(round.back - round.start)} after leaving`}
+              <span className="text-muted-foreground"> · {plan.road ? "road distance and time from Ola Maps" : "Ola Maps did not answer: straight-line estimates"}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+            <span className="flex items-center gap-1"><span className="grid size-4 place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: RED }}>S</span> depot</span>
+            <span className="flex items-center gap-1"><span className="grid size-4 place-items-center rounded-full bg-[#2B3990] text-[9px] font-bold text-white">1</span> stops in order</span>
+            <span className="flex items-center gap-1"><span className="size-4 rounded-full bg-[#2B3990]" style={{ boxShadow: `0 0 0 2px ${LATE}` }} /> late</span>
+            <span className="flex items-center gap-1"><span className="text-[13px] font-black">›</span> direction</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-0 w-5 border-t-2 border-dashed border-foreground/70" /> back to depot</span>
+            <span className="text-muted-foreground">click a road or stop for its km</span>
+          </div>
+        </div>
+      ) : null}
+
+
       {/* the map fills the screen; the list beside it scrolls on its own and can be hidden */}
       <div
         ref={box}
@@ -234,27 +258,7 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
               {full ? <Minimize2 /> : <Maximize2 />} {full ? "Exit full screen" : "Full screen"}
             </Button>
           </div>
-          {round ? (
-            <div className="absolute top-3 left-3 z-10 max-w-[calc(100%-5rem)] rounded-lg bg-background/95 px-3 py-2 shadow-md">
-              <div className="text-base font-bold md:text-lg">{option!.title}: {km(round.metres)} | {hours(round.seconds)} driving</div>
-              <div className="text-[12px]">
-                {plan!.timed
-                  ? `Leave ${clock(round.start)} · last drop ${clock(round.lastDrop)} · back at the depot ${clock(round.back)}`
-                  : `No given times · last drop ${elapsed(round.lastDrop - round.start)} · back at the depot ${elapsed(round.back - round.start)} after leaving`}
-              </div>
-              <div className="text-[12px] text-muted-foreground">
-                {plan!.road ? "Road distance and time from Ola Maps" : "Ola Maps did not answer: straight-line estimates"}
-              </div>
-              {/* how to read the map */}
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-1.5 text-[11.5px]">
-                <span className="flex items-center gap-1"><span className="grid size-4 place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: RED }}>S</span> depot</span>
-                <span className="flex items-center gap-1"><span className="grid size-4 place-items-center rounded-full bg-[#2B3990] text-[9px] font-bold text-white">1</span> stops in order</span>
-                <span className="flex items-center gap-1"><span className="size-4 rounded-full bg-[#2B3990]" style={{ boxShadow: `0 0 0 2px ${LATE}` }} /> late</span>
-                <span className="flex items-center gap-1"><span className="text-[13px] font-black">›</span> direction</span>
-                <span className="flex items-center gap-1"><span className="inline-block h-0 w-5 border-t-2 border-dashed border-foreground/70" /> back to depot</span>
-              </div>
-            </div>
-          ) : (
+          {round ? null : (
             <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
               {error ?? "Working out the roads with Ola Maps (the first time can take a minute)…"}
             </div>
