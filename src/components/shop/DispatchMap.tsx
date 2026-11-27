@@ -117,11 +117,13 @@ function arrowImage(): ImageData {
  * `clear`: for following one route - the streets fade behind a light veil, the roads get a dark halo and arrows
  * show which way the vehicle drives.
  */
-export function DispatchMap({ lines, pins, focus, onPin, clear = false, className = "" }: {
+export function DispatchMap({ lines, pins, focus, onPin, onLine, clear = false, className = "" }: {
   lines: MapLine[];
   pins: MapPin[];
   focus?: { key: string; points: LngLat[] } | null;
   onPin?: (id: string) => void;
+  /** a click on the map: the id of the line under it, or null for empty map */
+  onLine?: (id: string | null) => void;
   clear?: boolean;
   className?: string;
 }) {
@@ -134,7 +136,9 @@ export function DispatchMap({ lines, pins, focus, onPin, clear = false, classNam
   const [ready, setReady] = useState(false);
   const [note, setNote] = useState("Loading map…");
   const clearStyle = useRef(clear);
+  const lineClicked = useRef(onLine);
   useEffect(() => { clicked.current = onPin; }, [onPin]);
+  useEffect(() => { lineClicked.current = onLine; }, [onLine]);
 
   useEffect(() => {
     let dead = false;
@@ -170,6 +174,13 @@ export function DispatchMap({ lines, pins, focus, onPin, clear = false, classNam
               "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true },
             paint: { "icon-opacity": ["get", "opacity"] } });
         }
+        // a click on a road (with a few pixels of slack) or on empty map
+        m.on("click", (e) => {
+          if (!lineClicked.current) return;
+          const p = e.point;
+          const hit = m.queryRenderedFeatures([[p.x - 7, p.y - 7], [p.x + 7, p.y + 7]], { layers: ["solid", "dashed"] });
+          lineClicked.current(hit.length ? String(hit[0].properties?.lid ?? "") || null : null);
+        });
         setReady(true);
         setNote("");
       });
@@ -191,7 +202,7 @@ export function DispatchMap({ lines, pins, focus, onPin, clear = false, classNam
     for (const l of lines) {
       for (const p of l.paths) {
         if (p.length < 2) continue;
-        features.push({ type: "Feature", properties: { color: l.color, width: l.width ?? 4, opacity: l.opacity ?? 1, dashed: !!l.dashed }, geometry: { type: "LineString", coordinates: p } });
+        features.push({ type: "Feature", properties: { lid: l.id, color: l.color, width: l.width ?? 4, opacity: l.opacity ?? 1, dashed: !!l.dashed }, geometry: { type: "LineString", coordinates: p } });
       }
     }
     (m.getSource("lines") as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
