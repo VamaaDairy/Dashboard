@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import QRCode from "qrcode";
 import { STELLAR } from "@/lib/trace/stellar";
 import "../trace.css";
 import "./demo.css";
 
 /** The batch the QR on the back of this pack opens: a demo twin whose 4 steps are on Stellar. */
 const BATCH = "GAIA-DEMO-TM500-20261125";
-const BATCH_URL = `https://production.vamadairy.in/trace/${BATCH}`;
 
 export const metadata: Metadata = {
   title: "Scan the pack | Gaia Dairy",
@@ -14,17 +12,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * A public showcase: one pack, front and back, with the back's QR printed large so it can be scanned
- * straight off the screen. Nothing here is read from our database.
+ * A public showcase: one pack, back and front. The back is the printed pouch with the batch QR on it, the way
+ * every pack will carry it. Nothing here is read from our database.
  */
-export default async function ScanDemoPage() {
-  const qr = await QRCode.toString(BATCH_URL, {
-    type: "svg",
-    errorCorrectionLevel: "M",
-    margin: 0,
-    color: { dark: "#2f3992", light: "#ffffff" },
-  });
-
+export default function ScanDemoPage() {
   return (
     <div className="gt-page gd-page">
       <header className="gt-top">
@@ -35,18 +26,14 @@ export default async function ScanDemoPage() {
       <section className="gt-hero">
         <p className="gt-eyebrow">Batch check on Stellar</p>
         <h1 className="gt-title">Scan the back of the pack</h1>
-        <p className="gd-lead">Point your phone camera at the QR. It opens this exact batch, read from the blockchain.</p>
+        <p className="gd-lead">Point your phone camera at the QR printed on the back. It opens this exact batch, read from the blockchain.</p>
       </section>
 
       <div className="gd-stage">
-        <figure className="gd-back" aria-label="Back of the pack with the batch QR">
+        {/* the printed back of the pouch, with the batch QR where the pack carries its QR */}
+        <figure className="gd-back gd-back-print" aria-label="Back of the Toned Milk 500 ml pack with the batch QR printed on it">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/trace/toned-milk-500.png" alt="" className="gd-pouch" />
-          <div className="gd-label">
-            <div className="gd-qr" dangerouslySetInnerHTML={{ __html: qr }} />
-            <p className="gd-scan">Scan to check this batch</p>
-            <p className="gd-batch">{BATCH}</p>
-          </div>
+          <img src="/trace/toned-milk-500-back.webp" alt="Back of the Toned Milk 500 ml pack" className="gd-pouch" />
         </figure>
 
         <figure className="gd-front">

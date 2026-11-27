@@ -111,3 +111,7 @@
   .gd-steps { grid-template-columns: repeat(2, 1fr); }
   .gd-front { right: -4px; }
 }
+
+/* the printed back: a cut-out pouch photo, so no grey card behind it */
+.gd-back-print { background: transparent; box-shadow: none; border-radius: 0; overflow: visible; aspect-ratio: auto; }
+.gd-back-print .gd-pouch { height: auto; filter: drop-shadow(0 18px 24px rgba(47, 57, 146, 0.18)); }
