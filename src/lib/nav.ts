@@ -17,9 +17,6 @@ import {
 import ordersSidebar from "@/lib/orders/sidebar.json";
 import unbuilt from "@/lib/nav-unbuilt.json";
 
-/** The key of a menu entry every signed-in user sees, whatever their access (its page needs no sign-in). */
-export const OPEN_KEY = "open";
-
 export interface NavLeaf { href: string; key: string; label: string; exact?: boolean }
 export interface NavItem {
   href: string; key: string; label: string; icon: React.ElementType; exact?: boolean;
@@ -248,8 +245,6 @@ const WORKING: NavSection[] = [
               { href: "/route-orders/masters", key: "routeorders.masters", label: "Customers & products" },
             ],
           },
-          // the delivery routes on the map (/app-orders/slot-route): a public page, so open to everyone in the menu too
-          { href: "/app-orders/slot-route", key: OPEN_KEY, label: "Delivery routes", icon: Route },
           // after the route sheet confirms them: the orders go on trips, and the trips run in the Delivery app
           // (the same pages as Distributor & Retail -> App orders -> Dispatch)
           {
