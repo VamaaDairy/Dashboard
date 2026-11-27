@@ -17,7 +17,7 @@ export interface MapPin {
   id: string;
   lat: number;
   lng: number;
-  kind: "dot" | "num" | "pill" | "pin";
+  kind: "dot" | "num" | "pill" | "pin" | "stop";
   color: string;
   label?: string;
   /** pin: the few characters inside the pin (a stop number) */
@@ -27,6 +27,10 @@ export interface MapPin {
   dim?: boolean;
   /** drawn above the others (the truck) */
   top?: boolean;
+  /** stop: a ring round the circle in this colour (a late stop) */
+  ring?: string;
+  /** pill: white with a coloured border and text, quieter than the solid pill */
+  ghost?: boolean;
 }
 
 function pinElement(p: MapPin): HTMLElement {
@@ -54,8 +58,24 @@ function pinElement(p: MapPin): HTMLElement {
       el.append(t);
     }
   } else if (p.kind === "pill") {
-    el.style.cssText += `;background:${p.color};color:#fff;font:600 11px system-ui;padding:3px 8px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);white-space:nowrap`;
+    el.style.cssText += p.ghost
+      ? `;background:rgba(255,255,255,.95);color:${p.color};font:700 11px system-ui;padding:2px 7px;border-radius:999px;border:1.5px solid ${p.color};box-shadow:0 1px 3px rgba(0,0,0,.2);white-space:nowrap`
+      : `;background:${p.color};color:#fff;font:600 11px system-ui;padding:3px 8px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);white-space:nowrap`;
     el.textContent = p.label ?? "";
+  } else if (p.kind === "stop") {
+    // a numbered circle centred on the point, its name in a small chip beside it
+    el.style.cssText += ";display:flex;align-items:center;gap:5px";
+    const c = document.createElement("span");
+    const ring = p.ring ? `,0 0 0 5px ${p.ring}` : "";
+    c.style.cssText = `width:28px;height:28px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${p.color};color:#fff;font:800 13px system-ui;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)${ring}`;
+    c.textContent = p.mark ?? "";
+    el.append(c);
+    if (p.label) {
+      const t = document.createElement("span");
+      t.style.cssText = "background:rgba(255,255,255,.94);border-radius:6px;padding:1px 6px;font:600 11.5px/1.35 system-ui,-apple-system,sans-serif;color:#1f2329;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.25)";
+      t.textContent = p.label;
+      el.append(t);
+    }
   } else {
     el.style.cssText += ";display:flex;align-items:center;gap:6px";
     const d = document.createElement("span");
@@ -71,17 +91,38 @@ function pinElement(p: MapPin): HTMLElement {
   return el;
 }
 
-const sig = (p: MapPin) => [p.kind, p.color, p.label, p.mark, p.popup, p.hollow, p.dim, p.top].join("|");
+const sig = (p: MapPin) => [p.kind, p.color, p.label, p.mark, p.popup, p.hollow, p.dim, p.top, p.ring, p.ghost].join("|");
+
+/** A small white chevron pointing along the line, drawn once and used by the arrows layer. */
+function arrowImage(): ImageData {
+  const c = document.createElement("canvas");
+  c.width = 24;
+  c.height = 24;
+  const g = c.getContext("2d")!;
+  g.strokeStyle = "#ffffff";
+  g.lineWidth = 4;
+  g.lineCap = "round";
+  g.lineJoin = "round";
+  g.beginPath();
+  g.moveTo(8, 5);
+  g.lineTo(16, 12);
+  g.lineTo(8, 19);
+  g.stroke();
+  return g.getImageData(0, 0, 24, 24);
+}
 
 /**
  * The Ola map with any number of lines and pins (Dispatch: Live, a trip, the Plan map). It fits itself to everything
  * the first time there is something to show, and to `focus` whenever its key changes. It fills its parent.
+ * `clear`: for following one route - the streets fade behind a light veil, the roads get a dark halo and arrows
+ * show which way the vehicle drives.
  */
-export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
+export function DispatchMap({ lines, pins, focus, onPin, clear = false, className = "" }: {
   lines: MapLine[];
   pins: MapPin[];
   focus?: { key: string; points: LngLat[] } | null;
   onPin?: (id: string) => void;
+  clear?: boolean;
   className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -92,6 +133,7 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
   const clicked = useRef(onPin);
   const [ready, setReady] = useState(false);
   const [note, setNote] = useState("Loading map…");
+  const clearStyle = useRef(clear);
   useEffect(() => { clicked.current = onPin; }, [onPin]);
 
   useEffect(() => {
@@ -107,6 +149,13 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
       m.on("load", () => {
         m.addSource("lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         const round = { "line-cap": "round", "line-join": "round" } as const;
+        if (clearStyle.current) {
+          // a light veil over the streets, under the route, so the route stands out
+          m.addSource("veil", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } } });
+          m.addLayer({ id: "veil", type: "fill", source: "veil", paint: { "fill-color": "#ffffff", "fill-opacity": 0.45 } });
+          m.addLayer({ id: "halo", type: "line", source: "lines", layout: round,
+            paint: { "line-color": "#0b1a33", "line-width": ["+", ["get", "width"], 7], "line-opacity": ["*", ["get", "opacity"], 0.28], "line-blur": 2 } });
+        }
         // a white casing under the solid lines so they read cleanly over the streets
         m.addLayer({ id: "casing", type: "line", source: "lines", filter: ["==", ["get", "dashed"], false], layout: round,
           paint: { "line-color": "#ffffff", "line-width": ["+", ["get", "width"], 3], "line-opacity": ["*", ["get", "opacity"], 0.85] } });
@@ -114,6 +163,13 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
           paint: { "line-color": ["get", "color"], "line-width": ["get", "width"], "line-opacity": ["get", "opacity"] } });
         m.addLayer({ id: "dashed", type: "line", source: "lines", filter: ["==", ["get", "dashed"], true],
           paint: { "line-color": ["get", "color"], "line-width": ["get", "width"], "line-opacity": ["get", "opacity"], "line-dasharray": [2, 1.6] } });
+        if (clearStyle.current) {
+          m.addImage("route-arrow", arrowImage(), { pixelRatio: 2 });
+          m.addLayer({ id: "arrows", type: "symbol", source: "lines",
+            layout: { "symbol-placement": "line", "symbol-spacing": 90, "icon-image": "route-arrow", "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 1.5, 17, 1.9],
+              "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-ignore-placement": true },
+            paint: { "icon-opacity": ["get", "opacity"] } });
+        }
         setReady(true);
         setNote("");
       });
@@ -161,8 +217,8 @@ export function DispatchMap({ lines, pins, focus, onPin, className = "" }: {
       el.addEventListener("click", (e) => { if (clicked.current) { e.stopPropagation(); clicked.current(p.id); } });
       const mk = new maplibregl.Marker({
         element: el,
-        anchor: p.kind === "dot" ? "left" : p.kind === "pin" ? "bottom-left" : "center",
-        offset: p.kind === "dot" ? [-9, 0] : p.kind === "pin" ? [-15, 0] : [0, 0],
+        anchor: p.kind === "dot" || p.kind === "stop" ? "left" : p.kind === "pin" ? "bottom-left" : "center",
+        offset: p.kind === "dot" ? [-9, 0] : p.kind === "stop" ? [-14, 0] : p.kind === "pin" ? [-15, 0] : [0, 0],
       }).setLngLat([p.lng, p.lat]);
       if (p.popup) mk.setPopup(new maplibregl.Popup({ offset: 14 }).setText(p.popup));
       kept.set(p.id, { m: mk.addTo(m), sig: k });
