@@ -29,6 +29,7 @@ export const ROUTES: SheetRoute[] = [
       "Kanger Valley Academy school",
       "Modi Tea Stall",
       "Milky Way Dairy Raipur",
+      "Gaia Fresh Raipur Office (Vamaa Dairy)",
     ],
     stops: [
       { name: "Deepak Kumar Sharma", area: "Fundhar", phone: "9399855783", segment: "GT", slot: "3:00", open: 180, close: 180, hold: 5, lat: 21.2174781, lng: 81.6923535 },
@@ -39,6 +40,8 @@ export const ROUTES: SheetRoute[] = [
       { name: "Aryavarta Hospitality", area: "Mangeto Mall", phone: "7600870852", segment: "Institution", slot: "4:10", open: 250, close: 250, hold: 5, lat: 21.2391252, lng: 81.6807679 },
       { name: "Modi Tea Stall", area: "Railway Station", phone: "7000249233", segment: "GT", slot: "4:35", open: 275, close: 275, hold: 5, lat: 21.2528925, lng: 81.6273945 },
       { name: "Milky Way Dairy Raipur", area: "Purani Basti", phone: "9300772375", segment: "GT", slot: "4:50", open: 290, close: 290, hold: 5, lat: 21.2334886, lng: 81.628395 },
+      // Gaia's own retail outlet (House of Gaia, Pandri): the same pin as "Gaia Fresh Foods Pandri (Retail)" on Raipur 2
+      { name: "Gaia Fresh Raipur Office (Vamaa Dairy)", area: "Pandri (Gaia outlet)", phone: "9201593537", segment: "GFF", slot: "", open: null, close: null, hold: 5, lat: 21.2558427, lng: 81.6459396 },
       { name: "Jai Maa Bhagwati Daily Needs", area: "Raipura", phone: "9131497817", segment: "GT", slot: "5:05", open: 305, close: 305, hold: 10, lat: 21.2118717, lng: 81.5997954 },
       { name: "Kanger Valley Academy school", area: "Amanaka", phone: "9770912137", segment: "Institution", slot: "5:25", open: 325, close: 325, hold: 5, lat: 21.2442732, lng: 81.5861121 },
       { name: "NEMRAS & co", area: "Devendra Nagar", phone: "9131713145", segment: "GT", slot: "5:40", open: 340, close: 340, hold: 5, lat: 21.26148658, lng: 81.63992699 },
@@ -65,6 +68,7 @@ export const ROUTES: SheetRoute[] = [
       { name: "Santosh Kumar Sagar", time: "03:49" },
       { name: "Anand Milk Agency", time: "04:02" },
       { name: "Milky Way Dairy Raipur", time: "04:19" },
+      { name: "Gaia Fresh Raipur Office (Vamaa Dairy)", time: "04:27" },
       { name: "Modi Tea Stall", time: "04:35" },
       { name: "Kanger Valley Academy school", time: "05:01" },
       { name: "Jai Maa Bhagwati Daily Needs", time: "05:31" },

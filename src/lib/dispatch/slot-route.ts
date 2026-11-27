@@ -1,6 +1,6 @@
 import "server-only";
 import { haversine, type Pt } from "@/lib/shop/route-plan";
-import { olaEnabled, route } from "@/lib/shop/ola";
+import { olaEnabled, route, routeVia } from "@/lib/shop/ola";
 import type { LngLat } from "@/lib/shop/track";
 import { ROUTES, type OffStop, type SheetStop, type SuggestedStop } from "./slot-routes-data";
 
@@ -79,7 +79,24 @@ async function road(a: Pt, b: Pt): Promise<{ path: LngLat[]; metres: number; sec
   if (kept && Date.now() - kept.at < KEEP_MS && kept.road) return kept.road;
   if (!olaEnabled()) return null;
   // Ola allows only so many requests a minute: one more try after a pause
-  const r = (await route(a, b, { shortest: true })) ?? (await sleep(12000), await route(a, b, { shortest: true }));
+  const ask = async (x: Pt, y: Pt) => (await route(x, y, { shortest: true })) ?? (await sleep(12000), await route(x, y, { shortest: true }));
+  let r: { points: Array<[number, number]>; distanceM: number; durationS: number } | null = await ask(a, b);
+  // Ola's alternatives can all miss a short road (a divided highway sends the car up to a U-turn). When the road back
+  // from b is clearly shorter, also try a to b through the middle of that road, and keep the fewer km.
+  if (r) {
+    const backKey = `${b.lat},${b.lng}|${a.lat},${a.lng}`;
+    const keptBack = legKept.get(backKey);
+    const back = keptBack && Date.now() - keptBack.at < KEEP_MS && keptBack.road
+      ? { points: keptBack.road.path.map(([lng, lat]) => [lat, lng] as [number, number]), distanceM: keptBack.road.metres, durationS: keptBack.road.seconds }
+      : await ask(b, a);
+    // the road back is itself the shortest Ola offers that way: keep it for when the round drives b to a
+    if (back && !keptBack) legKept.set(backKey, { at: Date.now(), road: { path: back.points.map(([lat, lng]) => [lng, lat] as LngLat), metres: back.distanceM, seconds: back.durationS } });
+    if (back && back.distanceM < r.distanceM * 0.9 && back.points.length > 2) {
+      const [lat, lng] = back.points[Math.floor(back.points.length / 2)];
+      const via = await routeVia(a, [{ lat, lng }], b).catch(() => null);
+      if (via && via.distanceM < r.distanceM) r = via;
+    }
+  }
   const got = r ? { path: r.points.map(([lat, lng]) => [lng, lat] as LngLat), metres: r.distanceM, seconds: r.durationS } : null;
   legKept.set(k, { at: Date.now(), road: got });
   return got;

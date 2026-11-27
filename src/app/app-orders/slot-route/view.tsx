@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Ruler, Tag } from "lucide-react";
+import { Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Tag } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DispatchMap, type MapLine, type MapPin } from "@/components/shop/DispatchMap";
 import { ROUTE_COLOURS } from "@/components/shop/route-colors";
@@ -63,11 +63,13 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
   const [paths, setPaths] = useState<Record<string, LngLat[][]>>({});
   // the map takes the screen: the list and the km | min labels can be hidden, and the map shown full screen
   const [showList, setShowList] = useState(true);
-  const [showFigures, setShowFigures] = useState(false);
   const [showNames, setShowNames] = useState(true);
-  // a stretch picked in the list: drawn strong, the rest faded; clicking also zooms the map to it
+  // a stretch under the mouse in the list, or one clicked (on the map or in the list): drawn strong, the rest
+  // faded. Only the clicked stretch shows its km and minutes.
   const [hoverLeg, setHoverLeg] = useState<number | null>(null);
-  const [zoomLeg, setZoomLeg] = useState<{ leg: number; n: number } | null>(null);
+  // kept with the option it was picked on, so a new route or option starts with nothing picked
+  const [pickedAt, setPickedAt] = useState<{ k?: string; leg: number } | null>(null);
+  const [zoomAt, setZoomAt] = useState<{ k?: string; leg: number; n: number } | null>(null);
   const [full, setFull] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -99,6 +101,10 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
 
   // the chosen option's roads, once
   const key = option?.key;
+  const picked = pickedAt && pickedAt.k === key ? pickedAt.leg : null;
+  const zoomLeg = zoomAt && zoomAt.k === key ? zoomAt : null;
+  const strong = hoverLeg ?? picked;
+  const setPicked = useCallback((leg: number | null) => setPickedAt(leg == null ? null : { k: key, leg }), [key]);
   const order = round?.order;
   useEffect(() => {
     if (!key || !order || paths[key]) return;
@@ -144,33 +150,41 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
       // the stop wears the colour of the road that reaches it; a late stop gets an orange ring
       out.push({
         id: `s${v.stop}`, lat: st.lat, lng: st.lng, kind: "stop", color: legColour(i), ring: late ? LATE : undefined,
-        mark: String(i + 1), label, popup, dim: hoverLeg != null && hoverLeg !== i && hoverLeg !== i + 1,
+        mark: String(i + 1), label, popup, dim: strong != null && strong !== i && strong !== i + 1,
       });
     });
-    // each stretch's distance and time halfway along its road, in its colour (unless hidden)
-    if (showFigures) round.legs.forEach((l, i) => {
-      const [lng, lat] = halfway(roads[i]);
-      out.push({ id: `l${i}`, lat, lng, kind: "pill", ghost: true, color: legColour(i), label: `${km(l.metres)} · ${min(l.seconds)}`, dim: hoverLeg != null && hoverLeg !== i });
-    });
+    // the clicked stretch's distance and time, halfway along its road, in its colour
+    if (picked != null && round.legs[picked] && roads[picked]) {
+      const l = round.legs[picked];
+      const [lng, lat] = halfway(roads[picked]);
+      out.push({ id: "leg-figures", lat, lng, kind: "pill", ghost: true, top: true, color: legColour(picked), label: `${km(l.metres)} · ${min(l.seconds)}` });
+    }
     return out;
-  }, [plan, round, option, roads, at, showFigures, showNames, hoverLeg]);
+  }, [plan, round, option, roads, at, showNames, strong, picked]);
 
   // every stretch from one stop to the next in its own colour; the drive back dashed. A picked stretch is drawn on
   // top and wider, the others fade.
   const lines: MapLine[] = useMemo(() => {
     const all = roads.map((p, i) => ({
       id: `road${i}`, paths: [p], color: legColour(i), dashed: i === roads.length - 1,
-      width: hoverLeg === i ? 9 : 6, opacity: hoverLeg == null || hoverLeg === i ? 1 : 0.22,
+      width: strong === i ? 9 : 6, opacity: strong == null || strong === i ? 1 : 0.22,
     }));
-    return hoverLeg == null ? all : [...all.filter((_, i) => i !== hoverLeg), ...all.filter((_, i) => i === hoverLeg)];
-  }, [roads, hoverLeg]);
+    return strong == null ? all : [...all.filter((_, i) => i !== strong), ...all.filter((_, i) => i === strong)];
+  }, [roads, strong]);
   const focus = useMemo(() => {
     if (!plan) return null;
     if (zoomLeg && roads[zoomLeg.leg]) return { key: `${plan.id}:${zoomLeg.leg}:${zoomLeg.n}`, points: roads[zoomLeg.leg] };
     return { key: plan.id, points: plan.stops.map((s) => [s.lng, s.lat] as LngLat) };
   }, [plan, zoomLeg, roads]);
-  const zoomTo = (leg: number) => setZoomLeg((z) => ({ leg, n: (z?.n ?? 0) + 1 }));
-  const showAll = () => setZoomLeg(null);
+  const zoomTo = (leg: number) => { setPicked(leg); setZoomAt((z) => ({ k: key, leg, n: (z?.n ?? 0) + 1 })); };
+  const showAll = () => { setZoomAt(null); setPicked(null); };
+  // on the map: a road picks its stretch, a stop the stretch that reaches it, empty map clears
+  const onLine = useCallback((lid: string | null) => setPicked(lid?.startsWith("road") ? Number(lid.slice(4)) : null), [setPicked]);
+  const onPin = useCallback((pid: string) => {
+    if (!round) return;
+    const i = round.visits.findIndex((v) => `s${v.stop}` === pid);
+    if (i >= 0) setPicked(i);
+  }, [round, setPicked]);
 
   return (
     <div className="flex flex-1 flex-col gap-2 p-3 md:p-4">
@@ -205,15 +219,12 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
         )}
       >
         <div className={cn("relative min-h-0", showList ? "h-[70vh] lg:h-full" : "h-full")}>
-          <DispatchMap lines={lines} pins={pins} focus={focus} clear />
+          <DispatchMap lines={lines} pins={pins} focus={focus} onLine={onLine} onPin={onPin} clear />
           <div className="absolute bottom-3 left-3 z-10 flex flex-wrap gap-1.5">
             <Button variant="outline" size="sm" className="bg-background/95" onClick={() => setShowNames((v) => !v)} aria-pressed={showNames}>
               <Tag /> {showNames ? "Hide names" : "Show names"}
             </Button>
-            <Button variant="outline" size="sm" className="bg-background/95" onClick={() => setShowFigures((v) => !v)} aria-pressed={showFigures}>
-              <Ruler /> {showFigures ? "Hide km" : "Show km"}
-            </Button>
-            {zoomLeg ? (
+            {zoomLeg || picked != null ? (
               <Button variant="outline" size="sm" className="bg-background/95" onClick={showAll}>Whole route</Button>
             ) : null}
             <Button variant="outline" size="sm" className="bg-background/95" onClick={() => setShowList((v) => !v)}>
