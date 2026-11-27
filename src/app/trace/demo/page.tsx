@@ -35,17 +35,25 @@ export default async function ScanDemoPage() {
       <section className="gt-hero">
         <p className="gt-eyebrow">Batch check on Stellar</p>
         <h1 className="gt-title">Scan the back of the pack</h1>
-        <p className="gd-lead">Point your phone camera at the QR. It opens this exact batch, read from the blockchain.</p>
+        <p className="gd-lead">Find the small QR on the back of the pouch and point your phone camera at it. It opens this exact batch, read from the blockchain.</p>
       </section>
 
       <div className="gd-stage">
-        <figure className="gd-back" aria-label="Back of the pack with the batch QR">
+        <figure className="gd-back" aria-label="Back of the pack with the batch QR printed in its corner">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/trace/toned-milk-500.png" alt="" className="gd-pouch" />
+          {/* the printed back label of the pouch; the QR sits small in its corner, as on a real pack */}
           <div className="gd-label">
-            <div className="gd-qr" dangerouslySetInnerHTML={{ __html: qr }} />
-            <p className="gd-scan">Scan to check this batch</p>
-            <p className="gd-batch">{BATCH}</p>
+            <p className="gd-l-name">Toned Milk</p>
+            <p className="gd-l-sub">Pasteurised · Homogenised</p>
+            <dl className="gd-l-rows">
+              <div><dt>Net qty</dt><dd>500 ml</dd></div>
+              <div><dt>Batch no.</dt><dd>{BATCH}</dd></div>
+            </dl>
+            <div className="gd-l-foot">
+              <p className="gd-l-hint">Scan to trace this pack from source to shelf</p>
+              <div className="gd-qr" dangerouslySetInnerHTML={{ __html: qr }} />
+            </div>
           </div>
         </figure>
 
