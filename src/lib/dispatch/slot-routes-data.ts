@@ -10,14 +10,16 @@ export interface SheetRoute { id: string; name: string; stops: SheetStop[]; off:
   /** times on hold: the planned route ignores the windows (fewest km, delivered on arrival) */
   timesOnHold?: boolean;
   /** the last stops of the route in this order (names), set by hand */
-  plannedLast?: string[] }
+  plannedLast?: string[];
+  /** where the round starts and ends, when not the Tumgaon depot (the city office) */
+  depot?: SheetStop }
 
 export const ROUTES: SheetRoute[] = [
   {
     id: "raipur-1", name: "Raipur 1", window: 45, timesOnHold: true,
     // after Purani Basti: Shankar Nagar and Devendra Nagar together (whichever order is shorter), then the curve
-    // Transport Nagar, Sarora, Siltara, Mova, Ashokaratan, Mahaveer Nagar, Mandir Hasaud
-    plannedLast: ["Ganga Prashad Enterprise", "Amit Kirana Stores", "Godavari Power and Ispat Limited", "The Lunchbox", "Tao Hospitality Private Limited", "Goyal Ventures", "Chahna Palace"],
+    // Transport Nagar, Sarora, Siltara, Mova, Mahaveer Nagar, Mandir Hasaud (Ashokaratan moved to the office route)
+    plannedLast: ["Ganga Prashad Enterprise", "Amit Kirana Stores", "Godavari Power and Ispat Limited", "The Lunchbox", "Goyal Ventures", "Chahna Palace"],
     // set by hand: Telibandha after Mangeto, Santoshi Nagar after Pachpedi, then Raipura, Amanaka, Railway Station, Purani Basti; the Devendra Nagar side by fewest km (times on hold)
     planned: [
       "Deepak Kumar Sharma",
@@ -52,14 +54,13 @@ export const ROUTES: SheetRoute[] = [
       { name: "The Lunchbox", area: "Mova", phone: "9300501025", segment: "Institution", slot: "7:45", open: 465, close: 465, hold: 5, lat: 21.2726683, lng: 81.673286 },
       { name: "Chahna Palace", area: "RingRoad Mandir Hasaud", phone: "8305557216", segment: "Institution", slot: "8:10", open: 490, close: 490, hold: 5, lat: 21.2687864, lng: 81.7344626 },
       { name: "Goyal Ventures", area: "Mahaveer Nagar", phone: "7879942837", segment: "Institution", slot: "10:00", open: 600, close: 600, hold: 5, lat: 21.2311085, lng: 81.6640088 },
-      { name: "Tao Hospitality Private Limited", area: "Ashokaratan", phone: "9545663883", segment: "Institution", slot: "11:00", open: 660, close: 660, hold: 5, lat: 21.2593406, lng: 81.6756016 },
     ],
     off: [
-      { name: "United Foodbrands Limited", area: "", phone: "8349701202", why: "Delivered by the city office" },
+      { name: "United Foodbrands Limited", area: "", phone: "8349701202", why: "On the Raipur Office route" },
       { name: "Dawoodi Bohra Jamaat Trust", area: "", phone: "9752811120", why: "Delivered by the city office" },
       { name: "M S Hospitality", area: "", phone: "9301552442", why: "Delivered by the city office" },
-      { name: "BS Hospitality Service Pind Balluchi Restaurant", area: "", phone: "8839165149", why: "Delivered by the city office" },
-      { name: "Sukh Sagar Restaurants", area: "", phone: "9425204192", why: "Delivered by the city office" },
+      { name: "BS Hospitality Service Pind Balluchi Restaurant", area: "", phone: "8839165149", why: "On the Raipur Office route" },
+      { name: "Sukh Sagar Restaurants", area: "", phone: "9425204192", why: "On the Raipur Office route" },
     ],
     suggested: [
       { name: "Deepak Kumar Sharma", time: "03:00" },
@@ -79,9 +80,24 @@ export const ROUTES: SheetRoute[] = [
       { name: "Godavari Power and Ispat Limited", time: "07:50" },
       { name: "The Lunchbox", time: "08:31" },
       { name: "Chahna Palace", time: "08:55" },
-      { name: "Tao Hospitality Private Limited", time: "10:00" },
       { name: "Goyal Ventures", time: "10:27" },
     ],
+  },
+  {
+    // the city office's own round (from the handwritten delivery timings): leaves the Gaia office in Pandri and comes
+    // back to it. Pins from the customer master's GPS tags; the two Instamart stores were tagged at our office, so
+    // they sit at the centre of their area (Devendra Nagar, Saraswati Nagar) until they are tagged on site.
+    id: "raipur-office", name: "Raipur Office",
+    depot: { name: "Gaia Fresh Raipur office", area: "Pandri", phone: "9201593537", segment: "", slot: "", open: null, close: null, hold: 0, lat: 21.2558427, lng: 81.6459396 },
+    stops: [
+      { name: "Swinsta Ent Pvt Ltd - Devendra Nagar", area: "Instamart Devendra Nagar", phone: "8319800125", segment: "MFS", slot: "9:00", open: 540, close: 540, hold: 5, lat: 21.2581472, lng: 81.6467162 },
+      { name: "Sukh Sagar Restaurants", area: "Sukh Sagar, Phool Chowk", phone: "9425204192", segment: "IT", slot: "9:30", open: 570, close: 570, hold: 5, lat: 21.2424744, lng: 81.633224 },
+      { name: "Swinsta Ent Pvt Ltd - Saraswati Nagar", area: "Instamart Saraswati Nagar", phone: "8092841606", segment: "MFS", slot: "10:15", open: 615, close: 615, hold: 5, lat: 21.2543944, lng: 81.6012647 },
+      { name: "United Foodbrands Limited", area: "Magneto Mall (Barbeque Nation)", phone: "8349701202", segment: "IT", slot: "11:10", open: 670, close: 670, hold: 5, lat: 21.2401402, lng: 81.6840505 },
+      { name: "BS Hospitality Service Pind Balluchi Restaurant", area: "Pind Balluchi, VIP Road", phone: "8839165149", segment: "IT", slot: "11:30", open: 690, close: 690, hold: 5, lat: 21.2288868, lng: 81.6825578 },
+      { name: "Tao Hospitality Private Limited", area: "Ashokaratan (proposed)", phone: "9545663883", segment: "Institution", slot: "11:50", open: 710, close: 710, hold: 5, lat: 21.2593406, lng: 81.6756016 },
+    ],
+    off: [],
   },
   {
     id: "raipur-2", name: "Raipur 2", window: 30,
@@ -165,9 +181,9 @@ export const ROUTES: SheetRoute[] = [
     ],
     off: [
       { name: "SKM-Amlidih", area: "Amlidih", phone: null, why: "No location in the sheet" },
-      { name: "Swinsta Ent Pvt Ltd - Saraswati nagar", area: "Saraswati nagar", phone: "8092841606", why: "No location in the sheet" },
+      { name: "Swinsta Ent Pvt Ltd - Saraswati nagar", area: "Saraswati nagar", phone: "8092841606", why: "On the Raipur Office route" },
       { name: "Swinsta Ent Pvt Ltd - Professor Colony", area: "Professor Colony", phone: "6267168375", why: "No location in the sheet" },
-      { name: "Swinsta Ent Pvt Ltd - Devendra Nagar", area: "Devendra Nagar", phone: "8319800125", why: "No location in the sheet" },
+      { name: "Swinsta Ent Pvt Ltd - Devendra Nagar", area: "Devendra Nagar", phone: "8319800125", why: "On the Raipur Office route" },
       { name: "Swinsta Ent Pvt Ltd - Purnea", area: "Purnea", phone: "6260500084", why: "No location in the sheet" },
       { name: "Gaia Fresh Foods ( Mobile App)", area: "", phone: null, why: "No location in the sheet" },
     ],

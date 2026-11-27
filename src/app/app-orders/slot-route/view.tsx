@@ -189,7 +189,7 @@ export function SlotRouteView({ tabs, id }: { tabs: RouteTab[]; id: string }) {
   return (
     <div className="flex flex-1 flex-col gap-2 p-3 md:p-4">
       <nav className="flex flex-wrap items-center gap-1.5">
-        <h1 className="mr-2 text-base font-semibold" title="Every route of the route sheet, from Tumgaon depot and back. No customer takes a delivery before their given time: a vehicle there sooner waits and stays the hold time. Distances and driving times are Ola Maps' road figures.">
+        <h1 className="mr-2 text-base font-semibold" title="Every route of the route sheet, from its start (Tumgaon depot, or the city office) and back. No customer takes a delivery before their given time: a vehicle there sooner waits and stays the hold time. Distances and driving times are Ola Maps' road figures.">
           Delivery routes
         </h1>
         {tabs.map((t) => (

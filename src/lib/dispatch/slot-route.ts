@@ -582,7 +582,7 @@ export async function slotRoutePlan(id: string): Promise<SlotRoutePlan | null> {
   if (!sheet) return null;
   const kept = planKept.get(id);
   if (kept && Date.now() - kept.at < KEEP_MS) return kept.plan;
-  const stops = [DEPOT, ...sheet.stops];
+  const stops = [sheet.depot ?? DEPOT, ...sheet.stops];
   const m = await roadMatrix(id, stops);
   const roadOk = !!m;
   // without Ola: straight line x 1.3 at 30 km/h, so the page still says something
@@ -601,7 +601,7 @@ export async function slotRoutePlan(id: string): Promise<SlotRoutePlan | null> {
 export async function slotRoutePaths(id: string, order: number[]): Promise<LngLat[][] | null> {
   const sheet = ROUTES.find((r) => r.id === id);
   if (!sheet) return null;
-  const stops = [DEPOT, ...sheet.stops];
+  const stops = [sheet.depot ?? DEPOT, ...sheet.stops];
   // only a full round of this route's stops
   if (order[0] !== 0 || order.length !== stops.length || new Set(order).size !== stops.length || order.some((s) => !Number.isInteger(s) || s < 0 || s >= stops.length)) return null;
   const path = [...order, 0];
