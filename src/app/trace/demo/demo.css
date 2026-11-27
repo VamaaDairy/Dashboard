@@ -1,90 +1,80 @@
-/* /trace/demo: one pack, back (QR small, in the label corner) and front. Gaia tokens come from ../trace.css. */
+/* /trace/demo: the back of one milk pouch, drawn as printed, with the batch QR small in its corner.
+   Gaia tokens come from ../trace.css; the band blue is sampled from the real pouch photo. */
 
 .gd-page { max-width: 760px; }
-
 .gd-lead { margin: 8px auto 0; max-width: 420px; color: var(--gt-title); font-weight: 500; }
 
-.gd-stage {
+.gd-pack {
+  --band: #006fae;
+  --band-dark: #00457e;
+  --ink: #0b3a66;
+  container-type: inline-size;
   position: relative;
-  margin: 8px auto 0;
-  max-width: 640px;
+  width: min(100%, 440px);
+  margin: 18px auto 0;
+  filter: drop-shadow(0 22px 26px rgba(11, 58, 102, 0.22));
 }
 
-/* the pouch with a printed label carrying the QR over its middle */
-.gd-back {
-  position: relative;
-  margin: 0;
-  aspect-ratio: 1 / 1;
-  border-radius: 28px;
-  overflow: hidden;
-  background: #e9e9e9;
-  box-shadow: 0 18px 40px rgba(47, 57, 146, 0.18);
+/* the crimped heat seals at both ends */
+.gd-seal {
+  height: 6cqw;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.55) 0 1.2cqw, rgba(0, 0, 0, 0.06) 1.2cqw 2.4cqw),
+    #e8edf2;
+  border-radius: 2cqw 2cqw 0 0;
 }
-/* the back of the pouch: its printed label sits on the upper white panel; the blue band stays visible */
-.gd-back { container-type: inline-size; }
-.gd-pouch { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gd-seal:last-child { background-color: var(--band-dark); border-radius: 0 0 2cqw 2cqw; }
 
-.gd-label {
-  position: absolute;
-  left: 26%;
-  right: 26%;
-  top: 20%;
-  bottom: 41%;
-  background: #ffffff;
-  border-radius: 1.6cqw;
-  padding: 2.2cqw 2.6cqw;
+.gd-face {
+  position: relative;
+  aspect-ratio: 1 / 0.92;
   display: flex;
   flex-direction: column;
-  color: var(--gt-navy);
-  font-size: 1.9cqw;
-  line-height: 1.25;
-}
-.gd-l-name { margin: 0; font-weight: 800; font-size: 3.4cqw; line-height: 1.05; }
-.gd-l-sub { margin: 0.2cqw 0 0; font-size: 1.7cqw; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gt-muted); }
-.gd-l-rows { margin: 1.2cqw 0 0; border-top: 1px solid var(--gt-rule); }
-.gd-l-rows div { display: flex; justify-content: space-between; gap: 2cqw; padding: 0.5cqw 0; border-bottom: 1px solid var(--gt-rule); }
-.gd-l-rows dt { font-weight: 700; }
-.gd-l-rows dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
-
-/* the QR: small, in the label's bottom-right corner */
-.gd-l-foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 3cqw; }
-.gd-l-hint { margin: 0; font-weight: 700; font-size: 1.9cqw; max-width: 20cqw; }
-.gd-qr {
-  flex: none;
-  width: 13cqw;
-  aspect-ratio: 1 / 1;
-  padding: 0.5cqw;
   background: #ffffff;
-  border-radius: 0.8cqw;
-  animation: gd-pulse 2.4s ease-in-out infinite;
-}
-.gd-qr svg { width: 100%; height: 100%; display: block; }
-
-@keyframes gd-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 57, 146, 0.45); }
-  50% { box-shadow: 0 0 0 1.2cqw rgba(47, 57, 146, 0); }
-}
-@media (prefers-reduced-motion: reduce) { .gd-qr { animation: none; } }
-
-/* the front, tucked over a corner */
-.gd-front {
-  position: absolute;
-  right: -10px;
-  bottom: -26px;
-  width: 30%;
-  margin: 0;
-  border-radius: 18px;
   overflow: hidden;
-  background: #e9e9e9;
-  border: 4px solid var(--gt-cream);
-  box-shadow: 0 10px 24px rgba(47, 57, 146, 0.2);
-  transform: rotate(6deg);
 }
-.gd-front img { width: 100%; display: block; }
-.gd-front figcaption {
-  position: absolute; left: 0; right: 0; bottom: 4px;
-  text-align: center; font-size: 12px; font-weight: 700; color: var(--gt-navy);
+/* plastic sheen */
+.gd-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.35) 44%, transparent 58%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.06), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.06));
 }
+
+.gd-upper { flex: 1; padding: 6cqw 7cqw 3cqw; color: var(--ink); }
+.gd-brand { display: flex; align-items: center; gap: 3.5cqw; }
+.gd-brand img { width: 15cqw; height: auto; }
+.gd-name { margin: 0; font-weight: 800; font-size: 6.4cqw; line-height: 1; color: var(--band); }
+.gd-sub { margin: 1cqw 0 0; font-size: 2.6cqw; letter-spacing: 0.1em; text-transform: uppercase; }
+
+.gd-nutri { width: 100%; margin-top: 4.5cqw; border-collapse: collapse; font-size: 3cqw; }
+.gd-nutri caption { text-align: left; font-weight: 700; padding-bottom: 1cqw; border-bottom: 0.5cqw solid var(--ink); }
+.gd-nutri th, .gd-nutri td { padding: 0.9cqw 0; border-bottom: 1px solid rgba(11, 58, 102, 0.25); }
+.gd-nutri th { text-align: left; font-weight: 500; }
+.gd-nutri td { text-align: right; font-weight: 700; }
+.gd-small { margin: 2.5cqw 0 0; font-size: 2.4cqw; }
+
+.gd-band {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4cqw;
+  padding: 4cqw 7cqw 4.5cqw;
+  background: linear-gradient(180deg, var(--band), var(--band-dark));
+  color: #ffffff;
+}
+.gd-codes { margin: 0; font-size: 2.6cqw; line-height: 1.35; }
+.gd-codes div { display: flex; gap: 1.5cqw; }
+.gd-codes dt { opacity: 0.8; }
+.gd-codes dd { margin: 0; font-weight: 700; letter-spacing: 0.03em; }
+
+/* the QR: small, printed in the band's corner */
+.gd-qrbox { flex: none; background: #ffffff; border-radius: 1.2cqw; padding: 1.2cqw 1.2cqw 0.6cqw; text-align: center; }
+.gd-qr { width: 15cqw; aspect-ratio: 1 / 1; }
+.gd-qr svg { width: 100%; height: 100%; display: block; }
+.gd-qrbox p { margin: 0.6cqw 0 0; font-size: 1.9cqw; font-weight: 700; color: var(--ink); }
 
 .gd-page .gd-open {
   display: block;
@@ -126,5 +116,4 @@
 
 @media (max-width: 480px) {
   .gd-steps { grid-template-columns: repeat(2, 1fr); }
-  .gd-front { right: -4px; }
 }
