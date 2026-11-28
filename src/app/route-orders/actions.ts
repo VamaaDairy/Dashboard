@@ -23,10 +23,9 @@ export async function issueBillsAction(form: FormData) {
   const params = { date };
   const me = await editor("routeorders.billing");
   if (!me) return back("/route-orders/billing", { ...params, error: DENIED });
-  const voucherDate = validDate(text(form, "voucherDate") ?? date);
   const startNo = Number(text(form, "startNo"));
   if (!Number.isInteger(startNo) || startNo < 1) return back("/route-orders/billing", { ...params, error: "Give the first bill number." });
-  const r = await issueBills(date, voucherDate, startNo, me.name || me.email);
+  const r = await issueBills(date, startNo, me.name || me.email);
   revalidatePath("/route-orders", "layout");
   return back("/route-orders/billing", r.ok ? { ...params, msg: `Made ${r.count} bills: ${r.first} to ${r.last}. Download the Tally file below.` } : { ...params, error: r.error });
 }

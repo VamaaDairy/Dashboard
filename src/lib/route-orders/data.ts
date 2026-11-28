@@ -129,8 +129,9 @@ export interface BillingDay {
 }
 
 /** What the day's orders come to: bills ready to make, bills held up by the masters, and the orders left out. */
+/** A day's bills: the orders placed that day (by order date, not delivery date); each bill is dated that day. */
 export async function billingDay(date: string): Promise<BillingDay> {
-  const lines = await dayLines(date);
+  const lines = await dayLines(date, "order");
   const uniq = (ls: DayLine[]) => new Set(ls.map((l) => l.orderUid)).size;
   const open = lines.filter((l) => !l.voucherNo);
   const drafts = buildDrafts(open.filter((l) => l.ours && l.status.toLowerCase() === "confirmed"));
@@ -179,7 +180,9 @@ export type IssueResult = { ok: true; count: number; first: string; last: string
  * Makes the ready bills for [date], numbered from [startNo], and marks their orders invoiced. Every line is on Primary
  * Batch for now - no batch numbers and no stock taken from the stock app (allocateBatches in calc.ts, for later).
  */
-export async function issueBills(date: string, voucherDate: string, startNo: number, who: string): Promise<IssueResult> {
+export async function issueBills(date: string, startNo: number, who: string): Promise<IssueResult> {
+  // a bill is dated the day its orders were placed
+  const voucherDate = date;
   const fy = fyOf(voucherDate);
   return tx(async (c): Promise<IssueResult> => {
     await c.query(`select pg_advisory_xact_lock(hashtext('route_order_bill'))`);
