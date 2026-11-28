@@ -106,7 +106,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </Panel>
         ) : null}
 
-        <Panel title="Ready to make" description={`${day.ready.length} bill${day.ready.length === 1 ? "" : "s"}. Rates are the ones on the orders. Batches are given when the bills are made.`} flush>
+        <Panel title="Ready to make" description={`${day.ready.length} bill${day.ready.length === 1 ? "" : "s"}. Rates are the ones on the orders. Every line goes on Primary Batch for now.`} flush>
           {day.ready.length ? (
             <>
               <ul className="divide-y divide-border text-sm">

@@ -1,7 +1,6 @@
 import "server-only";
 import { one, query, tx } from "@/lib/db";
-import { allocateBatches, balanced, buildDrafts, type Bill, type BillInputLine, type BillParty, type BillProduct, type DraftBill } from "./calc";
-import { stockBatches } from "./stock";
+import { balanced, buildDrafts, onPrimaryBatch, type Bill, type BillInputLine, type BillParty, type BillProduct, type DraftBill } from "./calc";
 
 export const CHANNELS = ["GT", "MFS", "Institutional", "ATP", "Bulk", "Online", "Other"] as const;
 
@@ -164,25 +163,13 @@ export async function nextVoucherNo(voucherDate: string): Promise<number> {
   return r?.next_no ?? 1;
 }
 
-/** Takes off the stock this day's live bills already have: the stock app doesn't know about them. */
-async function batchPool(date: string) {
-  const pool = await stockBatches();
-  if (!pool) return null;
-  const used = await query<{ data: Bill }>(`select data from route_order_bill where order_date = $1 and status = 'issued'`, [date]);
-  for (const { data } of used) {
-    for (const l of data.lines) {
-      const b = l.stockId ? pool.get(l.stockId)?.find((x) => x.no === l.batch) : null;
-      if (b) b.pieces -= l.pieces;
-    }
-  }
-  return pool;
-}
-
 export type IssueResult = { ok: true; count: number; first: string; last: string } | { ok: false; error: string };
 
-/** Makes the ready bills for [date], numbered from [startNo], each with its batches, and marks their orders invoiced. */
+/**
+ * Makes the ready bills for [date], numbered from [startNo], and marks their orders invoiced. Every line is on Primary
+ * Batch for now - no batch numbers and no stock taken from the stock app (allocateBatches in calc.ts, for later).
+ */
 export async function issueBills(date: string, voucherDate: string, startNo: number, who: string): Promise<IssueResult> {
-  const pool = await batchPool(date);
   const fy = fyOf(voucherDate);
   return tx(async (c): Promise<IssueResult> => {
     await c.query(`select pg_advisory_xact_lock(hashtext('route_order_bill'))`);
@@ -191,7 +178,7 @@ export async function issueBills(date: string, voucherDate: string, startNo: num
     let no = startNo;
     let first = "", last = "";
     for (const draft of ready) {
-      const b = allocateBatches(draft, pool, voucherDate);
+      const b = onPrimaryBatch(draft, voucherDate);
       if (!balanced(b)) return { ok: false, error: `${b.partyName}: the bill doesn't balance, nothing was made.` };
       const voucherNo = `VD/${fy}/${no}`;
       const bill: Bill = { ...b, voucherNo, voucherDate };
