@@ -10,7 +10,7 @@ export function CustomerTabs({ on, counts, duplicates, showD2c = true }: { on: C
   return (
     <nav className="flex flex-wrap gap-1.5">
       {CUSTOMER_KINDS.filter((k) => showD2c || k.key !== "d2c").map((k) => (
-        <Link key={k.key} href={`/customers/${k.key}`} className={tab(on === k.key)}>
+        <Link key={k.key} href={k.key === "d2c" ? "/d2c/customers" : `/customers/${k.key}`} className={tab(on === k.key)}>
           {k.label} <span className="num opacity-70">{counts[k.key].toLocaleString("en-IN")}</span>
         </Link>
       ))}
