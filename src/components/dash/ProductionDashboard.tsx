@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ProductLabel } from "@/lib/products/names";
 import { ProductCell, QtyUnit } from "@/components/products/Product";
 import Link from "next/link";
-import { ArrowRight, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { GAIA, MatrixHeatmap, StackedBars, shortDate } from "@/components/farmers/charts";
 import { COST, headColor, headLabel, tint } from "@/lib/costing/colors";
 import { Panel, PeriodBar, dayList } from "@/components/dash/Dash";
@@ -29,17 +29,14 @@ function ThS({ children, code }: { children: React.ReactNode; code: string }) {
   return <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-tertiary-foreground" style={{ background: tint(c, 0.12), borderTop: `3px solid ${c}` }}>{children}</th>;
 }
 
-export function ProductionDashboard({ from, to, today, costing, tankIn }: {
-  from: string; to: string; today: string; costing: Costing; tankIn: number;
+export function ProductionDashboard({ from, to, today, costing }: {
+  from: string; to: string; today: string; costing: Costing;
 }) {
   const { days, batches, skus, heads } = costing;
   const dates = dayList(from, to);
   const milk = days.reduce((t, d) => t + d.milk_litre, 0);
-  const outKg = batches.filter((b) => b.unit === "kg").reduce((t, b) => t + (b.output ?? 0), 0);
-  const outL = batches.filter((b) => b.unit === "L").reduce((t, b) => t + (b.output ?? 0), 0);
   const packedKg = skus.filter((s) => s.bulk_unit === "kg").reduce((t, s) => t + s.bulk_qty, 0);
   const packedL = skus.filter((s) => s.bulk_unit === "L").reduce((t, s) => t + s.bulk_qty, 0);
-  const skuCount = new Set(skus.map((s) => s.sku_id)).size;
 
   // products over the period, shared costs head by head
   const products = new Map<string, { name: string; unit: string; batches: number; milk: number; output: number; milkCost: number; ing: number; oh: number; byHead: Record<string, number>; total: number; cells: Record<string, number> }>();
@@ -76,21 +73,6 @@ export function ProductionDashboard({ from, to, today, costing, tankIn }: {
   return (
     <div className="space-y-5">
       <PeriodBar from={from} to={to} today={today} />
-
-      {/* ---- the chain: up to the bulk batch, then into SKUs */}
-      <section className="rounded-lg border border-border bg-card p-4 shadow-xs">
-        <h3 className="text-[13px] font-semibold text-foreground">From milk to SKUs</h3>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">Up to the bulk batch it&apos;s litres and kg; after that every SKU is counted in its own unit - see &quot;What each SKU produced&quot; below.</p>
-        <div className="mt-4 grid items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
-          <Step label="Milk into tanks" value={formatNumber(tankIn, 0)} unit="L" note="farmers + tankers" />
-          <Arrow note={tankIn ? `${formatNumber((milk / tankIn) * 100, 0)}% used` : ""} />
-          <Step label="Milk into bulk batches" value={formatNumber(milk, 0)} unit="L" note={`${batches.length} batches · ${products.size} products`} />
-          <Arrow note="made into" />
-          <Step label="Bulk output (yield)" value={formatNumber(outKg, 0)} unit="kg" note={`+ ${formatNumber(outL, 0)} L of milk, lassi, chaach`} />
-          <Arrow note={outKg + outL ? `${formatNumber((packed / (outKg + outL)) * 100, 1)}% packed` : ""} />
-          <Step label="Packed into SKUs" value={String(skuCount)} unit="SKUs" strong note={`${formatNumber(packedKg, 0)} kg + ${formatNumber(packedL, 0)} L of product`} />
-        </div>
-      </section>
 
       {/* ---- where every cost is put */}
       <Panel title="Where every cost is put"
@@ -262,33 +244,6 @@ function SkuOutput({ costing, dates }: { costing: Costing; dates: string[] }) {
   );
 }
 
-function Step({ label, value, unit, note, strong }: { label: string; value: string; unit: string; note?: string; strong?: boolean }) {
-  return (
-    <div className={`rounded-lg px-4 py-3 ${strong ? "bg-foreground text-background" : "bg-muted/60"}`}>
-      <div className={`text-[11px] font-medium ${strong ? "text-background/70" : "text-muted-foreground"}`}>{label}</div>
-      <div className="mt-1 flex items-baseline gap-1">
-        <span className="num text-[22px] font-bold">{value}</span>
-        <span className={`text-[12px] ${strong ? "text-background/70" : "text-muted-foreground"}`}>{unit}</span>
-      </div>
-      {note ? <div className={`mt-0.5 text-[11px] ${strong ? "text-background/70" : "text-muted-foreground"}`}>{note}</div> : null}
-    </div>
-  );
-}
-
-function Arrow({ note }: { note: string }) {
-  return (
-    <div className="flex items-center justify-center gap-1 text-muted-foreground md:flex-col">
-      <ArrowRight className="h-4 w-4 rotate-90 md:rotate-0" />
-      <span className="text-[10px] font-semibold">{note}</span>
-    </div>
-  );
-}
-
-/**
- * Every SKU's cost after packing: the bulk product in it (at its batch's cost,
- * shared costs already inside), each item of its own packing list, and its
- * share of delivery fuel - per piece, per crate / box, or per kg / litre.
- */
 function SkuCostTable({ costing }: { costing: Costing }) {
   const [basis, setBasis] = useState<"pc" | "case" | "unit">("pc");
   const [category, setCategory] = useState("All");
