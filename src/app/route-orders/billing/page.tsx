@@ -68,10 +68,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   return (
     <div className="flex flex-1 flex-col bg-background p-4 md:p-6">
       <div className="w-full space-y-5">
-        <PageHeader icon={ReceiptText} title="Billing" subtitle="Make the day's sales bills from confirmed orders and download them for Tally." />
+        <PageHeader icon={ReceiptText} title="Billing" subtitle="Make the sales bills for a day's confirmed orders (by order date, each bill dated that day) and download them for Tally." />
         <form action="/route-orders/billing" className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">Delivery date</span>
-          <input key={date} type="date" name="date" defaultValue={date} aria-label="Delivery date" className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
+          <span className="text-xs font-semibold text-muted-foreground">Order date</span>
+          <input key={date} type="date" name="date" defaultValue={date} aria-label="Order date" className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
           <button className="h-9 rounded-lg border border-border px-3 text-sm hover:bg-muted">Show</button>
         </form>
 
@@ -133,9 +133,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               {canEdit ? (
                 <form action={issueBillsAction} className="flex flex-wrap items-end gap-3 border-t border-border px-4 py-3">
                   <input type="hidden" name="date" value={date} />
-                  <label className="text-xs font-medium">Bill date
-                    <input type="date" name="voucherDate" defaultValue={date} className="mt-1 block h-9 rounded-lg border border-input bg-background px-3 text-sm font-normal" />
-                  </label>
+                  <p className="self-center text-xs text-muted-foreground">Bills are dated {date}, the order date.</p>
                   <label className="text-xs font-medium">First bill number
                     <input type="number" name="startNo" min={1} defaultValue={next} required className="mt-1 block h-9 w-32 rounded-lg border border-input bg-background px-3 text-sm font-normal" />
                   </label>
