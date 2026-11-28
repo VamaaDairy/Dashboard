@@ -34,7 +34,7 @@ export async function tallyInvoicesFor(orderUid: string): Promise<TallyInvoice[]
     `select b.order_id, b.booking_time, b.status,
             (select row_to_json(x) from (select ${FIRM} from fp_firm f where f.uid = b.from_firm_uid) x) as buyer,
             (select row_to_json(x) from (select ${FIRM} from fp_firm f where f.uid = coalesce(b.to_firm_uid,
-               (select s.uid from fp_firm s join fp_channel c on c.uid = s.channel_uid where c.channel_code = 'CO' order by s.created_at limit 1))) x) as seller
+               (select s.uid from fp_firm s join fp_channel c on c.uid = s.channel_uid where c.channel_code in ('CMP', 'CO') or coalesce(c.level, 9) <= 1 order by s.created_at limit 1))) x) as seller
      from fp_booking_order b where b.uid = $1`,
     [orderUid],
   );

@@ -192,7 +192,7 @@ export async function tallyCheck(): Promise<TallyCheck> {
       `select f.name, ch.channel, f.firm_code as code
          from fp_firm f left join fp_channel ch on ch.uid = f.channel_uid
         where f.active = 1 and coalesce(trim(f.tally_name), '') = ''
-          and coalesce(ch.channel_code, '') not in ('RT', 'CO')
+          and coalesce(ch.channel_code, '') not in ('RT', 'CMP', 'CO') and coalesce(ch.level, 9) > 1
           and exists (select 1 from fp_booking_order b where b.from_firm_uid = f.uid and b.booking_time > now() - interval '90 days')
         order by ch.channel, f.name`,
     ),
