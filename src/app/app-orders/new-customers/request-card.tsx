@@ -20,7 +20,8 @@ export function RequestCard({ r, choices, canEdit }: { r: FirmRequest; choices: 
   const [code, setCode] = useState(guess ? codes[guess] ?? "" : "");
   const [codeTyped, setCodeTyped] = useState(false);
   const [channel, setChannel] = useState(guess);
-  const [parent, setParent] = useState("");
+  // a retailer: the distributor it picked at sign-up (or the officer picked), which the office can change
+  const [parent, setParent] = useState(r.parentUid ?? "");
   const [beat, setBeat] = useState("");
   const [contact, setContact] = useState(r.staffUid ?? "");
   const [firmClass, setFirmClass] = useState("");
@@ -81,7 +82,7 @@ export function RequestCard({ r, choices, canEdit }: { r: FirmRequest; choices: 
               <select value={channel} onChange={(e) => { setChannel(e.target.value); if (!codeTyped) setCode(codes[e.target.value] ?? ""); }} className={box}><option value="">Choose…</option>{channels.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
             </label>
             <label className="text-[12px] text-muted-foreground">Customer code<input value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setCodeTyped(true); }} className={cn(box, "px-3 font-mono uppercase")} placeholder="Unique code" /></label>
-            <label className="text-[12px] text-muted-foreground">Served by (optional)
+            <label className="text-[12px] text-muted-foreground">{retailer ? "Served by (its distributor)" : "Served by (optional)"}
               <select value={parent} onChange={(e) => setParent(e.target.value)} className={box}><option value="">-</option>{parents.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
             </label>
             <label className="text-[12px] text-muted-foreground">Route (optional)
@@ -115,7 +116,7 @@ export function RequestCard({ r, choices, canEdit }: { r: FirmRequest; choices: 
             ) : null}
             {r.source === "app" ? <p className="text-[12px] text-muted-foreground sm:col-span-4">Approving switches on their Gaia Distributors app login: {r.phone} with the PIN they chose while onboarding. Their app shows it as approved.</p> : null}
             <div className="flex gap-2 sm:col-span-4">
-              <button type="button" disabled={pending || !code || !channel || (!retailer && (!tally.trim() || !state))} onClick={() => run(() => approveRequestAction(r.id, {
+              <button type="button" disabled={pending || !code || !channel || (!retailer && (!tally.trim() || !state)) || (retailer && !parent)} onClick={() => run(() => approveRequestAction(r.id, {
                 code, channelUid: channel, parentUid: parent || null, beatUid: beat || null, salesContactUid: contact || null,
                 firmClass: firmClass.trim() || null, creditLimit: credit ? Number(credit) : null, priceListUid: list || null,
                 tallyName: retailer ? null : tally.trim(), state: state || null,
