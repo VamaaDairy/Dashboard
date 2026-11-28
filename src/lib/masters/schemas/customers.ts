@@ -6,9 +6,10 @@ import { person, active } from "./fragments";
 /** Whether the customer can sign in to the Gaia app: a distributor needs an enabled login and an active customer record. */
 const APP_LOGIN = `case when dl.id is null then 'No login' when not dl.active then 'Disabled' when f.active = 1 then 'Active' else 'Customer inactive' end`;
 
-/** Route: /orders/distribution */
+/** The Customer Master: /customers (/orders/distribution sends people there) */
 export const customers: MasterDef = {
   slug: "distribution",
+  home: { list: "/customers", profile: "/customers/firm/" },
   title: "Customer Masters",
   subtitle: "Every distributor, retailer, institution and store, with who serves them and which route they are on.",
   icon: Contact,

@@ -112,6 +112,8 @@ export interface MasterDef {
   readOnly?: { note: string; href: string; label: string };
   /** the rows can sign in to the Gaia app: shows each row's app login and lets it be created, reset or switched off */
   appLogin?: "distributor" | "salesman" | "retailer";
+  /** the master has its own section (list + profile + form) instead of /orders/<slug>; see ./home.ts */
+  home?: { list: string; profile: string };
 }
 
 export type SearchParams = Record<string, string | string[] | undefined>;

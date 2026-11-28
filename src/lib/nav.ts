@@ -79,10 +79,16 @@ const distAppOrders: NavItem = {
 // The old ERP order lists (Primary: portal / my booking orders; Secondary: customer booking orders) are gone from the
 // sidebar: App orders classifies every order as distributor or retailer. What else they held stays here.
 const salesStock = orders("Sales & stock", Truck, ["fpsalesview", "fpsecondarysalesview", "stockView", "fpsalesreturnview", "collections", "task"]);
-const distCustomers = orders("Customers", Contact, ["distribution", "customerTarget", "customerTypeMaster", "customerRouteMapping"]);
+// The Customer Master (/customers) is the one list of customers; the old Customer Masters screen
+// (/orders/distribution) sends people there.
+const customerMaster: NavLeaf = { href: "/customers/distributors", key: "customers", label: "Customer Master" };
+const customerSetup = orders("Customers", Contact, ["customerTarget", "customerTypeMaster", "customerRouteMapping"]);
+const distCustomers: NavItem | null = customerSetup && { ...customerSetup, href: customerMaster.href, children: [customerMaster, ...customerSetup.children!] };
 // The old staff list (employeecustomermaster), attendance and leave pages are replaced by the Employee Master and
 // the Employee app's Attendance and Leave, so they are left out (they show under "Not in use").
-const salesTeam = orders("Sales team", Users, ["staffs", "employeefaceregistration", "employeeTarget", "catalogue", "lms"]);
+// The Employee Master (/employees) is the one list of employees; the old Employee Profile screen (/orders/staffs)
+// sends people there.
+const salesTeam = orders("Sales team", Users, ["employeefaceregistration", "employeeTarget", "catalogue", "lms"]);
 const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
 // Pricing
 const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Prices", icon: Tags };
@@ -449,7 +455,7 @@ const WORKING: NavSection[] = [
           { href: "/employees/office", key: "employees", label: "Office", icon: Briefcase },
           { href: "/employees/unset", key: "employees", label: "Not placed yet", icon: Users },
           { href: "/employees/departments", key: "employees", label: "Departments", icon: Network },
-          salesTeam && { ...salesTeam, label: "Field staff setup (all fields)" },
+          salesTeam && { ...salesTeam, label: "Field staff setup" },
           { href: "/employee-app/accounts", key: "emp.accounts", label: "Employee app accounts", icon: Smartphone },
           { href: "/users", key: "", label: "Dashboard users", icon: UserPlus, ownerOnly: true },
         ),
@@ -470,7 +476,7 @@ const WORKING: NavSection[] = [
           },
           { href: "/d2c/customers", key: "d2c.customers", label: "D2C customers", icon: Contact },
           { href: "/customers/duplicates", key: "customers", label: "Same mobile twice", icon: ClipboardCheck },
-          distCustomers && { ...distCustomers, label: "Customer setup (all fields)" },
+          customerSetup && { ...customerSetup, label: "Customer targets, types & routes" },
           { href: "/route-orders/masters", key: "routeorders.masters", label: "Route customers & products", icon: Route },
         ),
       },

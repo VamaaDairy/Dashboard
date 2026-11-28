@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { ChevronRight, Contact, List, Network, Plus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Contact, Download, List, Network, Plus, Search } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Pill } from "@/components/cn/ui";
 import { CustomerTabs } from "@/components/customers/CustomerTabs";
+import { RowActions } from "@/components/masters/RowActions";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { CUSTOMER_KINDS, customerCounts, firmTypes, isCustomerKind, listD2c, listFirms, servedBy, type FirmKind, type FirmRow } from "@/lib/customers";
+import { CUSTOMER_KINDS, FIRM_PAGE, customerCounts, firmFilterOptions, firmTypes, isCustomerKind, listD2c, listFirms, servedBy, type FirmFilter, type FirmKind, type FirmRow } from "@/lib/customers";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -25,31 +26,43 @@ const td = "px-3 py-2";
  * group) and shown as a list or as a hierarchy: grouped by type (retailers: by who serves them), each with the
  * customers it serves underneath.
  */
-export default async function CustomerListPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ q?: string; type?: string; view?: string }> }) {
+export default async function CustomerListPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ q?: string; type?: string; view?: string; status?: string; state?: string; officer?: string; page?: string }> }) {
   const { kind } = await params;
   if (!isCustomerKind(kind)) notFound();
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const type = (sp.type ?? "").trim() || null;
   const tree = sp.view === "tree";
+  const status = sp.status === "active" || sp.status === "inactive" ? sp.status : null;
+  const state = (sp.state ?? "").trim() || null;
+  const officer = (sp.officer ?? "").trim() || null;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const filter: FirmFilter = { q, type, status, state, officer };
   const info = CUSTOMER_KINDS.find((k) => k.key === kind)!;
   const me = await userFromToken((await cookies()).get("session")?.value);
+  // adding, editing, deactivating and deleting customers: the Customer Master's edit right
   const canAdd = kind !== "d2c" && !!me && atLeast(levelFor(me, "fp.distribution"), "edit");
-  const [counts, firms, d2c, types] = await Promise.all([
+  const [counts, listing, d2c, types, options] = await Promise.all([
     customerCounts(),
-    kind === "d2c" ? Promise.resolve([]) : listFirms(kind, q, type),
+    kind === "d2c" ? Promise.resolve({ rows: [], total: 0 }) : listFirms(kind, filter, page),
     kind === "d2c" ? listD2c(q) : Promise.resolve([]),
     kind === "d2c" ? Promise.resolve([]) : firmTypes(kind),
+    kind === "d2c" ? Promise.resolve({ states: [], officers: [] }) : firmFilterOptions(kind),
   ]);
+  const firms = listing.rows;
+  const pages = Math.max(1, Math.ceil(listing.total / FIRM_PAGE));
   // the hierarchy: who each shown customer serves (one level down)
   const children = tree && kind !== "d2c" ? await servedBy(firms.filter((f) => f.serves > 0).map((f) => f.uid)) : new Map();
   const href = (over: Record<string, string | null>) => {
     const p = new URLSearchParams();
-    const all: Record<string, string | null> = { q: q || null, type, view: tree ? "tree" : null, ...over };
+    const all: Record<string, string | null> = { q: q || null, type, view: tree ? "tree" : null, status, state, officer, page: null, ...over };
     for (const [k, v] of Object.entries(all)) if (v) p.set(k, v);
     const qs = p.toString();
     return `/customers/${kind}${qs ? `?${qs}` : ""}`;
   };
+  const exportHref = `/customers/${kind}/export?${new URLSearchParams(Object.entries({ q, type, status, state, officer }).filter((e): e is [string, string] => !!e[1])).toString()}`;
+  const narrowed = !!(q || status || state || officer);
+  const select = "h-8 max-w-[11rem] rounded-lg border border-input bg-background px-2 text-sm";
   const chip = (on: boolean) => cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px]", on ? "border-primary bg-primary/10 font-medium text-primary" : "border-border hover:bg-muted");
 
   return (
@@ -61,7 +74,12 @@ export default async function CustomerListPage({ params, searchParams }: { param
           subtitle={kind === "d2c"
             ? "Everyone who shops in the Gaia app: orders, spend and subscriptions. Open one for the full profile."
             : `${info.about} Contact, who serves them, sales officer, price list, app login and orders; open one for the full profile.`}
-          actions={canAdd ? <Link href="/orders/distribution/new" className={buttonVariants({ variant: "primary" })}><Plus className="size-4" /> Add {info.one.toLowerCase()}</Link> : null}
+          actions={kind === "d2c" ? null : (
+            <div className="flex items-center gap-2">
+              <a href={exportHref} className={buttonVariants({ variant: "outline" })}><Download className="size-4" /> Export</a>
+              {canAdd ? <Link href="/customers/new" className={buttonVariants({ variant: "primary" })}><Plus className="size-4" /> Add {info.one.toLowerCase()}</Link> : null}
+            </div>
+          )}
         />
         <CustomerTabs on={kind} counts={counts} showD2c={!!me && levelFor(me, "d2c.customers") !== "none"} />
         {kind !== "d2c" ? (
@@ -81,16 +99,37 @@ export default async function CustomerListPage({ params, searchParams }: { param
             ) : null}
           </div>
         ) : null}
-        <form className="flex max-w-md items-center gap-2">
+        <form className="flex flex-wrap items-center gap-2">
           {type ? <input type="hidden" name="type" value={type} /> : null}
           {tree ? <input type="hidden" name="view" value="tree" /> : null}
-          <div className="relative flex-1">
+          <div className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input name="q" defaultValue={q} placeholder={kind === "d2c" ? "Search name, mobile, address, pincode" : "Search name, code, mobile, city, contact"}
+            <input name="q" defaultValue={q} placeholder={kind === "d2c" ? "Search name, mobile, address, pincode" : "Search name, code, mobile, city, contact, GSTIN, Tally name, route"}
               className="h-8 w-full rounded-lg border border-input bg-transparent pr-3 pl-8 text-sm focus:border-primary focus:outline-none" />
           </div>
+          {kind !== "d2c" ? (
+            <>
+              <select name="status" defaultValue={status ?? ""} className={select} aria-label="Status">
+                <option value="">Active and inactive</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              {options.states.length > 1 ? (
+                <select name="state" defaultValue={state ?? ""} className={select} aria-label="State">
+                  <option value="">All states</option>
+                  {options.states.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              ) : null}
+              {options.officers.length ? (
+                <select name="officer" defaultValue={officer ?? ""} className={select} aria-label="Sales officer">
+                  <option value="">All sales officers</option>
+                  {options.officers.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              ) : null}
+            </>
+          ) : null}
           <button className="h-8 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Search</button>
-          {q ? <Link href={href({ q: null })} className="text-sm text-muted-foreground hover:underline">Clear</Link> : null}
+          {narrowed ? <Link href={href({ q: null, status: null, state: null, officer: null })} className="text-sm text-muted-foreground hover:underline">Clear</Link> : null}
         </form>
 
         {tree && kind !== "d2c" ? <Hierarchy kind={kind} firms={firms} served={children} /> : (
@@ -119,7 +158,10 @@ export default async function CustomerListPage({ params, searchParams }: { param
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-                <tr>{[info.one, "Type", "Contact", "City", "Served by", "Serves", "Route", "Sales officer", "Price list", "App", "Orders", "Last order", "Last 90 days", "Status"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+                <tr>
+                  {[info.one, "Type", "Class", "Contact", "City", "State", "Pincode", "GSTIN", "Tally name", "Served by", "Serves", "Route", "Sales officer", "Price list", "Credit limit", "App", "Orders", "Last order", "Last 90 days", "Added", "Status"].map((h) => <th key={h} className={th}>{h}</th>)}
+                  {canAdd ? <th className={th} /> : null}
+                </tr>
               </thead>
               <tbody>
                 {firms.map((f) => (
@@ -129,27 +171,45 @@ export default async function CustomerListPage({ params, searchParams }: { param
                       {f.code ? <div className="font-mono text-[11px] text-tertiary-foreground">{f.code}</div> : null}
                     </td>
                     <td className={`${td} whitespace-nowrap`}>{f.type === "Not set" ? <span className="text-muted-foreground">—</span> : f.type}</td>
+                    <td className={td}>{f.firmClass ?? "—"}</td>
                     <td className={td}><div>{f.contactPerson ?? "—"}</div><div className="font-mono text-xs text-muted-foreground">{f.phone ?? ""}</div></td>
                     <td className={td}>{f.city ?? "—"}</td>
+                    <td className={`${td} whitespace-nowrap`}>{f.state ?? "—"}</td>
+                    <td className={`${td} font-mono text-xs`}>{f.pincode ?? "—"}</td>
+                    <td className={`${td} font-mono text-xs`}>{f.gstin ?? "—"}</td>
+                    <td className={`${td} min-w-40`}>{f.tallyName ?? "—"}</td>
                     <td className={td}>{f.servedByUid ? <Link href={`/customers/firm/${f.servedByUid}`} className="hover:underline">{f.servedBy}</Link> : "—"}</td>
                     <td className={`${td} num text-right`}>{f.serves || "—"}</td>
                     <td className={td}>{f.route ?? "—"}</td>
                     <td className={td}>{f.salesOfficer ?? "—"}</td>
                     <td className={td}>{f.priceList ?? <span className="text-muted-foreground">Standard</span>}</td>
+                    <td className={`${td} num text-right`}>{f.creditLimit ? rs(f.creditLimit) : "—"}</td>
                     <td className={td}>{f.appLogin ? <Pill tone="success">Login</Pill> : <Pill>No login</Pill>}</td>
                     <td className={`${td} num text-right`}>{f.orders || "—"}</td>
                     <td className={`${td} whitespace-nowrap`}>{day(f.lastOrder)}</td>
                     <td className={`${td} num text-right`}>{f.value90 ? rs(f.value90) : "—"}</td>
+                    <td className={`${td} whitespace-nowrap`}>{day(f.created)}</td>
                     <td className={td}>{f.active ? <Pill tone="success">Active</Pill> : <Pill>Inactive</Pill>}</td>
+                    {canAdd ? <td className={td}><RowActions slug="distribution" id={f.uid} noun="customer" label={f.name} on={f.active} editHref={`/customers/firm/${f.uid}/edit`} /></td> : null}
                   </tr>
                 ))}
-                {firms.length === 0 ? <tr><td colSpan={14} className="px-3 py-10 text-center text-muted-foreground">{q ? "No customer matches." : `No ${info.label.toLowerCase()} yet.`}</td></tr> : null}
+                {firms.length === 0 ? <tr><td colSpan={canAdd ? 22 : 21} className="px-3 py-10 text-center text-muted-foreground">{narrowed || type ? "No customer matches." : `No ${info.label.toLowerCase()} yet.`}</td></tr> : null}
               </tbody>
             </table>
           )}
         </div>
         )}
-        {kind !== "d2c" && firms.length >= 2000 ? <p className="text-[12px] text-muted-foreground">Showing the first 2,000. Search or pick a type to narrow it.</p> : null}
+        {kind !== "d2c" && listing.total > 0 ? (
+          <div className="flex items-center gap-3 text-[13px] text-muted-foreground">
+            <span>
+              {pages > 1
+                ? `${((page - 1) * FIRM_PAGE + 1).toLocaleString("en-IN")}–${Math.min(page * FIRM_PAGE, listing.total).toLocaleString("en-IN")} of ${listing.total.toLocaleString("en-IN")}`
+                : `${listing.total.toLocaleString("en-IN")} customer${listing.total === 1 ? "" : "s"}`}
+            </span>
+            {page > 1 ? <Link href={href({ page: String(page - 1) })} className="inline-flex items-center gap-1 hover:text-foreground"><ChevronLeft className="size-4" /> Previous</Link> : null}
+            {page < pages ? <Link href={href({ page: String(page + 1) })} className="inline-flex items-center gap-1 hover:text-foreground">Next <ChevronRight className="size-4" /></Link> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

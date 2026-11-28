@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/cn/ui";
+import { RowActions } from "@/components/masters/RowActions";
 import { placeAction } from "@/app/employees/actions";
 import type { Department, EmployeeRow } from "@/lib/employees";
 
@@ -16,8 +17,11 @@ const select = "h-8 rounded-lg border border-input bg-background px-2 text-[13px
 const day = (d: Date | string | null) =>
   d ? new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-/** The employees of one group, with a photo, job, contact and which apps they sign in to; HR can move them in bulk. */
-export function EmployeeTable({ rows, departments, canEdit }: { rows: EmployeeRow[]; departments: Department[]; canEdit: boolean }) {
+/**
+ * The employees of one group, with a photo, job, contact, the rest of their Employee Master record and which apps they
+ * sign in to; HR can move them in bulk, and the Employee Master's editors can edit, deactivate or delete each one.
+ */
+export function EmployeeTable({ rows, departments, canEdit, canManage }: { rows: EmployeeRow[]; departments: Department[]; canEdit: boolean; canManage: boolean }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [wing, setWing] = useState("");
@@ -62,7 +66,8 @@ export function EmployeeTable({ rows, departments, canEdit }: { rows: EmployeeRo
                   <input type="checkbox" checked={all} onChange={() => setPicked(all ? new Set() : new Set(rows.map((r) => r.uid)))} aria-label="Select all" />
                 </th>
               ) : null}
-              {["Employee", "Designation", "Department", "Mobile", "Reports to", "Joined", "Signs in to", "Status"].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}
+              {["Employee", "Designation", "Department", "Mobile", "Email", "City", "State", "Reports to", "Customers", "Joined", "Left", "Signs in to", "Status"].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>)}
+              {canManage ? <th className="px-3 py-2" /> : null}
             </tr>
           </thead>
           <tbody>
@@ -85,8 +90,13 @@ export function EmployeeTable({ rows, departments, canEdit }: { rows: EmployeeRo
                 <td className="px-3 py-2">{r.designation ?? "—"}</td>
                 <td className="px-3 py-2">{r.department ?? <span className="text-muted-foreground">—</span>}</td>
                 <td className="px-3 py-2 font-mono text-xs">{r.phone ?? "—"}</td>
+                <td className="px-3 py-2 text-[13px]">{r.email ?? "—"}</td>
+                <td className="px-3 py-2">{r.city ?? "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2">{r.state ?? "—"}</td>
                 <td className="px-3 py-2">{r.manager ?? "—"}</td>
+                <td className="num px-3 py-2 text-right">{r.customers || "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2">{day(r.joined)}</td>
+                <td className="whitespace-nowrap px-3 py-2">{r.left ? day(r.left) : "—"}</td>
                 <td className="px-3 py-2">
                   <span className="flex flex-wrap gap-1">
                     {r.employeeApp ? <Pill tone="info" dot={false}>Employee app</Pill> : null}
@@ -96,9 +106,10 @@ export function EmployeeTable({ rows, departments, canEdit }: { rows: EmployeeRo
                   </span>
                 </td>
                 <td className="px-3 py-2">{r.active ? <Pill tone="success">Active</Pill> : <Pill>Left</Pill>}</td>
+                {canManage ? <td className="px-3 py-2"><RowActions slug="staffs" id={r.uid} noun="employee" label={r.name} on={r.active} editHref={`/employees/staff/${r.uid}/edit`} /></td> : null}
               </tr>
             ))}
-            {rows.length === 0 ? <tr><td colSpan={canEdit ? 9 : 8} className="px-3 py-10 text-center text-muted-foreground">No employee here.</td></tr> : null}
+            {rows.length === 0 ? <tr><td colSpan={13 + (canEdit ? 1 : 0) + (canManage ? 1 : 0)} className="px-3 py-10 text-center text-muted-foreground">No employee here.</td></tr> : null}
           </tbody>
         </table>
       </div>

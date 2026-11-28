@@ -40,6 +40,8 @@ export interface EmployeeRow {
   wing: Wing | null; wingSet: boolean; phone: string | null; email: string | null; manager: string | null; joined: Date | null;
   active: boolean; hasPhoto: boolean;
   employeeApp: boolean; salesforceApp: boolean; dashboard: { email: string; role: string; active: boolean } | null;
+  // the rest of the Employee Master record
+  city: string | null; state: string | null; customers: number; left: Date | null;
 }
 
 const ROW = `s.uid, ${FULL_NAME("s")} as name, s.employee_code as code, d.designation,
@@ -49,20 +51,28 @@ const ROW = `s.uid, ${FULL_NAME("s")} as name, s.employee_code as code, d.design
   (exists (select 1 from emp_profile p where p.staff_uid = s.uid and p.photo is not null) or nullif(trim(s.profile_pic), '') is not null) as "hasPhoto",
   exists (select 1 from emp_login l where l.staff_uid = s.uid and l.active) as "employeeApp",
   exists (select 1 from dist_login l where l.staff_uid = s.uid and l.kind = 'salesman' and l.active) as "salesforceApp",
-  case when u.id is null then null else json_build_object('email', u.email, 'role', u.role, 'active', u.is_active) end as dashboard`;
+  case when u.id is null then null else json_build_object('email', u.email, 'role', u.role, 'active', u.is_active) end as dashboard,
+  s.city, s.state_state as state, (select count(*)::int from fp_firm x where x.sales_contact_uid = s.uid) as customers,
+  coalesce(s.resignation_date, s.deactivation_date) as left`;
+
+/** What a group's list is narrowed to, besides the search and department. */
+export interface EmployeeFilter { status?: "active" | "left" | null; designation?: string | null }
 
 /** Employees of one group (or the ones not placed yet), active first. */
-export function listEmployees(tab: WingTab, q = "", departmentId?: number): Promise<EmployeeRow[]> {
+export function listEmployees(tab: WingTab, q = "", departmentId?: number, filter: EmployeeFilter = {}): Promise<EmployeeRow[]> {
   const like = `%${q.trim().toLowerCase()}%`;
   return query<EmployeeRow>(
     `select ${ROW} from ${FROM}
       where (${tab === "unset" ? `${WING} is null and $1::text is null` : `${WING} = $1::text`})
         and ($2 = '%%' or lower(${FULL_NAME("s")}) like $2 or lower(coalesce(s.employee_code, '')) like $2 or coalesce(s.phone, '') like $2
-             or lower(coalesce(d.designation, '')) like $2 or lower(coalesce(dep.name, d.department, '')) like $2)
+             or lower(coalesce(d.designation, '')) like $2 or lower(coalesce(dep.name, d.department, '')) like $2
+             or lower(coalesce(s.email, '')) like $2 or lower(coalesce(s.city, '')) like $2)
         and ($3::int is null or m.department_id = $3)
+        and ($4::text is null or ($4 = 'active') = (coalesce(s.active, 1) = 1))
+        and ($5::text is null or d.designation = $5)
       order by coalesce(s.active, 1) = 1 desc, ${FULL_NAME("s")}
       limit 3000`,
-    [tab === "unset" ? null : tab, like, departmentId ?? null],
+    [tab === "unset" ? null : tab, like, departmentId ?? null, filter.status ?? null, filter.designation ?? null],
   );
 }
 
@@ -128,6 +138,16 @@ export interface Department {
   people: number; logins: number;
   /** the dashboard access its people get (migration 095) */
   access: AccessMap;
+}
+
+/** The designations a group's employees have, for its filter. */
+export async function wingDesignations(tab: WingTab): Promise<string[]> {
+  const rows = await query<{ v: string }>(
+    `select distinct d.designation as v from ${FROM}
+      where d.designation is not null and (${tab === "unset" ? `${WING} is null and $1::text is null` : `${WING} = $1::text`}) order by 1`,
+    [tab === "unset" ? null : tab],
+  );
+  return rows.map((r) => r.v);
 }
 
 export async function listDepartments(): Promise<Department[]> {
