@@ -63,7 +63,8 @@ export async function dayLines(date: string, by: DateBy = "delivery"): Promise<D
             to_char(${ORDER_DAY}, 'YYYY-MM-DD') as "orderDate", to_char(${DELIVERY_DAY}, 'YYYY-MM-DD') as "deliveryDate",
             exists (select 1 from dist_trip_stop ts where ts.order_uid = b.uid) as "onTrip",
             (b.app_kind = 'retailer' or coalesce(ch.channel_code, '') = 'RT') as retail,
-            (sup.uid is null or coalesce(sc.channel_code, '') = 'CO') as ours,
+            -- the company's channel is CMP (level 1); CO kept for older data
+            (sup.uid is null or coalesce(sc.channel_code, '') in ('CMP', 'CO') or coalesce(sc.level, 9) <= 1) as ours,
             p.sku_code as sku, p.sku_name as "skuName", i.quantity::float as qty, i.selling_price::float as rate, i.total_cost::float as amount,
             r.name as "routeName", bill.voucher_no as "voucherNo",
             -- the Tally names are the masters' (Customer Master, Product Master), the route sheet's where those have none

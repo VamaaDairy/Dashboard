@@ -477,7 +477,7 @@ export async function distOrderUid(login: DistLogin, orderId: number): Promise<s
 
 /** An order the plant supplies (no supplier, or the company): billed in Tally, so its bill is the Tally bill. */
 export const PLANT_ORDER = (b: string) =>
-  `(${b}.to_firm_uid is null or exists (select 1 from fp_firm sx join fp_channel cx on cx.uid = sx.channel_uid where sx.uid = ${b}.to_firm_uid and cx.channel_code = 'CO'))`;
+  `(${b}.to_firm_uid is null or exists (select 1 from fp_firm sx join fp_channel cx on cx.uid = sx.channel_uid where sx.uid = ${b}.to_firm_uid and (cx.channel_code in ('CMP', 'CO') or coalesce(cx.level, 9) <= 1)))`;
 
 export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> {
   const v = visibleTo(login);
