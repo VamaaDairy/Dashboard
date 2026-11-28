@@ -8,12 +8,13 @@ import { cn } from "@/lib/utils";
 import { approveRequestAction, rejectRequestAction } from "../dispatch/actions";
 
 type Opt = { value: string; label: string };
-export interface Choices { channels: Opt[]; parents: Opt[]; beats: Opt[]; staff: Opt[]; classes: string[]; lists: Opt[]; codes: Record<string, string> }
+export interface Choices { channels: Opt[]; parents: Opt[]; beats: Opt[]; staff: Opt[]; classes: string[]; lists: Opt[]; codes: Record<string, string>; states: Opt[]; ledgers: string[] }
 const when = (iso: string) => new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" });
 const box = "mt-1 h-9 w-full rounded-lg border border-input bg-background px-2 text-sm text-foreground";
 
 export function RequestCard({ r, choices, canEdit }: { r: FirmRequest; choices: Choices; canEdit: boolean }) {
-  const { channels, parents, beats, staff, classes, lists, codes } = choices;
+  const { channels, parents, beats, staff, classes, lists, codes, states, ledgers } = choices;
+  const retailer = /retail/i.test(r.kind);
   const router = useRouter();
   const guess = channels.find((c) => c.label.toLowerCase() === r.kind.toLowerCase())?.value ?? "";
   const [code, setCode] = useState(guess ? codes[guess] ?? "" : "");
@@ -26,6 +27,9 @@ export function RequestCard({ r, choices, canEdit }: { r: FirmRequest; choices: 
   const [credit, setCredit] = useState("");
   // rates: a price list, or "" = the channel's rates
   const [list, setList] = useState("");
+  // billed in Tally: its ledger there and its state (a retailer is billed by its distributor)
+  const [tally, setTally] = useState(ledgers.find((l) => l.toLowerCase() === r.name.toLowerCase()) ?? "");
+  const [state, setState] = useState(states.find((s) => s.value.toLowerCase() === (r.state ?? "").toLowerCase())?.value ?? "");
   const [reason, setReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [error, setError] = useState("");
@@ -97,11 +101,24 @@ export function RequestCard({ r, choices, canEdit }: { r: FirmRequest; choices: 
                 {lists.map((c) => <option key={c.value} value={c.value}>Price list: {c.label}</option>)}
               </select>
             </label>
+            {!retailer ? (
+              <>
+                <label className="text-[12px] text-muted-foreground sm:col-span-2">Tally ledger name
+                  <input list={`ledgers-${r.id}`} value={tally} onChange={(e) => setTally(e.target.value)} className={cn(box, "px-3")} placeholder="Exactly as in Tally" />
+                  <datalist id={`ledgers-${r.id}`}>{ledgers.map((l) => <option key={l} value={l} />)}</datalist>
+                </label>
+                <label className="text-[12px] text-muted-foreground">State
+                  <select value={state} onChange={(e) => setState(e.target.value)} className={box}><option value="">Choose…</option>{states.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
+                </label>
+                <p className="self-end text-[12px] text-muted-foreground">Create its ledger in Tally first. It can order once approved, and its bills go to this ledger.</p>
+              </>
+            ) : null}
             {r.source === "app" ? <p className="text-[12px] text-muted-foreground sm:col-span-4">Approving switches on their Gaia Distributors app login: {r.phone} with the PIN they chose while onboarding. Their app shows it as approved.</p> : null}
             <div className="flex gap-2 sm:col-span-4">
-              <button type="button" disabled={pending || !code || !channel} onClick={() => run(() => approveRequestAction(r.id, {
+              <button type="button" disabled={pending || !code || !channel || (!retailer && (!tally.trim() || !state))} onClick={() => run(() => approveRequestAction(r.id, {
                 code, channelUid: channel, parentUid: parent || null, beatUid: beat || null, salesContactUid: contact || null,
                 firmClass: firmClass.trim() || null, creditLimit: credit ? Number(credit) : null, priceListUid: list || null,
+                tallyName: retailer ? null : tally.trim(), state: state || null,
               }))}
                 className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">{pending ? "Saving…" : "Approve and create"}</button>
               <button type="button" onClick={() => setRejecting(true)} className="h-9 rounded-lg border border-input px-3 text-sm hover:bg-muted">Reject…</button>

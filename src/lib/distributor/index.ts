@@ -475,6 +475,10 @@ export async function distOrderUid(login: DistLogin, orderId: number): Promise<s
   return r?.uid ?? null;
 }
 
+/** An order the plant supplies (no supplier, or the company): billed in Tally, so its bill is the Tally bill. */
+export const PLANT_ORDER = (b: string) =>
+  `(${b}.to_firm_uid is null or exists (select 1 from fp_firm sx join fp_channel cx on cx.uid = sx.channel_uid where sx.uid = ${b}.to_firm_uid and cx.channel_code = 'CO'))`;
+
 export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> {
   const v = visibleTo(login);
   const rows = await query<Omit<DistOrderRow, "lines"> & { uid: string }>(
@@ -484,7 +488,11 @@ export async function listDistOrders(login: DistLogin): Promise<DistOrderRow[]> 
             nullif(trim(b.rejection_reason), '') as reason,
             case when lower(b.status) in ('cancelled', 'rejected') or exists (select 1 from dist_trip_stop x where x.order_uid = b.uid and x.status = 'delivered')
                  then null else b.delivery_code end as "deliveryCode",
-            (select v.invoice_no from dist_invoice v where v.booking_order_uid = b.uid) as "invoiceNo",
+            -- an order from the plant shows its Tally bill (once made); one supplied by a distributor, that distributor's invoice
+            case when ${PLANT_ORDER("b")}
+                 then (select string_agg(x.voucher_no, ', ' order by x.id) from route_order_bill_order bo join route_order_bill x on x.id = bo.bill_id
+                        where bo.order_uid = b.uid and x.status = 'issued')
+                 else (select v.invoice_no from dist_invoice v where v.booking_order_uid = b.uid) end as "invoiceNo",
             case b.app_kind when 'distributor' then 'Distributor' when 'retailer' then 'Retailer'
                  when 'salesman' then 'Sales officer' || coalesce(' ' || nullif(trim(so.first_name || ' ' || coalesce(so.last_name, '')), ''), '')
                  else 'Gaia' end as "placedBy"

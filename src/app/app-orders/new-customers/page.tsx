@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { query } from "@/lib/db";
-import { REF_BEATS, REF_CHANNELS, REF_PARENT_FIRMS, REF_STAFF, SUGGEST_CUSTOMER_CLASS } from "@/lib/masters/refs";
+import { REF_BEATS, REF_CHANNELS, REF_PARENT_FIRMS, REF_STAFF, REF_STATES, SUGGEST_CUSTOMER_CLASS, SUGGEST_TALLY_LEDGER } from "@/lib/masters/refs";
 import { firmRequests, nextFirmCodes } from "@/lib/distributor/requests";
 import { priceLists } from "@/lib/price-list";
 import { RequestCard } from "./request-card";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 /** New customers sales officers proposed from the Sales app, or that signed up in the Gaia Distributors app, waiting for the office: approve (creates the customer) or reject. */
 export default async function NewCustomersPage() {
-  const [requests, channels, parents, beats, staff, classes, lists, codes, me] = await Promise.all([
+  const [requests, channels, parents, beats, staff, classes, lists, codes, me, states, ledgers] = await Promise.all([
     firmRequests(),
     query<{ value: string; label: string }>(REF_CHANNELS),
     query<{ value: string; label: string }>(REF_PARENT_FIRMS),
@@ -23,10 +23,13 @@ export default async function NewCustomersPage() {
     priceLists(),
     nextFirmCodes(),
     userFromToken((await cookies()).get("session")?.value),
+    query<{ value: string; label: string }>(REF_STATES),
+    query<{ value: string }>(SUGGEST_TALLY_LEDGER),
   ]);
   // what the office chooses when approving: who looks after it, its class and its rates
   const choices = {
-    channels, parents, beats, staff, codes,
+    channels, parents, beats, staff, codes, states,
+    ledgers: ledgers.map((l) => l.value),
     classes: classes.map((c) => c.value),
     lists: lists.map((l) => ({ value: l.uid, label: `${l.name}${l.grp ? ` (${l.grp})` : ""} · ${l.priced} products` })),
   };

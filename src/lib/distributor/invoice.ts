@@ -91,7 +91,7 @@ export function rupeesInWords(amount: number): string {
 
 const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
-function party(f: Record<string, unknown> | null, fallbackName: string): InvoiceParty {
+export function party(f: Record<string, unknown> | null, fallbackName: string): InvoiceParty {
   const address = [f?.address, f?.place, f?.city, f?.district].map(text).filter((x, i, a): x is string => !!x && a.findIndex((y) => y?.toLowerCase() === x.toLowerCase()) === i).join(", ");
   const pin = text(f?.pincode);
   return {

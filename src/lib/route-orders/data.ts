@@ -67,8 +67,17 @@ export async function dayLines(date: string, by: DateBy = "delivery"): Promise<D
             p.sku_code as sku, p.sku_name as "skuName", i.quantity::float as qty, i.selling_price::float as rate, i.total_cost::float as amount,
             r.name as "routeName", bill.voucher_no as "voucherNo",
             -- the Tally names are the masters' (Customer Master, Product Master), the route sheet's where those have none
-            case when pt.id is null then null
-                 else to_jsonb(pt) || jsonb_build_object('tally_ledger', coalesce(nullif(trim(f.tally_name), ''), pt.tally_ledger)) end as party,
+            -- a customer not on the route sheet is billed from the Customer Master when it has a Tally name (no route)
+            case when pt.id is not null
+                   then to_jsonb(pt) || jsonb_build_object('tally_ledger', coalesce(nullif(trim(f.tally_name), ''), pt.tally_ledger))
+                 when coalesce(trim(f.tally_name), '') <> ''
+                   then jsonb_build_object('id', null, 'name', f.name, 'tally_ledger', trim(f.tally_name), 'state', f.state_state,
+                          'channel', case upper(coalesce(ch.channel, '')) when 'MFS' then 'MFS' when 'INSTITUTION' then 'Institutional' else 'GT' end,
+                          'consolidated', false, 'review_note', null,
+                          'buyer_address', f.address, 'buyer_gstin', nullif(trim(f.gstin), ''), 'buyer_pincode', f.pincode,
+                          'consignee_name', f.name, 'consignee_address', f.address, 'consignee_state', f.state_state,
+                          'consignee_pincode', f.pincode, 'consignee_gstin', nullif(trim(f.gstin), ''))
+            end as party,
             case when rp.id is null then null
                  else to_jsonb(rp) || jsonb_build_object('tally_item', coalesce(nullif(trim(p.tally_name), ''), rp.tally_item)) end as product
      from fp_booking_order b
