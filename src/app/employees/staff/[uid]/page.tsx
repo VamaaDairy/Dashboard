@@ -287,7 +287,7 @@ export default async function EmployeeProfilePage({ params, searchParams }: { pa
           line={[e.designation, e.department, e.code, e.phone]}
           actions={<>
             {isOwner ? <Link href="/hierarchy" className={buttonVariants({ variant: "outline" })}>Hierarchy</Link> : null}
-            <Link href={`/orders/staffs/${e.uid}`} className={buttonVariants({ variant: "outline" })}>Edit</Link>
+            <Link href={`/employees/staff/${e.uid}/edit`} className={buttonVariants({ variant: "outline" })}>Edit</Link>
           </>}
         />
         <Stats items={[

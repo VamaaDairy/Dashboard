@@ -1,7 +1,6 @@
-import { MasterPage } from "@/components/masters/MasterPage";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  return <MasterPage slug="staffs" searchParams={searchParams} />;
+/** The old Employee Profile screen: everything it had is in the Employee Master now. */
+export default function Page() {
+  redirect("/employees");
 }

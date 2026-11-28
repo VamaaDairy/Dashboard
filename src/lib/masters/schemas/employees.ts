@@ -6,9 +6,10 @@ import { person, active } from "./fragments";
 /** Whether the employee (a sales officer booking for distributors) can sign in to the Gaia app. */
 const APP_LOGIN = `case when dl.id is null then 'No login' when dl.active then 'Active' else 'Disabled' end`;
 
-/** Route: /orders/staffs */
+/** The Employee Master: /employees (/orders/staffs sends people there) */
 export const employees: MasterDef = {
   slug: "staffs",
+  home: { list: "/employees", profile: "/employees/staff/" },
   title: "Employee Profile",
   subtitle: "Everyone in the field force and office, active or gone, with their designation and manager.",
   icon: Users,

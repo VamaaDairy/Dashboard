@@ -15,6 +15,8 @@ interface Props {
   values: Record<string, string | null>;
   /** photos already held (photos field) */
   photos?: Array<{ id: string; url: string }>;
+  /** where Cancel goes */
+  back: string;
 }
 
 const input =
@@ -85,7 +87,7 @@ function Photos({ name, held }: { name: string; held: Array<{ id: string; url: s
   );
 }
 
-export function MasterForm({ slug, id, fields, refs, suggestions, values, photos = [] }: Props) {
+export function MasterForm({ slug, id, fields, refs, suggestions, values, photos = [], back }: Props) {
   const [state, action, pending] = useActionState(saveEntity.bind(null, slug, id), null);
   const errors = state?.fieldErrors ?? {};
 
@@ -158,7 +160,7 @@ export function MasterForm({ slug, id, fields, refs, suggestions, values, photos
         <button type="submit" disabled={pending} className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60">
           {pending ? "Saving…" : id ? "Save changes" : "Add"}
         </button>
-        <Link href={`/orders/${slug}`} className="text-sm text-muted-foreground hover:underline">Cancel</Link>
+        <Link href={back} className="text-sm text-muted-foreground hover:underline">Cancel</Link>
       </div>
     </form>
   );

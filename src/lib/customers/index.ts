@@ -47,35 +47,72 @@ export interface FirmRow {
   /** how many customers it serves (firms whose "served by" is this one) */
   serves: number;
   servedByUid: string | null;
+  // the rest of the Customer Master record
+  firmClass: string | null; state: string | null; pincode: string | null; gstin: string | null; tallyName: string | null;
+  creditLimit: number | null; created: Date | null;
 }
 
-/** One sub-section's customers (narrowed to one type when given), most recently active first. */
-export async function listFirms(kind: FirmKind, q = "", type?: string | null): Promise<FirmRow[]> {
-  const like = `%${q.trim().toLowerCase()}%`;
-  return query<FirmRow>(
-    `select f.uid, f.name, f.firm_code as code, f.city, f.phone, f.contact_person as "contactPerson", f.active = 1 as active,
-            p.name as "servedBy", p.uid as "servedByUid", b.beat_name as route, ${TYPE_OF("f")} as type,
-            (select count(*)::int from fp_firm c where c.parent_firm_uid = f.uid) as serves,
-            nullif(trim(so.first_name || ' ' || coalesce(so.last_name, '')), '') as "salesOfficer",
-            (select s.name from fp_slab_firm_mapping m join fp_slab s on s.uid = m.slab_uid where m.firm_uid = f.uid order by m.updated_at desc limit 1) as "priceList",
-            exists (select 1 from dist_login l where l.firm_uid = f.uid and l.active) as "appLogin",
-            coalesce(o.n, 0)::int as orders, o.last as "lastOrder", coalesce(o.v90, 0)::float as value90
-       from fp_firm f
+/** What a channel's list is narrowed to: search, type, status, state and sales officer. */
+export interface FirmFilter { q?: string; type?: string | null; status?: "active" | "inactive" | null; state?: string | null; officer?: string | null }
+export const FIRM_PAGE = 500;
+
+const FIRM_FROM = `fp_firm f
        join fp_channel ch on ch.uid = f.channel_uid and upper(ch.channel_code) = $1
        left join fp_firm p on p.uid = f.parent_firm_uid
        left join fp_beat b on b.uid = f.beat_uid
-       left join fp_staff so on so.uid = f.sales_contact_uid
-       left join lateral (
-         select count(*) as n, max(bo.booking_time) as last,
-                sum(bo.total_cost) filter (where bo.booking_time > now() - interval '90 days') as v90
-           from fp_booking_order bo where bo.from_firm_uid = f.uid) o on true
-      where ($2 = '%%' or lower(f.name) like $2 or lower(coalesce(f.firm_code, '')) like $2 or coalesce(f.phone, '') like $2
-             or lower(coalesce(f.city, '')) like $2 or lower(coalesce(f.contact_person, '')) like $2)
+       left join fp_staff so on so.uid = f.sales_contact_uid`;
+const OFFICER = `nullif(trim(so.first_name || ' ' || coalesce(so.last_name, '')), '')`;
+const FIRM_WHERE = `($2 = '%%' or lower(f.name) like $2 or lower(coalesce(f.firm_code, '')) like $2 or coalesce(f.phone, '') like $2
+             or lower(coalesce(f.city, '')) like $2 or lower(coalesce(f.contact_person, '')) like $2 or upper(coalesce(f.gstin, '')) like upper($2)
+             or lower(coalesce(f.tally_name, '')) like $2 or lower(coalesce(p.name, '')) like $2 or lower(coalesce(b.beat_name, '')) like $2)
         and ($3::text is null or ${TYPE_OF("f")} = $3)
-      order by (f.active = 1) desc, o.last desc nulls last, f.name
-      limit 2000`,
-    [CHANNEL[kind], like, type || null],
+        and ($4::text is null or ($4 = 'active') = (f.active = 1))
+        and ($5::text is null or f.state_state = $5)
+        and ($6::text is null or ${OFFICER} = $6)`;
+const firmArgs = (kind: FirmKind, f: FirmFilter) =>
+  [CHANNEL[kind], `%${(f.q ?? "").trim().toLowerCase()}%`, f.type || null, f.status || null, f.state || null, f.officer || null];
+
+/**
+ * One sub-section's customers (narrowed by the filter), most recently active first, a page at a time; `page` null
+ * gives them all (the export).
+ */
+export async function listFirms(kind: FirmKind, filter: FirmFilter = {}, page: number | null = 1): Promise<{ rows: FirmRow[]; total: number }> {
+  const args = firmArgs(kind, filter);
+  const [rows, total] = await Promise.all([
+    query<FirmRow>(
+      `select f.uid, f.name, f.firm_code as code, f.city, f.phone, f.contact_person as "contactPerson", f.active = 1 as active,
+              p.name as "servedBy", p.uid as "servedByUid", b.beat_name as route, ${TYPE_OF("f")} as type,
+              (select count(*)::int from fp_firm c where c.parent_firm_uid = f.uid) as serves,
+              ${OFFICER} as "salesOfficer",
+              (select s.name from fp_slab_firm_mapping m join fp_slab s on s.uid = m.slab_uid where m.firm_uid = f.uid order by m.updated_at desc limit 1) as "priceList",
+              exists (select 1 from dist_login l where l.firm_uid = f.uid and l.active) as "appLogin",
+              coalesce(o.n, 0)::int as orders, o.last as "lastOrder", coalesce(o.v90, 0)::float as value90,
+              f.firm_class as "firmClass", f.state_state as state, f.pincode, f.gstin, f.tally_name as "tallyName",
+              f.credit_limit::float as "creditLimit", f.created_at as created
+         from ${FIRM_FROM}
+         left join lateral (
+           select count(*) as n, max(bo.booking_time) as last,
+                  sum(bo.total_cost) filter (where bo.booking_time > now() - interval '90 days') as v90
+             from fp_booking_order bo where bo.from_firm_uid = f.uid) o on true
+        where ${FIRM_WHERE}
+        order by (f.active = 1) desc, o.last desc nulls last, f.name
+        ${page === null ? "" : `limit ${FIRM_PAGE} offset ${(Math.max(1, page) - 1) * FIRM_PAGE}`}`,
+      args,
+    ),
+    one<{ n: number }>(`select count(*)::int as n from ${FIRM_FROM} where ${FIRM_WHERE}`, args),
+  ]);
+  return { rows, total: total?.n ?? rows.length };
+}
+
+/** The states and sales officers a sub-section's customers have, for its filters. */
+export async function firmFilterOptions(kind: FirmKind): Promise<{ states: string[]; officers: string[] }> {
+  const rows = await query<{ k: string; v: string }>(
+    `select distinct 'state' as k, f.state_state as v from ${FIRM_FROM} where f.state_state is not null
+     union select distinct 'officer', ${OFFICER} from ${FIRM_FROM} where ${OFFICER} is not null
+     order by 1, 2`,
+    [CHANNEL[kind]],
   );
+  return { states: rows.filter((r) => r.k === "state").map((r) => r.v), officers: rows.filter((r) => r.k === "officer").map((r) => r.v) };
 }
 
 /** A sub-section's types (GT, ATP, MFS chains ...) with how many customers each has, largest first. */

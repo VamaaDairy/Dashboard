@@ -284,7 +284,7 @@ export default async function FirmProfilePage({ params, searchParams }: { params
           line={[f.code, [f.city, f.state].filter(Boolean).join(", "), f.contactPerson, f.phone]}
           actions={<>
             {me?.role === "owner" ? <Link href="/hierarchy?of=customers" className={buttonVariants({ variant: "outline" })}>Hierarchy</Link> : null}
-            <Link href={`/orders/distribution/${f.uid}`} className={buttonVariants({ variant: "outline" })}>Edit</Link>
+            <Link href={`/customers/firm/${f.uid}/edit`} className={buttonVariants({ variant: "outline" })}>Edit</Link>
           </>}
         />
         <Stats items={[

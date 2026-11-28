@@ -12,11 +12,13 @@ interface Props {
   label: string;
   /** current state, or null when the master has no on / off flag */
   on: boolean | null;
+  /** the edit form; /orders/<slug>/<id> when not given */
+  editHref?: string;
 }
 
 const btn = "rounded-md px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50";
 
-export function RowActions({ slug, id, noun, label, on }: Props) {
+export function RowActions({ slug, id, noun, label, on, editHref }: Props) {
   const [pending, start] = useTransition();
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
@@ -27,7 +29,7 @@ export function RowActions({ slug, id, noun, label, on }: Props) {
 
   return (
     <div className="flex items-center justify-end gap-0.5">
-      <Link href={`/orders/${slug}/${id}`} className={`${btn} text-foreground`}>Edit</Link>
+      <Link href={editHref ?? `/orders/${slug}/${id}`} className={`${btn} text-foreground`}>Edit</Link>
       {on !== null ? (
         <button
           type="button"

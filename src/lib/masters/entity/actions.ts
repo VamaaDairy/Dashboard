@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { MASTERS } from "../schemas";
+import { listHref, savedHref } from "../home";
 import { removeRecord, saveRecord, setActive } from "./service";
 
 export type FormState = { ok: false; error: string; fieldErrors?: Record<string, string> } | null;
@@ -31,15 +32,15 @@ export async function saveEntity(slug: string, id: string | null, _prev: FormSta
   if (!a) return denied;
   const r = await saveRecord(a.def, id, form, a.who);
   if (!r.ok) return { ok: false, error: r.error, fieldErrors: r.fieldErrors };
-  revalidatePath(`/orders/${slug}`);
-  redirect(`/orders/${slug}`);
+  revalidatePath(listHref(a.def), "layout");
+  redirect(savedHref(a.def, id));
 }
 
 export async function toggleEntity(slug: string, id: string, activate: boolean): Promise<ActionResult> {
   const a = await authorise(slug);
   if (!a) return denied;
   const r = await setActive(a.def, id, activate, a.who);
-  if (r.ok) revalidatePath(`/orders/${slug}`);
+  if (r.ok) revalidatePath(listHref(a.def), "layout");
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }
 
@@ -47,6 +48,6 @@ export async function deleteEntity(slug: string, id: string): Promise<ActionResu
   const a = await authorise(slug);
   if (!a) return denied;
   const r = await removeRecord(a.def, id, a.who);
-  if (r.ok) revalidatePath(`/orders/${slug}`);
+  if (r.ok) revalidatePath(listHref(a.def), "layout");
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }

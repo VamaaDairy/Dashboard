@@ -7,15 +7,18 @@ import { query } from "@/lib/db";
 import { atLeast, levelFor } from "@/lib/access";
 import { formOptions, loadRecord } from "@/lib/masters/entity/service";
 import { MASTERS } from "@/lib/masters/schemas";
+import { listHref } from "@/lib/masters/home";
 
 /** Add (id null) or edit page of an editable master. People without edit access are sent back to the list. */
 export async function EntityFormPage({ slug, id }: { slug: string; id: string | null }) {
   const def = MASTERS[slug];
   if (!def?.entity) notFound();
   // shown but not edited here (e.g. rates): back to the list, which says where they are changed
-  if (def.readOnly) redirect(`/orders/${slug}`);
+  if (def.readOnly) redirect(listHref(def));
   const me = await userFromToken((await cookies()).get("session")?.value);
-  if (!me || !atLeast(levelFor(me, `fp.${slug}`), "edit")) redirect(`/orders/${slug}`);
+  // back to the record's profile (editing) or the list (adding)
+  const back = id !== null && def.home ? `${def.home.profile}${id}` : listHref(def);
+  if (!me || !atLeast(levelFor(me, `fp.${slug}`), "edit")) redirect(back);
 
   const values = id === null ? {} : await loadRecord(def, id);
   if (!values) notFound();
@@ -41,6 +44,7 @@ export async function EntityFormPage({ slug, id }: { slug: string; id: string | 
           suggestions={options.suggestions}
           values={values}
           photos={photos}
+          back={back}
         />
       </div>
     </div>
