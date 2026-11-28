@@ -13,7 +13,8 @@ export const PRIMARY_BATCH = "Primary Batch";
 export const r2 = (n: number) => Math.round((n + Number.EPSILON * Math.sign(n)) * 100) / 100;
 
 export interface BillParty {
-  id: number;
+  /** null: a customer billed straight from the Customer Master (not on the route sheet) */
+  id: number | null;
   name: string;
   channel: string;
   tally_ledger: string | null;
@@ -45,6 +46,7 @@ export interface BillProduct {
 
 export interface BillInputLine {
   orderUid: string;
+  firmUid?: string;
   firmName: string;
   routeName: string | null;
   sku: string;
@@ -157,7 +159,7 @@ export function buildDrafts(input: BillInputLine[]): DraftBill[] {
     const ledger = pt?.tally_ledger?.trim() ? pt.tally_ledger : null;
     const p = l.product;
     const part = pt?.consolidated && ledger ? (p?.tally_ledger?.toLowerCase().includes("milk") ? "MILK" : "OTHER") : null;
-    const key = part ? `ledger:${ledger!.toLowerCase()}:${part}` : pt ? `party:${pt.id}` : `firm:${l.firmName}`;
+    const key = part ? `ledger:${ledger!.toLowerCase()}:${part}` : pt?.id != null ? `party:${pt.id}` : `firm:${l.firmUid ?? l.firmName}`;
     let b = bills.get(key);
     if (!b) {
       const state = pt?.state?.trim() || null;
@@ -182,7 +184,7 @@ export function buildDrafts(input: BillInputLine[]): DraftBill[] {
         warnings: [],
         taxable: 0, cgst: 0, sgst: 0, igst: 0, roundoff: 0, total: 0,
       };
-      if (!pt) b.issues.push(`"${l.firmName}" is not matched to a customer`);
+      if (!pt) b.issues.push(`"${l.firmName}" has no Tally name: set it in the Customer Master`);
       else {
         if (!ledger) b.issues.push(`${pt.name} has no Tally ledger`);
         if (!state) b.issues.push(`${pt.name} has no state, so CGST/SGST or IGST can't be chosen`);

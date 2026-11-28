@@ -362,6 +362,10 @@ export interface ApproveInput {
   priceListUid?: string | null;
   creditLimit?: number | null;
   firmClass?: string | null;
+  /** the Tally ledger it is billed to: needed for a distributor (a retailer is billed by its distributor) */
+  tallyName?: string | null;
+  /** its state (one on the masters' list): needed for a distributor, for CGST + SGST or IGST */
+  state?: string | null;
 }
 
 /**
@@ -382,6 +386,20 @@ export async function approveFirmRequest(id: number, input: ApproveInput, who: s
     return { ok: false, error: "That price list no longer exists." };
   }
   if (input.creditLimit != null && !(Number.isFinite(input.creditLimit) && input.creditLimit >= 0)) return { ok: false, error: "The credit limit must be 0 or more." };
+  // a distributor orders from the plant and is billed in Tally: it is switched on only once its Tally ledger and state
+  // are set, so its first order can be billed (a retailer is billed by its distributor and needs neither)
+  const retailer = /retail/i.test(r.kind);
+  const tallyName = input.tallyName?.trim() || null;
+  const chosenState = input.state?.trim() || r.state?.trim() || null;
+  const state = chosenState ? (await one<{ state: string }>(`select state from fp_state where lower(state) = lower($1) limit 1`, [chosenState]))?.state ?? null : null;
+  if (!retailer) {
+    if (!tallyName) return { ok: false, error: "Enter its Tally ledger name. Create the ledger in Tally first if it isn't there." };
+    if (!state) return { ok: false, error: "Choose its state." };
+    const read = await one<{ n: number }>(`select count(*)::int as n from tally_name where kind = 'ledger'`);
+    if (read?.n && !(await one(`select 1 from tally_name where kind = 'ledger' and name = $1`, [tallyName]))) {
+      return { ok: false, error: `"${tallyName}" is not a ledger in Tally (as last read). Create it in Tally, then use Read from Tally (Route orders > Masters > Tally names), or pick the exact name.` };
+    }
+  }
   const f = new FormData();
   const put = (k: string, v: string | number | null | undefined) => { if (v !== null && v !== undefined && v !== "") f.set(k, String(v)); };
   put("firm_code", input.code.trim().toUpperCase());
@@ -396,9 +414,9 @@ export async function approveFirmRequest(id: number, input: ApproveInput, who: s
   put("phone", r.phone);
   put("email", r.email);
   put("contact_person", r.contactPerson);
-  // the state must be one on the masters' list: matched whatever its spelling case, else left for the office
-  const state = r.state ? (await one<{ state: string }>(`select state from fp_state where lower(state) = lower($1) limit 1`, [r.state.trim()]))?.state : null;
+  // the state as the masters' list spells it (the one chosen here, else the one they gave)
   put("state_state", state);
+  put("tally_name", tallyName);
   put("city", r.city);
   put("pincode", r.pincode);
   put("address", r.address);
