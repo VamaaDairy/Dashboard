@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { ChevronLeft, ChevronRight, Contact, Download, List, Network, Plus, Search } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -9,7 +9,7 @@ import { CustomerTabs } from "@/components/customers/CustomerTabs";
 import { RowActions } from "@/components/masters/RowActions";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
-import { CUSTOMER_KINDS, FIRM_PAGE, customerCounts, firmFilterOptions, firmTypes, isCustomerKind, listD2c, listFirms, servedBy, type FirmFilter, type FirmKind, type FirmRow } from "@/lib/customers";
+import { CUSTOMER_KINDS, FIRM_PAGE, customerCounts, firmFilterOptions, firmTypes, isCustomerKind, listFirms, servedBy, type FirmFilter, type FirmKind, type FirmRow } from "@/lib/customers";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -21,8 +21,8 @@ const th = "whitespace-nowrap px-3 py-2 font-semibold";
 const td = "px-3 py-2";
 
 /**
- * Customer Master, one sub-section per channel (super stockists, distributors, MFS, institutions, parlours, retailers,
- * D2C), each with a link to every profile. Firms can be narrowed to one type (GT / ATP, the MFS chain, the institution
+ * Customer Master, one sub-section per channel (super stockists, distributors, MFS, institutions, parlours, retailers;
+ * D2C customers are /d2c/customers), each with a link to every profile. Firms can be narrowed to one type (GT / ATP, the MFS chain, the institution
  * group) and shown as a list or as a hierarchy: grouped by type (retailers: by who serves them), each with the
  * customers it serves underneath.
  */
@@ -31,6 +31,8 @@ export default async function CustomerListPage({ params, searchParams }: { param
   if (!isCustomerKind(kind)) notFound();
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
+  // D2C customers have one page: /d2c/customers
+  if (kind === "d2c") redirect(`/d2c/customers${q ? `?${new URLSearchParams({ q })}` : ""}`);
   const type = (sp.type ?? "").trim() || null;
   const tree = sp.view === "tree";
   const status = sp.status === "active" || sp.status === "inactive" ? sp.status : null;
@@ -41,18 +43,12 @@ export default async function CustomerListPage({ params, searchParams }: { param
   const info = CUSTOMER_KINDS.find((k) => k.key === kind)!;
   const me = await userFromToken((await cookies()).get("session")?.value);
   // adding, editing, deactivating and deleting customers: the Customer Master's edit right
-  const canAdd = kind !== "d2c" && !!me && atLeast(levelFor(me, "fp.distribution"), "edit");
-  const [counts, listing, d2c, types, options] = await Promise.all([
-    customerCounts(),
-    kind === "d2c" ? Promise.resolve({ rows: [], total: 0 }) : listFirms(kind, filter, page),
-    kind === "d2c" ? listD2c(q) : Promise.resolve([]),
-    kind === "d2c" ? Promise.resolve([]) : firmTypes(kind),
-    kind === "d2c" ? Promise.resolve({ states: [], officers: [] }) : firmFilterOptions(kind),
-  ]);
+  const canAdd = !!me && atLeast(levelFor(me, "fp.distribution"), "edit");
+  const [counts, listing, types, options] = await Promise.all([customerCounts(), listFirms(kind, filter, page), firmTypes(kind), firmFilterOptions(kind)]);
   const firms = listing.rows;
   const pages = Math.max(1, Math.ceil(listing.total / FIRM_PAGE));
   // the hierarchy: who each shown customer serves (one level down)
-  const children = tree && kind !== "d2c" ? await servedBy(firms.filter((f) => f.serves > 0).map((f) => f.uid)) : new Map();
+  const children = tree ? await servedBy(firms.filter((f) => f.serves > 0).map((f) => f.uid)) : new Map();
   const href = (over: Record<string, string | null>) => {
     const p = new URLSearchParams();
     const all: Record<string, string | null> = { q: q || null, type, view: tree ? "tree" : null, status, state, officer, page: null, ...over };
@@ -71,10 +67,8 @@ export default async function CustomerListPage({ params, searchParams }: { param
         <PageHeader
           icon={Contact}
           title={`Customer Master · ${info.label}`}
-          subtitle={kind === "d2c"
-            ? "Everyone who shops in the Gaia app: orders, spend and subscriptions. Open one for the full profile."
-            : `${info.about} Contact, who serves them, sales officer, price list, app login and orders; open one for the full profile.`}
-          actions={kind === "d2c" ? null : (
+          subtitle={`${info.about} Contact, who serves them, sales officer, price list, app login and orders; open one for the full profile.`}
+          actions={(
             <div className="flex items-center gap-2">
               <a href={exportHref} className={buttonVariants({ variant: "outline" })}><Download className="size-4" /> Export</a>
               {canAdd ? <Link href="/customers/new" className={buttonVariants({ variant: "primary" })}><Plus className="size-4" /> Add {info.one.toLowerCase()}</Link> : null}
@@ -82,8 +76,7 @@ export default async function CustomerListPage({ params, searchParams }: { param
           )}
         />
         <CustomerTabs on={kind} counts={counts} showD2c={!!me && levelFor(me, "d2c.customers") !== "none"} />
-        {kind !== "d2c" ? (
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-input p-0.5">
               <Link href={href({ view: null })} className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px]", !tree ? "bg-primary text-primary-foreground" : "hover:bg-muted")}><List className="size-3.5" /> List</Link>
               <Link href={href({ view: "tree" })} className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px]", tree ? "bg-primary text-primary-foreground" : "hover:bg-muted")}><Network className="size-3.5" /> Hierarchy</Link>
@@ -97,18 +90,16 @@ export default async function CustomerListPage({ params, searchParams }: { param
                 ))}
               </>
             ) : null}
-          </div>
-        ) : null}
+        </div>
         <form className="flex flex-wrap items-center gap-2">
           {type ? <input type="hidden" name="type" value={type} /> : null}
           {tree ? <input type="hidden" name="view" value="tree" /> : null}
           <div className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input name="q" defaultValue={q} placeholder={kind === "d2c" ? "Search name, mobile, address, pincode" : "Search name, code, mobile, city, contact, GSTIN, Tally name, route"}
+            <input name="q" defaultValue={q} placeholder="Search name, code, mobile, city, contact, GSTIN, Tally name, route"
               className="h-8 w-full rounded-lg border border-input bg-transparent pr-3 pl-8 text-sm focus:border-primary focus:outline-none" />
           </div>
-          {kind !== "d2c" ? (
-            <>
+          <>
               <select name="status" defaultValue={status ?? ""} className={select} aria-label="Status">
                 <option value="">Active and inactive</option>
                 <option value="active">Active</option>
@@ -126,36 +117,13 @@ export default async function CustomerListPage({ params, searchParams }: { param
                   {options.officers.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               ) : null}
-            </>
-          ) : null}
+          </>
           <button className="h-8 rounded-lg border border-input px-3 text-sm font-medium hover:bg-muted">Search</button>
           {narrowed ? <Link href={href({ q: null, status: null, state: null, officer: null })} className="text-sm text-muted-foreground hover:underline">Clear</Link> : null}
         </form>
 
-        {tree && kind !== "d2c" ? <Hierarchy kind={kind} firms={firms} served={children} /> : (
+        {tree ? <Hierarchy kind={kind} firms={firms} served={children} /> : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          {kind === "d2c" ? (
-            <table className="w-full text-sm">
-              <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-                <tr>{["Customer", "Mobile", "Address", "Joined", "Orders", "Spend", "Last order", "Subscriptions"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {d2c.map((c) => (
-                  <tr key={c.id} className="border-t border-border align-top hover:bg-muted/40">
-                    <td className={td}><Link href={`/d2c/customers/${c.id}`} className="font-medium text-primary hover:underline">{c.name}</Link></td>
-                    <td className={`${td} font-mono text-xs`}>{c.phone}</td>
-                    <td className={`${td} min-w-56 text-muted-foreground`}>{[c.address, c.pincode].filter(Boolean).join(" - ") || "—"}</td>
-                    <td className={`${td} whitespace-nowrap`}>{day(c.joined)}</td>
-                    <td className={`${td} num text-right`}>{c.orders}</td>
-                    <td className={`${td} num text-right`}>{rs(c.spend)}</td>
-                    <td className={`${td} whitespace-nowrap`}>{day(c.last_order)}</td>
-                    <td className={`${td} num text-right`}>{c.subscriptions || "—"}</td>
-                  </tr>
-                ))}
-                {d2c.length === 0 ? <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">{q ? "No customer matches." : "No D2C customers yet."}</td></tr> : null}
-              </tbody>
-            </table>
-          ) : (
             <table className="w-full text-sm">
               <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
                 <tr>
@@ -196,10 +164,9 @@ export default async function CustomerListPage({ params, searchParams }: { param
                 {firms.length === 0 ? <tr><td colSpan={canAdd ? 22 : 21} className="px-3 py-10 text-center text-muted-foreground">{narrowed || type ? "No customer matches." : `No ${info.label.toLowerCase()} yet.`}</td></tr> : null}
               </tbody>
             </table>
-          )}
         </div>
         )}
-        {kind !== "d2c" && listing.total > 0 ? (
+        {listing.total > 0 ? (
           <div className="flex items-center gap-3 text-[13px] text-muted-foreground">
             <span>
               {pages > 1

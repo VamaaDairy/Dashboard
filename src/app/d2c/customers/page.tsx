@@ -1,5 +1,10 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Download, Search, Users } from "lucide-react";
+import { CustomerTabs } from "@/components/customers/CustomerTabs";
+import { userFromToken } from "@/lib/access-server";
+import { levelFor } from "@/lib/access";
+import { customerCounts } from "@/lib/customers";
 import { PageHeader } from "@/components/ui/page-header";
 import { Tiles } from "@/components/dash/Dash";
 import { CUSTOMER_SORTS, listCustomers, type CustomerSort } from "@/lib/d2c/sales";
@@ -19,6 +24,9 @@ export default async function D2cCustomersPage({ searchParams }: { searchParams:
   const q = (sp.q ?? "").slice(0, 80);
   const sort = (sp.sort && sp.sort in CUSTOMER_SORTS ? sp.sort : "newest") as CustomerSort;
   const customers = await listCustomers(q, sort);
+  // the Customer Master's other tabs, for those who can open them
+  const me = await userFromToken((await cookies()).get("session")?.value);
+  const counts = me && levelFor(me, "customers") !== "none" ? await customerCounts() : null;
   const all = q ? await listCustomers("", "newest") : customers;
   const buyers = all.filter((c) => c.orders > 0);
   const repeat = all.filter((c) => c.orders > 1);
@@ -43,6 +51,7 @@ export default async function D2cCustomersPage({ searchParams }: { searchParams:
             </a>
           }
         />
+        {counts ? <CustomerTabs on="d2c" counts={counts} /> : null}
         <Tiles
           items={[
             { label: "Customers", value: all.length.toLocaleString("en-IN"), note: `${thisMonth.length} joined this month` },

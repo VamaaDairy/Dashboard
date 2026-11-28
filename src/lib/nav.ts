@@ -81,14 +81,37 @@ const distAppOrders: NavItem = {
 const salesStock = orders("Sales & stock", Truck, ["fpsalesview", "fpsecondarysalesview", "stockView", "fpsalesreturnview", "collections", "task"]);
 // The Customer Master (/customers) is the one list of customers; the old Customer Masters screen
 // (/orders/distribution) sends people there.
-const customerMaster: NavLeaf = { href: "/customers/distributors", key: "customers", label: "Customer Master" };
-const customerSetup = orders("Customers", Contact, ["customerTarget", "customerTypeMaster", "customerRouteMapping"]);
-const distCustomers: NavItem | null = customerSetup && { ...customerSetup, href: customerMaster.href, children: [customerMaster, ...customerSetup.children!] };
+// One entry, the same wherever it shows (Masters, Distributor & Retail).
+const customerMaster: NavItem = {
+  href: "/customers/distributors", key: "customers", label: "Customer Master", icon: Contact,
+  children: [
+    { href: "/customers/super-stockists", key: "customers", label: "Super stockists" },
+    { href: "/customers/distributors", key: "customers", label: "Distributors (GT / ATP)" },
+    { href: "/customers/mfs", key: "customers", label: "MFS" },
+    { href: "/customers/institutions", key: "customers", label: "Institutions" },
+    { href: "/customers/pt", key: "customers", label: "PT / Parlours" },
+    { href: "/customers/retailers", key: "customers", label: "Retailers" },
+    { href: "/d2c/customers", key: "d2c.customers", label: "D2C customers" },
+    { href: "/customers/duplicates", key: "customers", label: "Same mobile twice" },
+  ],
+};
+const customerSetup = orders("Customer targets, types & routes", Contact, ["customerTarget", "customerTypeMaster", "customerRouteMapping"]);
 // The old staff list (employeecustomermaster), attendance and leave pages are replaced by the Employee Master and
 // the Employee app's Attendance and Leave, so they are left out (they show under "Not in use").
 // The Employee Master (/employees) is the one list of employees; the old Employee Profile screen (/orders/staffs)
 // sends people there.
 const salesTeam = orders("Sales team", Users, ["employeefaceregistration", "employeeTarget", "catalogue", "lms"]);
+// One entry, the same wherever it shows (Masters, HR).
+const employeeMaster: NavItem = {
+  href: "/employees/salesforce", key: "employees", label: "Employee Master", icon: Users,
+  children: [
+    { href: "/employees/salesforce", key: "employees", label: "Salesforce" },
+    { href: "/employees/plant", key: "employees", label: "Plant" },
+    { href: "/employees/office", key: "employees", label: "Office" },
+    { href: "/employees/unset", key: "employees", label: "Not placed yet" },
+    { href: "/employees/departments", key: "employees", label: "Departments" },
+  ],
+};
 const salesMasters = orders("Masters", Database, ["designationMaster", "channelMaster", "categoryMaster", "taxMaster", "stateMaster", "cityMaster", "divisionMaster", ["communicationCredit", "CRM credits"]]);
 // Pricing
 const priceList: NavItem = { href: "/price-list", key: "pricelist", label: "Prices", icon: Tags };
@@ -354,7 +377,8 @@ const WORKING: NavSection[] = [
       {
         label: "Customers & products",
         items: items(
-          distCustomers,
+          customerMaster,
+          customerSetup,
           {
             href: "/product-master/distributor", key: "productmaster", label: "App products", icon: PackageSearch,
             children: [
@@ -423,6 +447,7 @@ const WORKING: NavSection[] = [
       {
         label: "Employees",
         items: [
+          employeeMaster,
           {
             href: "/employee-app", key: "emp", label: "Employee app", icon: Users,
             children: [
@@ -450,11 +475,7 @@ const WORKING: NavSection[] = [
       {
         label: "Employee Master",
         items: items(
-          { href: "/employees/salesforce", key: "employees", label: "Salesforce", icon: MapPinned },
-          { href: "/employees/plant", key: "employees", label: "Plant", icon: Factory },
-          { href: "/employees/office", key: "employees", label: "Office", icon: Briefcase },
-          { href: "/employees/unset", key: "employees", label: "Not placed yet", icon: Users },
-          { href: "/employees/departments", key: "employees", label: "Departments", icon: Network },
+          employeeMaster,
           salesTeam && { ...salesTeam, label: "Field staff setup" },
           { href: "/employee-app/accounts", key: "emp.accounts", label: "Employee app accounts", icon: Smartphone },
           { href: "/users", key: "", label: "Dashboard users", icon: UserPlus, ownerOnly: true },
@@ -463,20 +484,8 @@ const WORKING: NavSection[] = [
       {
         label: "Customer Master",
         items: items(
-          {
-            href: "/customers/distributors", key: "customers", label: "Trade customers", icon: Network,
-            children: [
-              { href: "/customers/super-stockists", key: "customers", label: "Super stockists" },
-              { href: "/customers/distributors", key: "customers", label: "Distributors (GT / ATP)" },
-              { href: "/customers/mfs", key: "customers", label: "MFS" },
-              { href: "/customers/institutions", key: "customers", label: "Institutions" },
-              { href: "/customers/pt", key: "customers", label: "PT / Parlours" },
-              { href: "/customers/retailers", key: "customers", label: "Retailers" },
-            ],
-          },
-          { href: "/d2c/customers", key: "d2c.customers", label: "D2C customers", icon: Contact },
-          { href: "/customers/duplicates", key: "customers", label: "Same mobile twice", icon: ClipboardCheck },
-          customerSetup && { ...customerSetup, label: "Customer targets, types & routes" },
+          customerMaster,
+          customerSetup,
           { href: "/route-orders/masters", key: "routeorders.masters", label: "Route customers & products", icon: Route },
         ),
       },
@@ -510,7 +519,7 @@ const WORKING: NavSection[] = [
       },
       { label: "Accounts", items: [dash.creditNotes, dash.cn] },
       { label: "Distributor & retail orders", items: items(distAppOrders, salesStock) },
-      { label: "Distributor & retail masters", items: items(distCustomers, salesMasters) },
+      { label: "Distributor & retail masters", items: items(customerMaster, customerSetup, salesMasters) },
       { label: "Distributor & retail prices", items: items(priceList, marginsSlabs) },
     ],
   },
