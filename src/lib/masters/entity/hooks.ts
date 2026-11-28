@@ -65,6 +65,10 @@ const HOOKS: Record<string, Hooks> = {
       return extra;
     },
     async after(ctx, v) {
+      // the route sheet bills this customer to the same Tally ledger
+      if ((v.tally_name ?? null) !== (ctx.before?.tally_name ?? null)) {
+        await ctx.client.query(`update route_order_party set tally_ledger = $2, updated_at = now() where firm_uid = $1`, [ctx.id, v.tally_name ?? null]);
+      }
       if (!ctx.isNew && mobileOf(v.phone) !== mobileOf(ctx.before?.phone)) {
         // keep the app sign-in number the same as the master's
         await ctx.client.query(`update dist_login set phone = $2 where firm_uid = $1`, [ctx.id, mobileOf(v.phone)]);
@@ -126,6 +130,10 @@ const HOOKS: Record<string, Hooks> = {
     },
     async after(ctx, v) {
       await ctx.client.query(`insert into fp_category (category) select $1::text where not exists (select 1 from fp_category where category = $1::text)`, [v.category]);
+      // the route sheet bills this product as the same Tally stock item
+      if ((v.tally_name ?? null) !== (ctx.before?.tally_name ?? null)) {
+        await ctx.client.query(`update route_order_product set tally_item = $2 where sku_no::text = regexp_replace($1::text, '\\D', '', 'g')`, [v.sku_code ?? ctx.before?.sku_code, v.tally_name ?? null]);
+      }
       await ctx.client.query(`insert into fp_sub_category (sub_category) select $1::text where not exists (select 1 from fp_sub_category where sub_category = $1::text)`, [v.sub_category]);
 
       // photos: removed ones go, new ones are kept in the database after the existing ones

@@ -1,6 +1,6 @@
 import { Contact } from "lucide-react";
 import type { MasterDef } from "../types";
-import { REF_BEATS, REF_CHANNELS, REF_PARENT_FIRMS, REF_STAFF, REF_STATES, SUGGEST_CUSTOMER_CLASS, SUGGEST_CUSTOMER_TYPE } from "../refs";
+import { REF_BEATS, REF_CHANNELS, REF_PARENT_FIRMS, REF_STAFF, REF_STATES, SUGGEST_CUSTOMER_CLASS, SUGGEST_CUSTOMER_TYPE, SUGGEST_TALLY_LEDGER } from "../refs";
 import { person, active } from "./fragments";
 
 /** Whether the customer can sign in to the Gaia app: a distributor needs an enabled login and an active customer record. */
@@ -34,11 +34,12 @@ export const customers: MasterDef = {
     { key: "route", label: "Route", expr: "b.beat_name" },
     { key: "credit", label: "Credit limit", expr: "f.credit_limit", kind: "money" },
     { key: "gstin", label: "GSTIN", expr: "f.gstin", kind: "mono" },
+    { key: "tally", label: "Tally name", expr: "f.tally_name" },
     { key: "created", label: "Created", expr: "f.created_at", kind: "date" },
     { key: "applogin", label: "App login", expr: APP_LOGIN, kind: "status" },
     { key: "appmobile", label: "App mobile", expr: "dl.phone", kind: "mono" },
   ],
-  search: ["f.firm_code", "f.name", "f.phone", "f.city", "f.gstin", "p.name", "b.beat_name"],
+  search: ["f.firm_code", "f.name", "f.phone", "f.city", "f.gstin", "f.tally_name", "p.name", "b.beat_name"],
   filters: [
     { key: "channel", label: "Channel", expr: "ch.channel" },
     { key: "status", label: "Status", expr: active("f") },
@@ -101,6 +102,10 @@ export const customers: MasterDef = {
       { name: "longitude", label: "Longitude", type: "number", min: -180, max: 180 },
       { name: "license_no", label: "License number", type: "text" },
       { name: "erp_code", label: "ERP code", type: "text" },
+      {
+        name: "tally_name", label: "Tally name", type: "suggest", suggest: SUGGEST_TALLY_LEDGER, wide: true,
+        help: "The Tally ledger this customer is billed to, spelt exactly as in Tally (a stockist's outlet: the stockist's ledger). Used for the Tally sales file.",
+      },
     ],
   },
 };

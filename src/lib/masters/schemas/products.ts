@@ -1,6 +1,6 @@
 import { Package } from "lucide-react";
 import type { MasterDef } from "../types";
-import { REF_TAX, SUGGEST_BRAND, SUGGEST_CATEGORY, SUGGEST_SUB_CATEGORY, SUGGEST_UNIT } from "../refs";
+import { REF_TAX, SUGGEST_BRAND, SUGGEST_CATEGORY, SUGGEST_SUB_CATEGORY, SUGGEST_TALLY_ITEM, SUGGEST_UNIT } from "../refs";
 import { active } from "./fragments";
 import { productCols, productJoin } from "./product-cols";
 
@@ -23,6 +23,7 @@ export const products: MasterDef = {
     { key: "mrp", label: "MRP", expr: "p.mrp", kind: "money" },
     { key: "dp", label: "Dealer price", expr: "p.dp", kind: "money" },
     { key: "tax", label: "Tax code", expr: "t.tax_code", kind: "mono" },
+    { key: "tally", label: "Tally name", expr: "p.tally_name" },
     { key: "pos", label: "Position", expr: "p.position", kind: "num" },
     { key: "focus", label: "Focus", expr: "case when p.focus_product = 1 then 'Yes' else 'No' end" },
     { key: "status", label: "Status", expr: active("p"), kind: "status" },
@@ -58,6 +59,10 @@ export const products: MasterDef = {
       { name: "tax_configuration_uid", label: "Tax code", type: "ref", ref: REF_TAX, required: true },
       { name: "position", label: "Position", type: "number", help: "Order in product lists." },
       { name: "focus_product", label: "Focus product", type: "bool" },
+      {
+        name: "tally_name", label: "Tally name", type: "suggest", suggest: SUGGEST_TALLY_ITEM, wide: true,
+        help: "The Tally stock item this product is sold as, spelt exactly as in Tally. Used for the Tally sales file.",
+      },
       { name: "description", label: "Description", type: "textarea", wide: true },
       { name: "photos", label: "Photos", type: "photos", virtual: true, wide: true, help: "Shown in the Gaia app, first photo first. JPG, PNG or WebP." },
     ],

@@ -30,7 +30,7 @@ function decode(raw: string): string {
     .trim();
 }
 
-const tag = (chunk: string, name: string) => {
+export const tag = (chunk: string, name: string) => {
   const m = new RegExp(`<${name}(?:\\s[^>]*)?>([^<]*)</${name}>`).exec(chunk);
   return m ? decode(m[1]) : "";
 };
@@ -39,7 +39,7 @@ const num = (s: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-async function post(xml: string, timeoutMs = 120_000, attempts = 3): Promise<string> {
+export async function post(xml: string, timeoutMs = 120_000, attempts = 3): Promise<string> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
@@ -65,14 +65,14 @@ async function post(xml: string, timeoutMs = 120_000, attempts = 3): Promise<str
   throw new TallyError(`Could not reach Tally at ${TALLY_URL}. Is TallyServer running on port 9000 with "${TALLY_COMPANY}" open?`);
 }
 
-function collection(id: string, type: string, fetch: string[]) {
+export function collection(id: string, type: string, fetch: string[]) {
   return `<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>EXPORT</TALLYREQUEST><TYPE>COLLECTION</TYPE><ID>${id}</ID></HEADER><BODY><DESC>
 <STATICVARIABLES><SVCURRENTCOMPANY>${esc(TALLY_COMPANY)}</SVCURRENTCOMPANY><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES>
 <TDL><TDLMESSAGE><COLLECTION NAME="${id}" ISMODIFY="No"><TYPE>${type}</TYPE>${fetch.map((f) => `<FETCH>${f}</FETCH>`).join("")}</COLLECTION></TDLMESSAGE></TDL></DESC></BODY></ENVELOPE>`;
 }
 
-const chunks = (body: string, el: string) => body.match(new RegExp(`<${el}\\s[\\s\\S]*?</${el}>`, "g")) ?? [];
-const attrName = (chunk: string) => {
+export const chunks = (body: string, el: string) => body.match(new RegExp(`<${el}\\s[\\s\\S]*?</${el}>`, "g")) ?? [];
+export const attrName = (chunk: string) => {
   const m = /NAME="([^"]*)"/.exec(chunk);
   return m ? decode(m[1]) : "";
 };

@@ -11,6 +11,7 @@ import { atLeast, levelFor } from "@/lib/access";
 import { CHANNELS, listParties, listProducts, listRoutes, unmatchedFirms, unmatchedSkus } from "@/lib/route-orders/data";
 import { linkFirm, saveParty, saveProduct } from "../actions";
 import { Chip, Notice } from "../parts";
+import { TallyTab } from "./tally-tab";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ function Area({ label, name, value }: { label: string; name: string; value?: str
 
 export default async function MastersPage({ searchParams }: { searchParams: Promise<{ tab?: string; edit?: string; q?: string; msg?: string; error?: string }> }) {
   const sp = await searchParams;
-  const tab = sp.tab === "customers" || sp.tab === "products" ? sp.tab : "fix";
+  const tab = sp.tab === "customers" || sp.tab === "products" || sp.tab === "tally" ? sp.tab : "fix";
   const me = await userFromToken((await cookies()).get("session")?.value);
   const canEdit = !!me && atLeast(levelFor(me, "routeorders.masters"), "edit");
   const [parties, products, routes, firms, skus, labels] = await Promise.all([listParties(), listProducts(), listRoutes(), unmatchedFirms(), unmatchedSkus(), productLabels()]);
@@ -48,6 +49,7 @@ export default async function MastersPage({ searchParams }: { searchParams: Prom
           <Chip href="/route-orders/masters" on={tab === "fix"}>To fix <span className="ml-1 opacity-70">{fixCount}</span></Chip>
           <Chip href="/route-orders/masters?tab=customers" on={tab === "customers"}>Customers <span className="ml-1 opacity-70">{parties.length}</span></Chip>
           <Chip href="/route-orders/masters?tab=products" on={tab === "products"}>Products <span className="ml-1 opacity-70">{products.length}</span></Chip>
+          <Chip href="/route-orders/masters?tab=tally" on={tab === "tally"}>Tally names</Chip>
         </div>
         {sp.msg ? <Notice tone="ok">{sp.msg}</Notice> : null}
         {sp.error ? <Notice tone="error">{sp.error}</Notice> : null}
@@ -233,6 +235,8 @@ export default async function MastersPage({ searchParams }: { searchParams: Prom
             </div>
           </div>
         ) : null}
+
+        {tab === "tally" ? <TallyTab canEdit={canEdit} /> : null}
       </div>
     </div>
   );
