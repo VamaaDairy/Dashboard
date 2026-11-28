@@ -52,6 +52,9 @@ export interface FirmRequest {
   kind: string;
   notes: string | null;
   status: "pending" | "approved" | "rejected";
+  /** the distributor that serves it (a retailer): picked at sign-up or by the sales officer */
+  parentUid: string | null;
+  parentName: string | null;
   firmUid: string | null;
   firmCode: string | null;
   reason: string | null;
@@ -64,12 +67,46 @@ const SELECT = `
   select r.id, r.staff_uid as "staffUid", r.source, nullif(trim(concat_ws(' ', s.first_name, s.last_name)), '') as officer, r.name,
          r.contact_person as "contactPerson", r.phone, r.email, r.address, r.city, r.pincode, r.state, r.lat, r.lng, r.gstin, r.area, r.pan, r.licence_no as "licenceNo", r.landline, r.district, r.aadhar_no as "aadharNo",
          r.price_list_uid as "priceListUid", sl.name as "priceList", r.credit_limit::float as "creditLimit", r.firm_class as "firmClass", r.kind, r.notes,
-         r.status, r.firm_uid as "firmUid", f.firm_code as "firmCode", r.reason, r.decided_by as "decidedBy",
+         r.status, r.parent_firm_uid as "parentUid", pf.name as "parentName", r.firm_uid as "firmUid", f.firm_code as "firmCode", r.reason, r.decided_by as "decidedBy",
          r.decided_at as "decidedAt", r.created_at as "createdAt"
     from dist_firm_request r
     left join fp_staff s on s.uid = r.staff_uid
     left join fp_firm f on f.uid = r.firm_uid
+    left join fp_firm pf on pf.uid = r.parent_firm_uid
     left join fp_slab sl on sl.uid = r.price_list_uid`;
+
+/** A firm a retailer can be served by: an active distributor or super stockist (channel level 2 or 3). */
+const SERVES = `f.active = 1 and ch.level between 2 and 3`;
+
+/** The distributor [uid] if a retailer can be served by it, else null. */
+export async function servingDistributor(uid: unknown): Promise<{ uid: string; name: string } | null> {
+  if (typeof uid !== "string" || !/^[0-9a-f-]{36}$/i.test(uid)) return null;
+  return one<{ uid: string; name: string }>(`select f.uid, f.name from fp_firm f join fp_channel ch on ch.uid = f.channel_uid where f.uid = $1 and ${SERVES}`, [uid]);
+}
+
+export interface NearDistributor { uid: string; name: string; city: string | null; area: string | null; km: number | null }
+
+/**
+ * Distributors a retailer can pick from: nearest first when its location is known (within 100 km), else by name;
+ * [q] narrows by name, city or area. At most 30.
+ */
+export async function distributorsNear(at: { lat?: number | null; lng?: number | null; q?: string }): Promise<NearDistributor[]> {
+  const q = (at.q ?? "").trim().slice(0, 60);
+  const hasPin = typeof at.lat === "number" && typeof at.lng === "number" && Number.isFinite(at.lat) && Number.isFinite(at.lng);
+  const KM = `(6371 * acos(least(1, cos(radians(a.lat)) * cos(radians(f.latitude::float)) * cos(radians(f.longitude::float) - radians(a.lng)) + sin(radians(a.lat)) * sin(radians(f.latitude::float)))))`;
+  const pinned = `f.latitude is not null and f.longitude is not null and f.latitude::text not in ('', '0') and f.longitude::text not in ('', '0')`;
+  return query<NearDistributor>(
+    `with a as (select $1::float as lat, $2::float as lng, $3::text as q)
+     select f.uid, f.name, nullif(trim(f.city), '') as city, nullif(trim(f.place), '') as area,
+            ${hasPin ? `case when ${pinned} then round(${KM}::numeric, 1)::float end` : "null::float"} as km
+       from a, fp_firm f join fp_channel ch on ch.uid = f.channel_uid
+      where ${SERVES} and (a.q = '' or f.name ilike '%' || a.q || '%' or f.city ilike '%' || a.q || '%' or f.place ilike '%' || a.q || '%')
+      ${hasPin ? `and (not (${pinned}) or ${KM} <= 100 or a.q <> '')` : ""}
+      order by ${hasPin ? "km nulls last," : ""} f.name
+      limit 30`,
+    [hasPin ? at.lat : null, hasPin ? at.lng : null, q],
+  );
+}
 
 const iso = (r: FirmRequest): FirmRequest => ({
   ...r,
@@ -106,6 +143,9 @@ export async function createFirmRequest(
   if (pincode && pincode.length !== 6) fields.pincode = "Pincode must be 6 digits";
   if (gstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) fields.gstin = "Check the GSTIN";
   if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fields.email = "Check the email";
+  // a retailer orders from its distributor: the officer picks which one serves it
+  const serves = kind === "Retailer" ? await servingDistributor(b.distributorUid) : null;
+  if (kind === "Retailer" && !serves) fields.distributorUid = "Choose the distributor who serves this shop";
   if (Object.keys(fields).length) return { ok: false, error: "Please check the highlighted details.", fields };
 
   // the same phone already a customer, or already waiting
@@ -119,16 +159,16 @@ export async function createFirmRequest(
   if ((recent?.n ?? 0) >= 30) return { ok: false, error: "Too many new customers today. Please call the office." };
 
   const r = await one<{ id: number }>(
-    `insert into dist_firm_request (staff_uid, login_id, name, contact_person, phone, email, address, city, pincode, state, lat, lng, gstin, kind, notes)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) returning id`,
+    `insert into dist_firm_request (staff_uid, login_id, name, contact_person, phone, email, address, city, pincode, state, lat, lng, gstin, kind, notes, parent_firm_uid)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) returning id`,
     [staffUid, loginId, name, text(b.contactPerson, 80) || null, phone, email || null, address, text(b.city, 60) || null, pincode || null,
-      text(b.state, 60) || null, lat, lng, gstin || null, kind, text(b.notes, 300) || null],
+      text(b.state, 60) || null, lat, lng, gstin || null, kind, text(b.notes, 300) || null, serves?.uid ?? null],
   );
   if (kind === "Retailer") {
     // a retailer needs no approval: added now, mapped to this officer, ready for orders
     const rt = await retailChannel();
     if (rt) {
-      const done = await approveFirmRequest(r!.id, { code: await retailCode(phone), channelUid: rt }, "Sales app (retailer, automatic)", { quiet: true });
+      const done = await approveFirmRequest(r!.id, { code: await retailCode(phone), channelUid: rt, parentUid: serves!.uid }, "Sales app (retailer, automatic)", { quiet: true });
       if (!done.ok) console.error(`[customers] retailer ${phone} from the sales app stays for the office: ${done.error}`);
     }
   }
@@ -223,6 +263,9 @@ export async function createSelfSignup(b: Record<string, unknown>): Promise<Sign
   if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fields.email = "Check the email";
   if (landline && !LANDLINE.test(landline)) fields.landline = "Enter the landline with its STD code";
   if (aadhar && !AADHAAR.test(aadhar)) fields.aadharNo = "Aadhaar has 12 digits";
+  // a retailer orders from its distributor: it picks the one that serves it
+  const serves = kind === "retailer" ? await servingDistributor(b.distributorUid) : null;
+  if (kind === "retailer" && !serves) fields.distributorUid = "Choose your distributor";
   // the state as Customer Masters spells it (its list), whatever case it came in
   const masterState = state ? (await one<{ state: string }>(`select state from fp_state where lower(state) = lower($1) limit 1`, [state]))?.state ?? null : null;
   if (kind === "distributor") {
@@ -248,18 +291,18 @@ export async function createSelfSignup(b: Record<string, unknown>): Promise<Sign
   const ticket = randomBytes(24).toString("hex");
   const r = await one<{ id: number }>(
     `insert into dist_firm_request (source, name, contact_person, phone, email, address, area, city, state, pincode, lat, lng, gstin, pan, licence_no, kind, pin_hash,
-                                    landline, district, aadhar_no, ticket_hash)
-     values ('app', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) returning id`,
+                                    landline, district, aadhar_no, ticket_hash, parent_firm_uid)
+     values ('app', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) returning id`,
     [name, owner, phone, email || null, address || null, area || null, city, masterState ?? (state || null), pincode || null, lat, lng,
       gstin || null, pan || null, licence || null, kind === "retailer" ? "Retailer" : "Distributor", hashPin(pin),
-      landline || null, district || null, aadhar || null, sha(ticket)],
+      landline || null, district || null, aadhar || null, sha(ticket), serves?.uid ?? null],
   );
   if (kind === "distributor") return { ok: true, status: "pending", ticket };
 
   // a retailer needs no approval: added to Customer Masters on the Retail channel and signed up at once
   const rt = await retailChannel();
   if (!rt) return { ok: true, status: "pending", ticket }; // no Retail channel set up: the office approves it as before
-  const done = await approveFirmRequest(r!.id, { code: await retailCode(phone), channelUid: rt }, "Retailer sign-up (automatic)", { quiet: true });
+  const done = await approveFirmRequest(r!.id, { code: await retailCode(phone), channelUid: rt, parentUid: serves!.uid }, "Retailer sign-up (automatic)", { quiet: true });
   // should that fail the request stays pending for the office, and the retailer is told it is waiting
   return { ok: true, status: done.ok ? "active" : "pending", ticket };
 }
@@ -389,6 +432,9 @@ export async function approveFirmRequest(id: number, input: ApproveInput, who: s
   // a distributor orders from the plant and is billed in Tally: it is switched on only once its Tally ledger and state
   // are set, so its first order can be billed (a retailer is billed by its distributor and needs neither)
   const retailer = /retail/i.test(r.kind);
+  // a retailer is served by a distributor: the one picked at sign-up, or the office's choice
+  const parentUid = input.parentUid || r.parentUid || null;
+  if (retailer && !(await servingDistributor(parentUid))) return { ok: false, error: "Choose the distributor who serves this retailer (Served by)." };
   const tallyName = input.tallyName?.trim() || null;
   const chosenState = input.state?.trim() || r.state?.trim() || null;
   const state = chosenState ? (await one<{ state: string }>(`select state from fp_state where lower(state) = lower($1) limit 1`, [chosenState]))?.state ?? null : null;
@@ -406,7 +452,7 @@ export async function approveFirmRequest(id: number, input: ApproveInput, who: s
   put("name", r.name);
   put("channel_uid", input.channelUid);
   put("firm_type", r.kind);
-  put("parent_firm_uid", input.parentUid);
+  put("parent_firm_uid", parentUid);
   put("sales_contact_uid", input.salesContactUid ?? r.staffUid);
   put("firm_class", input.firmClass?.trim());
   put("credit_limit", input.creditLimit);

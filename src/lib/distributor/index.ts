@@ -361,6 +361,11 @@ export async function placeDistOrder(
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const total = quote.total;
 
+  // a retailer orders from the distributor that serves it: none (or one no longer active) means it can't order yet
+  if (channel === "retail" && !(await one(`select 1 from fp_firm f join fp_firm p on p.uid = f.parent_firm_uid where f.uid = $1 and p.active = 1`, [firm.uid]))) {
+    return { ok: false, error: "Your distributor isn't set yet. Please contact Gaia." };
+  }
+
   const placed = await tx(async (c) => {
     await c.query(`select pg_advisory_xact_lock(hashtext('dist_order_no'))`);
     // follow the portal's own vocabulary instead of inventing one
