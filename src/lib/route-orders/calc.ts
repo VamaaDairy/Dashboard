@@ -262,5 +262,14 @@ export function allocateBatches(bill: DraftBill, pool: Map<string, StockBatch[]>
   return { ...bill, lines, warnings: [...new Set(warnings)], ...totalsOf(lines, bill.interstate) };
 }
 
+/**
+ * Every line on Primary Batch, expiring the product's shelf life after the bill date (as the workbook's macro wrote it).
+ * Bills are made this way for now: batch numbers and stock come later (allocateBatches above is kept for that).
+ */
+export function onPrimaryBatch(bill: DraftBill, voucherDate: string): DraftBill {
+  const lines = bill.lines.map((l) => ({ ...l, batch: PRIMARY_BATCH, expiry: addDays(voucherDate, l.shelfDays) }));
+  return { ...bill, lines, ...totalsOf(lines, bill.interstate) };
+}
+
 /** A voucher balances when its sales, tax and round-off add up to what the party owes. */
 export const balanced = (b: Totals) => Math.abs(b.taxable + b.cgst + b.sgst + b.igst + b.roundoff - b.total) < 0.011;
