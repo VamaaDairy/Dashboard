@@ -8,6 +8,7 @@ import { one, query } from "@/lib/db";
 import { userFromToken } from "@/lib/access-server";
 import { atLeast, levelFor } from "@/lib/access";
 import { CHANNELS, cancelBill, issueBills, validDate } from "@/lib/route-orders/data";
+import { readTallyNames } from "@/lib/tally/names";
 
 async function editor(key: string) {
   const me = await userFromToken((await cookies()).get("session")?.value);
@@ -60,6 +61,8 @@ export async function saveParty(form: FormData) {
            consignee_pincode=$10, consignee_gstin=$11, buyer_address=$12, buyer_gstin=$13, buyer_pincode=$14, consolidated=$15, active=$16, review_note=$17, updated_at=now() where id=$18`,
         [...values, id],
       );
+      // the Customer Master keeps the same Tally name
+      await query(`update fp_firm f set tally_name = rp.tally_ledger from route_order_party rp where rp.id = $1 and rp.firm_uid = f.uid`, [id]);
     } else {
       await query(
         `insert into route_order_party (name, route_id, channel, group_name, tally_ledger, state, consignee_name, consignee_address, consignee_state, consignee_pincode, consignee_gstin, buyer_address, buyer_gstin, buyer_pincode, consolidated, active, review_note)
@@ -83,6 +86,12 @@ export async function linkFirm(form: FormData) {
   if (!firm || !party) return back(MASTERS, { error: `No customer is called "${name ?? ""}". Pick one from the list.` });
   await query(`update route_order_party set firm_uid = null where firm_uid = $1`, [firm]);
   await query(`update route_order_party set firm_uid = $1, updated_at = now() where id = $2`, [firm, party.id]);
+  // a customer with no Tally name yet takes the route sheet's; one that has a name keeps it, and so does the sheet
+  await query(
+    `update fp_firm set tally_name = (select tally_ledger from route_order_party where id = $2) where uid = $1 and coalesce(trim(tally_name), '') = ''`,
+    [firm, party.id],
+  );
+  await query(`update route_order_party rp set tally_ledger = f.tally_name from fp_firm f where rp.id = $2 and f.uid = $1 and coalesce(trim(f.tally_name), '') <> ''`, [firm, party.id]);
   revalidatePath("/route-orders", "layout");
   return back(MASTERS, { msg: `Linked to ${name}.` });
 }
@@ -102,6 +111,23 @@ export async function saveProduct(form: FormData) {
     `update route_order_product set name=$1, category=$2, tally_item=$3, tally_ledger=$4, tally_unit=$5, pack_size=$6, gst_pct=$7, shelf_days=$8, weight_kg=$9, stock_id=$10 where id=$11`,
     [name, text(form, "category") ?? "Other", text(form, "tally_item"), text(form, "tally_ledger"), text(form, "tally_unit"), pack, gst, Number(text(form, "shelf_days")) || 0, Number(text(form, "weight_kg")) || 0, text(form, "stock_id"), id],
   );
+  // the Product Master keeps the same Tally name
+  if (sku) await query(`update fp_product set tally_name = $2 where regexp_replace(sku_code, '\\D', '', 'g') = $1::text`, [String(sku.sku_no), text(form, "tally_item")]);
   revalidatePath("/route-orders", "layout");
   return back(MASTERS, { tab: "products", msg: `Saved ${name}.` });
+}
+
+/** Reads Tally's ledger, stock item and unit names (read only - nothing is written to Tally) and fills the masters. */
+export async function readTallyNamesAction() {
+  const me = await editor("routeorders.masters");
+  if (!me) return back(MASTERS, { tab: "tally", error: DENIED });
+  let msg: string;
+  try {
+    const r = await readTallyNames(me.name || me.email || null);
+    msg = `Read ${r.ledgers} ledgers (${r.debtors} customers) and ${r.items} stock items from Tally. ${r.filled.length ? `Filled or corrected ${r.filled.length} Tally names.` : "Nothing needed filling."}`;
+  } catch (e) {
+    return back(MASTERS, { tab: "tally", error: e instanceof Error ? e.message : "Could not read from Tally." });
+  }
+  revalidatePath("/route-orders", "layout");
+  return back(MASTERS, { tab: "tally", msg });
 }

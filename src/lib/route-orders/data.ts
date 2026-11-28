@@ -67,8 +67,11 @@ export async function dayLines(date: string, by: DateBy = "delivery"): Promise<D
             (sup.uid is null or coalesce(sc.channel_code, '') = 'CO') as ours,
             p.sku_code as sku, p.sku_name as "skuName", i.quantity::float as qty, i.selling_price::float as rate, i.total_cost::float as amount,
             r.name as "routeName", bill.voucher_no as "voucherNo",
-            case when pt.id is null then null else row_to_json(pt) end as party,
-            case when rp.id is null then null else row_to_json(rp) end as product
+            -- the Tally names are the masters' (Customer Master, Product Master), the route sheet's where those have none
+            case when pt.id is null then null
+                 else to_jsonb(pt) || jsonb_build_object('tally_ledger', coalesce(nullif(trim(f.tally_name), ''), pt.tally_ledger)) end as party,
+            case when rp.id is null then null
+                 else to_jsonb(rp) || jsonb_build_object('tally_item', coalesce(nullif(trim(p.tally_name), ''), rp.tally_item)) end as product
      from fp_booking_order b
      join fp_firm f on f.uid = b.from_firm_uid
      left join fp_channel ch on ch.uid = f.channel_uid

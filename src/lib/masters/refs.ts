@@ -26,5 +26,11 @@ export const SUGGEST_CATEGORY = `select category as value from fp_category order
 export const SUGGEST_SUB_CATEGORY = `select sub_category as value from fp_sub_category order by 1`;
 export const SUGGEST_BRAND = `select distinct trim(brand) as value from fp_product where trim(brand) <> '' order by 1`;
 export const SUGGEST_UNIT = `select distinct primary_unit #>> '{}' as value from fp_product where primary_unit is not null order by 1`;
+/** Tally's customer ledgers (as last read from Tally), and the names the masters already use */
+export const SUGGEST_TALLY_LEDGER = `select name as value from tally_name where kind = 'ledger' and debtor
+  union select distinct trim(tally_name) from fp_firm where coalesce(trim(tally_name), '') <> '' order by 1`;
+/** Tally's stock items (as last read from Tally), and the names the masters already use */
+export const SUGGEST_TALLY_ITEM = `select name as value from tally_name where kind = 'item'
+  union select distinct trim(tally_name) from fp_product where coalesce(trim(tally_name), '') <> '' order by 1`;
 export const SUGGEST_CUSTOMER_TYPE = `select distinct firm_type as value from fp_firm where firm_type is not null order by 1`;
 export const SUGGEST_CUSTOMER_CLASS = `select distinct firm_class as value from fp_firm where firm_class is not null order by 1`;
